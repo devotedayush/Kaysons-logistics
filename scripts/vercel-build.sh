@@ -14,9 +14,12 @@ if [ ! -x "$FLUTTER_HOME/bin/flutter" ]; then
   git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$FLUTTER_HOME"
 fi
 
+git config --global --add safe.directory "$FLUTTER_HOME"
+git -C "$FLUTTER_HOME" fetch --depth 1 origin master:refs/remotes/origin/master
+
 export PATH="$FLUTTER_HOME/bin:$PATH"
 
-flutter config --enable-web
+flutter config --enable-web --no-analytics
 flutter --version
 flutter pub get
 
