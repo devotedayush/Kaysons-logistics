@@ -46,7 +46,16 @@ class _RegisterContactScreenState extends State<RegisterContactScreen> {
       );
       return;
     }
-    draft.mobile = _mobile.text.trim();
+    final normalizedMobile = _normalizeIndiaPhone(_mobile.text);
+    if (normalizedMobile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Enter a valid 10 digit Indian mobile number.'),
+        ),
+      );
+      return;
+    }
+    draft.mobile = normalizedMobile;
     draft.landline = _landline.text.trim();
     draft.gst = _gst.text.trim();
     draft.businessNumber = _bizNum.text.trim();
@@ -72,6 +81,14 @@ class _RegisterContactScreenState extends State<RegisterContactScreen> {
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  String? _normalizeIndiaPhone(String raw) {
+    final digits = raw.replaceAll(RegExp(r'\D'), '');
+    final tenDigits =
+        digits.length > 10 ? digits.substring(digits.length - 10) : digits;
+    if (tenDigits.length != 10 || tenDigits.startsWith('0')) return null;
+    return '+91$tenDigits';
   }
 
   Future<void> _finalizeRegistration() async {

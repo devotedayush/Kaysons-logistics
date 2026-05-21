@@ -18,6 +18,7 @@ class AdminBottomNav extends StatelessWidget {
     (Icons.dashboard_outlined, 'Dashboard'),
     (Icons.people_outline, 'Users'),
     (Icons.gavel_outlined, 'Bids'),
+    (Icons.receipt_long_outlined, 'Ledger'),
     (Icons.psychology_alt_outlined, 'Clawd'),
   ];
 
@@ -29,7 +30,7 @@ class AdminBottomNav extends StatelessWidget {
         color: const Color(0xFFF3EDF7),
         borderRadius: BorderRadius.circular(80),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
@@ -86,13 +87,13 @@ class _SettingsNavItem extends StatelessWidget {
             ),
           ],
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 52,
-              height: 32,
+              width: 46,
+              height: 30,
               decoration: BoxDecoration(
                 color: Colors.transparent,
                 borderRadius: BorderRadius.circular(100),
@@ -107,7 +108,7 @@ class _SettingsNavItem extends StatelessWidget {
             const Text(
               'More',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 10,
                 fontWeight: FontWeight.w500,
                 color: Color(0xFF49454F),
                 letterSpacing: 0.5,
@@ -139,13 +140,13 @@ class _NavItem extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(32),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 2),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 64,
-              height: 32,
+              width: 46,
+              height: 30,
               decoration: BoxDecoration(
                 color: selected ? const Color(0xFFE8DEF8) : Colors.transparent,
                 borderRadius: BorderRadius.circular(100),
@@ -163,7 +164,7 @@ class _NavItem extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 10,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
                 color:
                     selected

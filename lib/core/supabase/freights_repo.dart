@@ -20,6 +20,22 @@ class FreightsRepo {
         .order('created_at', ascending: false);
   }
 
+  Stream<List<Map<String, dynamic>>> streamAcceptedDispatchFreights() {
+    return streamAllFreights().map(
+      (rows) =>
+          rows
+              .where(
+                (f) => const {
+                  'awarded',
+                  'dispatched',
+                  'locked',
+                  'completed',
+                }.contains((f['status'] ?? '').toString()),
+              )
+              .toList(),
+    );
+  }
+
   Future<Map<String, dynamic>?> fetchFreight(String id) async {
     final r =
         await supabase.from('freights').select().eq('id', id).maybeSingle();

@@ -28,18 +28,23 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _submit() async {
     final email = _email.text.trim();
     final password = _password.text;
-    if (email.isEmpty || !email.contains('@') || password.isEmpty || _busy) return;
+    if (email.isEmpty || !email.contains('@') || password.isEmpty || _busy) {
+      return;
+    }
     setState(() => _busy = true);
     try {
-      await AuthService.instance.signInWithPassword(email: email, password: password);
+      await AuthService.instance.signInWithPassword(
+        email: email,
+        password: password,
+      );
       final role = await AuthService.instance.fetchRole();
       if (!mounted) return;
       context.go(routeForRole(role));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Login failed: $e')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -80,14 +85,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   const Text(
                     'Sign in with your registered email and password.',
                     style: TextStyle(
-                        fontSize: 11,
-                        color: Color(0xFF757575),
-                        height: 16 / 11),
+                      fontSize: 11,
+                      color: Color(0xFF757575),
+                      height: 16 / 11,
+                    ),
                   ),
                   const SizedBox(height: 40),
-                  const Text('Email',
-                      style:
-                          TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+                  const Text(
+                    'Email',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 6),
                   PillTextField(
                     controller: _email,
@@ -96,9 +103,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     keyboardType: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 16),
-                  const Text('Password',
-                      style:
-                          TextStyle(fontSize: 11, fontWeight: FontWeight.w500)),
+                  const Text(
+                    'Password',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                  ),
                   const SizedBox(height: 6),
                   PillTextField(
                     controller: _password,
@@ -110,7 +118,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   SizedBox(
                     height: 48,
                     child: PrimaryButton(
-                      label: _busy ? 'Signing in…' : 'Sign in',
+                      label: _busy ? 'Signing in...' : 'Sign in',
                       onPressed: _busy ? null : _submit,
                     ),
                   ),

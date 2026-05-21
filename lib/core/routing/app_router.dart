@@ -22,6 +22,8 @@ import '../../features/logistics_manager/invoice_link_screen.dart';
 import '../../features/logistics_manager/lm_shell.dart';
 import '../../features/logistics_manager/lm_profile_screen.dart';
 import '../../features/logistics_manager/lm_track_screen.dart';
+import '../../features/dispatch_manager/dispatch_shell.dart';
+import '../../features/admin/accountant_shell.dart';
 import '../../features/admin/admin_shell.dart';
 import '../../features/admin/admin_profile_screen.dart';
 import '../../features/admin/analytics_screen.dart';
@@ -71,13 +73,30 @@ Widget _desktopShell({
 final GoRouter appRouter = GoRouter(
   initialLocation: '/',
   refreshListenable: _authNotifier,
-  redirect: (context, state) {
+  redirect: (context, state) async {
     final loggedIn = AuthService.instance.session != null;
     final path = state.matchedLocation;
     // Splash handles its own redirect based on role; leave it alone.
     if (path == '/') return null;
     final isPublic = _publicPaths.contains(path);
     if (!loggedIn && !isPublic) return '/login';
+    if (!loggedIn || isPublic) return null;
+    final role = await AuthService.instance.fetchRole();
+    final allowed = switch (role) {
+      AppRole.admin => path.startsWith('/admin'),
+      AppRole.logisticsManager => path.startsWith('/lm'),
+      AppRole.dispatchManager => path.startsWith('/dm'),
+      AppRole.accountant => path.startsWith('/acct'),
+      AppRole.transporter =>
+        path == '/home' ||
+            path == '/bids' ||
+            path == '/fleet' ||
+            path == '/vehicles' ||
+            path == '/drivers' ||
+            path == '/profile' ||
+            path.startsWith('/bid/'),
+    };
+    if (!allowed) return routeForRole(role);
     return null;
   },
   routes: [
@@ -169,6 +188,14 @@ final GoRouter appRouter = GoRouter(
       builder: (_, __) => const LogisticsShell(initialIndex: 2),
     ),
     GoRoute(
+      path: '/lm/ledger',
+      builder: (_, __) => const LogisticsShell(initialIndex: 3),
+    ),
+    GoRoute(
+      path: '/lm/dispatch',
+      builder: (_, __) => const LogisticsShell(initialIndex: 4),
+    ),
+    GoRoute(
       path: '/lm/profile',
       builder:
           (_, __) => _desktopShell(
@@ -222,6 +249,51 @@ final GoRouter appRouter = GoRouter(
           ),
     ),
     GoRoute(
+      path: '/dm/home',
+      builder: (_, __) => const DispatchShell(initialIndex: 0),
+    ),
+    GoRoute(
+      path: '/dm/fleet',
+      builder: (_, __) => const DispatchShell(initialIndex: 1),
+    ),
+    GoRoute(
+      path: '/dm/profile',
+      builder:
+          (_, __) => _desktopShell(
+            role: AppRole.dispatchManager,
+            child: const LmProfileScreen(),
+          ),
+    ),
+    GoRoute(
+      path: '/dm/track/:id',
+      builder:
+          (_, state) => _desktopShell(
+            role: AppRole.dispatchManager,
+            currentIndex: 1,
+            child: LmTrackScreen(freightId: state.pathParameters['id']!),
+          ),
+    ),
+    GoRoute(
+      path: '/acct/ledger',
+      builder: (_, __) => const AccountantShell(initialIndex: 0),
+    ),
+    GoRoute(
+      path: '/acct/analytics',
+      builder: (_, __) => const AccountantShell(initialIndex: 1),
+    ),
+    GoRoute(
+      path: '/acct/clawd',
+      builder: (_, __) => const AccountantShell(initialIndex: 2),
+    ),
+    GoRoute(
+      path: '/acct/profile',
+      builder:
+          (_, __) => _desktopShell(
+            role: AppRole.accountant,
+            child: const AdminProfileScreen(),
+          ),
+    ),
+    GoRoute(
       path: '/admin',
       builder: (_, __) => const AdminShell(initialIndex: 0),
     ),
@@ -234,8 +306,12 @@ final GoRouter appRouter = GoRouter(
       builder: (_, __) => const AdminShell(initialIndex: 2),
     ),
     GoRoute(
-      path: '/admin/clawd',
+      path: '/admin/ledger',
       builder: (_, __) => const AdminShell(initialIndex: 3),
+    ),
+    GoRoute(
+      path: '/admin/clawd',
+      builder: (_, __) => const AdminShell(initialIndex: 4),
     ),
     GoRoute(
       path: '/admin/profile',

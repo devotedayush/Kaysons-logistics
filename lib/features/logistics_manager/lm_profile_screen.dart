@@ -515,6 +515,8 @@ class _DirectoryTile extends StatelessWidget {
 
 String _roleLabel(String role) {
   if (role == 'logistics_manager') return 'Logistics Manager';
+  if (role == 'dispatch_manager') return 'Dispatch Manager';
+  if (role == 'accountant') return 'Accountant';
   if (role == 'admin') return 'Admin';
   if (role == 'transporter') return 'Transporter';
   return role.isEmpty ? 'Unknown' : _title(role);

@@ -8,6 +8,7 @@ import 'admin_ai_body.dart';
 import 'admin_bids_body.dart';
 import 'admin_bottom_nav.dart';
 import 'admin_dashboard_body.dart';
+import 'admin_ledger_body.dart';
 import 'admin_users_body.dart';
 
 class AdminShell extends StatefulWidget {
@@ -25,7 +26,7 @@ class _AdminShellState extends State<AdminShell> {
   @override
   void initState() {
     super.initState();
-    _index = widget.initialIndex.clamp(0, 3);
+    _index = widget.initialIndex.clamp(0, 4);
     _pc = PageController(initialPage: _index);
   }
 
@@ -62,6 +63,7 @@ class _AdminShellState extends State<AdminShell> {
           AdminDashboardBody(),
           AdminUsersBody(),
           AdminBidsBody(),
+          AdminLedgerBody(),
           AdminAiBody(),
         ],
       ),
@@ -96,6 +98,11 @@ class _AdminShellState extends State<AdminShell> {
           icon: Icon(Icons.gavel_outlined),
           selectedIcon: Icon(Icons.gavel),
           label: Text('Bids'),
+        ),
+        NavigationRailDestination(
+          icon: Icon(Icons.receipt_long_outlined),
+          selectedIcon: Icon(Icons.receipt_long),
+          label: Text('Ledger'),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.psychology_alt_outlined),

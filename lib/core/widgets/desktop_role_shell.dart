@@ -165,6 +165,11 @@ class _RoleNavConfig {
             _RoleNavItem(Icons.people_outline, 'Users', '/admin/users'),
             _RoleNavItem(Icons.gavel_outlined, 'Bids', '/admin/bids'),
             _RoleNavItem(
+              Icons.receipt_long_outlined,
+              'Ledger',
+              '/admin/ledger',
+            ),
+            _RoleNavItem(
               Icons.psychology_alt_outlined,
               'Clawd',
               '/admin/clawd',
@@ -181,6 +186,39 @@ class _RoleNavConfig {
             _RoleNavItem(Icons.dashboard_outlined, 'Dashboard', '/lm/home'),
             _RoleNavItem(Icons.gavel_outlined, 'Bids', '/lm/bids'),
             _RoleNavItem(Icons.local_shipping_outlined, 'Fleet', '/lm/fleet'),
+            _RoleNavItem(Icons.receipt_long_outlined, 'Ledger', '/lm/ledger'),
+            _RoleNavItem(
+              Icons.assignment_ind_outlined,
+              'Dispatch',
+              '/lm/dispatch',
+            ),
+          ],
+        );
+      case AppRole.dispatchManager:
+        return const _RoleNavConfig(
+          title: 'Dispatch manager',
+          subtitle: 'Track accepted deliveries and verify dispatch updates.',
+          icon: Icons.assignment_turned_in_outlined,
+          profileRoute: '/dm/profile',
+          items: [
+            _RoleNavItem(Icons.dashboard_outlined, 'Dashboard', '/dm/home'),
+            _RoleNavItem(Icons.local_shipping_outlined, 'Fleet', '/dm/fleet'),
+          ],
+        );
+      case AppRole.accountant:
+        return const _RoleNavConfig(
+          title: 'Accountant',
+          subtitle: 'Manage freight ledgers, reports, and Clawd analysis.',
+          icon: Icons.calculate_outlined,
+          profileRoute: '/acct/profile',
+          items: [
+            _RoleNavItem(Icons.receipt_long_outlined, 'Ledger', '/acct/ledger'),
+            _RoleNavItem(
+              Icons.analytics_outlined,
+              'Analytics',
+              '/acct/analytics',
+            ),
+            _RoleNavItem(Icons.psychology_alt_outlined, 'Clawd', '/acct/clawd'),
           ],
         );
       case AppRole.transporter:

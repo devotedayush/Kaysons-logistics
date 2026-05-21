@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add India phone number + OTP login alongside the existing email/password login.
+Add email OTP and India phone number OTP login alongside the existing email/password login.
 
 ## Current App State
 
@@ -12,12 +12,13 @@ Add India phone number + OTP login alongside the existing email/password login.
 
 ## Recommended Flow
 
-1. User enters a 10 digit Indian mobile number.
-2. App normalizes it to E.164 format: `+91XXXXXXXXXX`.
-3. App asks Supabase to send an OTP.
-4. User enters the 6 digit OTP.
-5. App verifies the OTP with Supabase.
-6. App fetches the existing profile role and routes the user:
+1. User chooses email OTP or phone OTP.
+2. For phone OTP, user enters a 10 digit Indian mobile number.
+3. App normalizes phone input to E.164 format: `+91XXXXXXXXXX`.
+4. App asks Supabase to send an OTP.
+5. User enters the 6 digit OTP.
+6. App verifies the OTP with Supabase.
+7. App fetches the existing profile role and routes the user:
    - `admin` -> `/admin`
    - `logistics_manager` -> `/lm/home`
    - `transporter` -> `/home`
@@ -31,6 +32,11 @@ await supabase.auth.signInWithOtp(
   phone: '+919876543210',
   shouldCreateUser: false,
 );
+
+await supabase.auth.signInWithOtp(
+  email: 'transporter@example.com',
+  shouldCreateUser: false,
+);
 ```
 
 Verify OTP:
@@ -41,9 +47,15 @@ final response = await supabase.auth.verifyOTP(
   token: '123456',
   type: OtpType.sms,
 );
+
+final response = await supabase.auth.verifyOTP(
+  email: 'transporter@example.com',
+  token: '123456',
+  type: OtpType.email,
+);
 ```
 
-Use `shouldCreateUser: false` so unknown phone numbers do not create incomplete accounts.
+Use `shouldCreateUser: false` so unknown emails or phone numbers do not create incomplete accounts.
 
 ## AuthService Additions
 
@@ -51,6 +63,13 @@ Use `shouldCreateUser: false` so unknown phone numbers do not create incomplete 
 Future<void> sendPhoneOtp(String phone) {
   return _auth.signInWithOtp(
     phone: phone,
+    shouldCreateUser: false,
+  );
+}
+
+Future<void> sendEmailOtp(String email) {
+  return _auth.signInWithOtp(
+    email: email,
     shouldCreateUser: false,
   );
 }
@@ -63,6 +82,17 @@ Future<void> verifyPhoneOtp({
     phone: phone,
     token: token,
     type: OtpType.sms,
+  );
+}
+
+Future<void> verifyEmailOtp({
+  required String email,
+  required String token,
+}) async {
+  await _auth.verifyOTP(
+    email: email,
+    token: token,
+    type: OtpType.email,
   );
 }
 ```
@@ -85,7 +115,16 @@ Reject the input if the final number is not exactly `+91` plus 10 digits.
 1. Enable Phone provider in Supabase Auth.
 2. Configure an SMS provider.
 3. Configure OTP rate limits and CAPTCHA before production.
+   - Supabase's default resend window is 60 seconds per user/phone.
+   - The app should mirror this by disabling "Resend OTP" for 60 seconds after each send.
 4. Ensure Indian SMS compliance before live use.
+
+## Backend Linkage
+
+- `profiles.email` must stay unique.
+- `profiles.phone` must be unique when present.
+- Registration stores phone numbers in E.164 format (`+91XXXXXXXXXX`).
+- A profile phone update should sync the same phone onto the matching Supabase Auth user so email OTP and phone OTP both resolve to the same account.
 
 Supabase supports phone login through SMS providers such as Twilio, MessageBird, Vonage, and community-supported TextLocal. India SMS delivery must follow TRAI DLT rules, so sender IDs and message templates should be registered with the SMS provider before production.
 

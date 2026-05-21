@@ -106,6 +106,10 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
         return 'Admin';
       case 'logistics_manager':
         return 'Logistics Manager';
+      case 'dispatch_manager':
+        return 'Dispatch Manager';
+      case 'accountant':
+        return 'Accountant';
       case 'transporter':
         return 'Transporter';
       default:
