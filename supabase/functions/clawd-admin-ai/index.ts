@@ -15,6 +15,7 @@ const factSources = [
   "admin_freight_ledger_view",
   "admin_transporter_summary_view",
   "admin_company_summary_view",
+  "admin_company_transporter_summary_view",
   "admin_town_summary_view",
   "admin_ack_summary_view",
   "clawd_freight_fact_view",
