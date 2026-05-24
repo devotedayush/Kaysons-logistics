@@ -33,10 +33,15 @@ const systemInstructions = [
   "You are Clawd, the backend operations analyst for Kaysons Logistics.",
   "Supabase SQL is the facts engine. Do not calculate raw totals yourself.",
   "Use only the computed facts and anomaly candidates provided by the backend.",
-  "Your job is to explain what changed, why it matters, fraud or loss risk, and what action an admin or accountant should take.",
+  "Your job is to explain what changed, why it matters, fraud or loss risk, and what action an admin, accountant, or logistics manager should take.",
   "Write for a non-technical logistics owner.",
   "Never expose database table names, raw column names, JSON paths, SQL phrases, UUIDs, or implementation details.",
+  "Never mention words like table, column, row, JSON, SQL, view, UUID, schema, function, API, or database in the final answer.",
+  "Translate internal signals into business language: late delivery proof, missing POD, duplicate e-way bill, cost spike, extra charge risk, or acknowledgement delay.",
   "Do not accuse anyone of fraud as fact. Say 'risk', 'possible issue', or 'needs review' unless the provided facts are conclusive.",
+  "Do not say payment is blocked, held, or cannot be cleared. Say the item should be reviewed before payment release.",
+  "If someone asks whether payment is blocked, answer: 'No automatic payment stop is applied in v1, but manual review before release is recommended for risky shipments.'",
+  "Answer like a calm human operations manager: short, direct, practical, and free of technical implementation details.",
   "Prefer concise markdown with headings and bullets.",
 ].join("\n");
 
@@ -154,11 +159,11 @@ async function authenticate(req: Request, supabaseUrl: string, anonKey: string) 
     .eq("id", user.id)
     .maybeSingle();
   const role = String(profile?.role ?? "");
-  if (profileError || !["admin", "accountant"].includes(role)) {
+  if (profileError || !["admin", "accountant", "logistics_manager"].includes(role)) {
     return {
       ok: false as const,
       status: 403,
-      error: "Clawd is available to admins and accountants only",
+      error: "Clawd is available to admins, accountants, and logistics managers only",
     };
   }
   return { ok: true as const, userId: user.id };
@@ -172,8 +177,10 @@ async function chat(args: {
 }) {
   const facts = await loadFacts(args.adminClient, 80);
   const prompt = [
-    "Answer the admin/accountant question using the computed logistics facts.",
+    "Answer the staff question using the computed logistics facts.",
     "Do not invent numbers. If the facts are insufficient, say what extra business detail is needed.",
+    "Use human business terms only. Do not name backend sources, fields, IDs, or implementation details.",
+    "For payment-sensitive risks, recommend manual review before payment release; do not claim the system has blocked or held payment.",
     `Question: ${args.question}`,
     `Computed facts:\n${JSON.stringify(facts)}`,
   ].join("\n\n");
@@ -216,6 +223,8 @@ async function runTemplate(args: {
   const facts = await loadFacts(args.adminClient, 100);
   const prompt = [
     "Run this saved admin prompt against computed facts.",
+    "Use human business terms only. Do not name backend sources, fields, IDs, or implementation details.",
+    "For payment-sensitive risks, recommend manual review before payment release; do not claim the system has blocked or held payment.",
     rendered,
     `Variables:\n${JSON.stringify(args.variables)}`,
     `Computed facts:\n${JSON.stringify(facts)}`,
@@ -270,6 +279,7 @@ async function generateReport(args: {
     `Generate the ${args.reportType} Clawd operations report.`,
     "Explain major fraud, e-way, cost, delay, proof, acknowledgement, and route-cost risks.",
     "Recommend human actions. Do not say the system blocked or held payment.",
+    "Use human business terms only. Do not name backend sources, fields, IDs, or implementation details.",
     `Period: ${periodStart} to ${periodEnd}`,
     `Anomaly sync result:\n${JSON.stringify(detected)}`,
     `Computed facts:\n${JSON.stringify(facts)}`,
@@ -586,13 +596,56 @@ function asRecord(value: unknown): Json {
 
 function sanitizeBusinessText(text: string): string {
   return text
-    .replace(/\b(?:admin_alerts|profiles|freights|bids|metadata|metrics|vehicles|drivers|invoices|ai_runs|ai_reports|ai_anomaly_events|clawd_[a-z_]+)(?:\.[a-z_]+)+/gi, "technical detail")
-    .replace(/\b(?:admin_alerts|profiles|freights|bids|metadata|metrics|vehicles|drivers|invoices|ai_runs|ai_reports|ai_anomaly_events|clawd_[a-z_]+)\b/gi, "business records")
+    .replace(/\b(?:admin_alerts|profiles|freights|bids|metadata|metrics|vehicles|drivers|invoices|delivery_stages|ai_runs|ai_reports|ai_anomaly_events|clawd_[a-z_]+)(?:\.[a-z_]+)+/gi, "this item")
+    .replace(/\b(?:admin_alerts|profiles|freights|bids|metadata|metrics|vehicles|drivers|invoices|delivery_stages|ai_runs|ai_reports|ai_anomaly_events|clawd_[a-z_]+)\b/gi, "business records")
+    .replace(/\b[a-z]+(?:_[a-z0-9]+){1,}\b/gi, (match) => humanizeSnakeCase(match))
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, "one record")
     .replace(/\brows?\b/gi, "records")
     .replace(/\bcolumns?\b/gi, "details")
+    .replace(/\bfields?\b/gi, "details")
+    .replace(/\btables?\b/gi, "records")
+    .replace(/\bviews?\b/gi, "reports")
+    .replace(/\bJSON\b/gi, "details")
+    .replace(/\bSQL\b/gi, "backend checks")
+    .replace(/\bUUIDs?\b/gi, "record IDs")
+    .replace(/\bIs payment needs manual review\?\s*/gi, "")
+    .replace(/\bthere(?:'s| is) no indication that payment is (?:automatically )?blocked\.?\s*/gi, "No automatic payment stop is applied. ")
+    .replace(/\b(?:payment is (?:automatically )?blocked|payment (?:automatically )?blocked|blocked payment|payment has been blocked|payment was blocked)\b/gi, "payment needs manual review")
+    .replace(/\b(?:Is )?payment needs manual review\?\s*No\.?\s*/gi, "")
+    .replace(/\bNothing here says payment needs manual review\.?\s*/gi, "No automatic payment stop is applied. ")
+    .replace(/(?:#{1,6}\s*)?[—-]?\s*\bthere(?:'s| is) no indication that payment needs manual review\.?\s*/gi, "No automatic payment stop is applied. ")
+    .replace(/\b(?:blocked|held|cannot be cleared|should not be cleared) for payment\b/gi, "marked for review before payment release")
+    .replace(/\bblocked\b/gi, "on automatic stop")
+    .replace(/\bautomatic payment stop is applied in v1\b/gi, "No automatic payment stop is applied right now")
+    .replace(/[—-]\s*there is no automatic payment stop in v1/gi, "No automatic payment stop is applied right now")
+    .replace(/\bautomatic payment stop in v1\b/gi, "automatic payment stop right now")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function humanizeSnakeCase(value: string): string {
+  const labels: Record<string, string> = {
+    pod_late_flag: "late POD",
+    pod_missing_overdue_flag: "overdue missing POD",
+    pod_delay_days: "POD delay days",
+    pod_submitted_at: "POD submission time",
+    proof_or_ack_delay: "proof or acknowledgement delay",
+    duplicate_eway: "duplicate e-way bill",
+    eway_mismatch: "e-way bill mismatch",
+    route_cost_spike: "route cost spike",
+    high_extra_charge: "high extra charge",
+    ack_pending_days: "acknowledgement pending days",
+    bill_to_dispatch_delay_days: "bill-to-dispatch delay days",
+    pod_missing_flag: "missing POD",
+    last_location_age_hours: "stale location update",
+    risk_score: "risk score",
+    risk_level: "risk level",
+    recommended_actions: "recommended actions",
+    evidence_summary: "evidence summary",
+    business_impact: "business impact",
+    follow_up_questions: "follow-up questions",
+  };
+  return labels[value.toLowerCase()] ?? value.replaceAll("_", " ");
 }
 
 function json(payload: unknown, status = 200): Response {

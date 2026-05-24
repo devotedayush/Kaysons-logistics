@@ -55,10 +55,13 @@ class FreightsRepo {
     required String stage,
     required Map<String, dynamic> data,
   }) async {
+    final submittedAt = DateTime.now();
     final current =
         await supabase
             .from('freights')
-            .select('delivery_stages, status')
+            .select(
+              'delivery_stages, status, dispatched_at, origin, destination_town, winner_profile_id',
+            )
             .eq('id', freightId)
             .single();
     final existing = Map<String, dynamic>.from(
@@ -66,7 +69,7 @@ class FreightsRepo {
     );
     existing[stage] = {
       ...data,
-      'submitted_at': DateTime.now().toIso8601String(),
+      'submitted_at': submittedAt.toIso8601String(),
     };
     if (stage == 'dispatched') {
       existing.remove('vehicle_confirmation');
@@ -82,13 +85,21 @@ class FreightsRepo {
       update['vehicle_number'] = data['lorry_number'];
       update['driver_name'] = data['driver_name'];
       update['driver_phone'] = data['driver_phone'];
-      update['dispatched_at'] = DateTime.now().toIso8601String();
+      update['dispatched_at'] = submittedAt.toIso8601String();
       if (current['status'] == 'awarded') update['status'] = 'dispatched';
     }
     if (stage == 'delivered') {
       update['status'] = 'completed';
     }
     await supabase.from('freights').update(update).eq('id', freightId);
+    if (stage == 'delivered') {
+      await _createLatePodAlertIfNeeded(
+        freightId: freightId,
+        freight: current,
+        submittedAt: submittedAt,
+        podPhotoPath: data['pod_photo_path']?.toString(),
+      );
+    }
   }
 
   Future<void> saveTransitLocation({
@@ -422,6 +433,60 @@ class FreightsRepo {
     }
   }
 
+  Future<void> _createLatePodAlertIfNeeded({
+    required String freightId,
+    required Map<String, dynamic> freight,
+    required DateTime submittedAt,
+    required String? podPhotoPath,
+  }) async {
+    final dispatchedAt = DateTime.tryParse(
+      (freight['dispatched_at'] ?? '').toString(),
+    );
+    if (dispatchedAt == null) return;
+    final delayDays = _calendarDayDifference(dispatchedAt, submittedAt);
+    if (delayDays <= 3) return;
+
+    String transporterName = 'Selected transporter';
+    final winnerId = freight['winner_profile_id'] as String?;
+    if (winnerId != null && winnerId.isNotEmpty) {
+      try {
+        final profile =
+            await supabase
+                .from('profiles')
+                .select('business_name, full_name, email')
+                .eq('id', winnerId)
+                .maybeSingle();
+        transporterName =
+            (profile?['business_name'] ??
+                    profile?['full_name'] ??
+                    profile?['email'] ??
+                    transporterName)
+                .toString();
+      } catch (_) {}
+    }
+
+    final route =
+        '${freight['origin'] ?? 'Unknown'} → ${freight['destination_town'] ?? 'Unknown'}';
+    await _createAlertSafe(
+      freightId: freightId,
+      category: 'late_pod',
+      severity: delayDays > 5 ? 'high' : 'medium',
+      title: 'Late POD / possible freight clubbing review',
+      message:
+          '$transporterName submitted POD for $route $delayDays day(s) after dispatch. Review with the receiver and transporter before treating this as normal delivery delay.',
+      metadata: {
+        'transporter_id': winnerId,
+        'transporter_name': transporterName,
+        'route': route,
+        'dispatch_at': dispatchedAt.toIso8601String(),
+        'pod_submitted_at': submittedAt.toIso8601String(),
+        'pod_delay_days': delayDays,
+        'pod_photo_path': podPhotoPath,
+        'sla_days': 3,
+      },
+    );
+  }
+
   Future<void> _createAlertSafe({
     required String freightId,
     String? invoiceId,
@@ -446,6 +511,12 @@ class FreightsRepo {
       // Some environments may not have the migration yet.
     }
   }
+}
+
+int _calendarDayDifference(DateTime from, DateTime to) {
+  final start = DateTime(from.year, from.month, from.day);
+  final end = DateTime(to.year, to.month, to.day);
+  return end.difference(start).inDays;
 }
 
 List<Map<String, dynamic>> _onlyOpenBids(List<Map<String, dynamic>> rows) {

@@ -61,6 +61,8 @@ class LmTrackScreen extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               _vehicleVerificationCard(context, freight, stages),
+              const SizedBox(height: 10),
+              _podTimingCard(freight, stages),
               const SizedBox(height: 24),
               const Text(
                 'Delivery stages',
@@ -234,6 +236,102 @@ class LmTrackScreen extends StatelessWidget {
     );
   }
 
+  Widget _podTimingCard(
+    Map<String, dynamic> freight,
+    Map<String, dynamic> stages,
+  ) {
+    final delivered = Map<String, dynamic>.from(
+      stages['delivered'] as Map? ?? const {},
+    );
+    final dispatchedAt = DateTime.tryParse(
+      (freight['dispatched_at'] ?? '').toString(),
+    );
+    final podSubmittedAt = DateTime.tryParse(
+      (delivered['submitted_at'] ?? '').toString(),
+    );
+    final podPath = (delivered['pod_photo_path'] ?? '').toString();
+    final delayDays =
+        dispatchedAt == null || podSubmittedAt == null
+            ? null
+            : _calendarDayDifference(dispatchedAt, podSubmittedAt);
+    final missingOverdue =
+        dispatchedAt != null &&
+        podSubmittedAt == null &&
+        _calendarDayDifference(dispatchedAt, DateTime.now()) > 3;
+    final late = (delayDays ?? 0) > 3;
+
+    final color =
+        late || missingOverdue
+            ? const Color(0xFFFFF1F0)
+            : const Color(0xFFE7F6EC);
+    final border =
+        late || missingOverdue
+            ? const Color(0xFFE69A95)
+            : const Color(0xFF77C28A);
+    final icon =
+        late || missingOverdue
+            ? Icons.warning_amber_outlined
+            : Icons.fact_check_outlined;
+    final title =
+        late
+            ? 'Late POD review'
+            : missingOverdue
+            ? 'POD overdue'
+            : 'POD timing';
+    final detail =
+        late
+            ? 'POD was submitted ${delayDays}d after dispatch. Review possible delayed dispatch or freight clubbing.'
+            : missingOverdue
+            ? 'No POD has been submitted after the 3-day SLA.'
+            : podSubmittedAt == null
+            ? 'POD has not been submitted yet.'
+            : 'POD was submitted within the 3-day SLA.';
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color,
+        border: Border.all(color: border),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                icon,
+                color:
+                    late || missingOverdue
+                        ? const Color(0xFFB3261E)
+                        : const Color(0xFF146C2E),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            detail,
+            style: const TextStyle(fontSize: 12, color: Color(0xFF49454F)),
+          ),
+          const SizedBox(height: 6),
+          _kv('Dispatch', _shortDateTime(dispatchedAt)),
+          _kv('POD time', _shortDateTime(podSubmittedAt)),
+          if (podPath.isNotEmpty) _kv('POD proof', 'Uploaded'),
+        ],
+      ),
+    );
+  }
+
   Future<void> _confirmVehicle(BuildContext context, String freightId) async {
     final controller = TextEditingController();
     final note = await showDialog<String>(
@@ -334,6 +432,20 @@ class LmTrackScreen extends StatelessWidget {
     if (status == 'confirmed') return 'Vehicle arrived and matched';
     if (status == 'issue') return 'Issue raised';
     return status;
+  }
+
+  int _calendarDayDifference(DateTime from, DateTime to) {
+    final start = DateTime(from.year, from.month, from.day);
+    final end = DateTime(to.year, to.month, to.day);
+    return end.difference(start).inDays;
+  }
+
+  String _shortDateTime(DateTime? value) {
+    if (value == null) return '—';
+    final local = value.toLocal();
+    final day = local.day.toString().padLeft(2, '0');
+    final month = local.month.toString().padLeft(2, '0');
+    return '$day/$month/${local.year}';
   }
 
   Widget _inTransitCard(BuildContext context, dynamic data) {

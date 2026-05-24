@@ -286,13 +286,13 @@ class _PlainEnglishAiText {
 
   static final _technicalPatterns = <RegExp>[
     RegExp(
-      r"\b(?:admin_alerts|profiles|freights|bids|metrics|metadata|vehicles|drivers|invoices|delivery_stages)(?:\.[a-z_]+)+\s*=\s*(?:"
+      r"\b(?:admin_alerts|profiles|freights|bids|metrics|metadata|vehicles|drivers|invoices|delivery_stages|ai_runs|ai_reports|ai_anomaly_events|clawd_[a-z_]+)(?:\.[a-z_]+)+\s*=\s*(?:"
       r'"[^"]*"'
       r"|'[^']*'|[^\s,)]+)",
       caseSensitive: false,
     ),
     RegExp(
-      r'\b(?:admin_alerts|profiles|freights|bids|metrics|metadata|vehicles|drivers|invoices|delivery_stages)(?:\.[a-z_]+)+\b',
+      r'\b(?:admin_alerts|profiles|freights|bids|metrics|metadata|vehicles|drivers|invoices|delivery_stages|ai_runs|ai_reports|ai_anomaly_events|clawd_[a-z_]+)(?:\.[a-z_]+)+\b',
       caseSensitive: false,
     ),
     RegExp(
@@ -305,7 +305,11 @@ class _PlainEnglishAiText {
     ),
     RegExp(r'\b[0-9a-f]{7,}\.\.\.', caseSensitive: false),
     RegExp(
-      r'\([^)]*(?:admin_alerts|profiles|freights|bids|metrics|metadata|winner_profile_id|delivery_stages)[^)]*\)',
+      r'\([^)]*(?:admin_alerts|profiles|freights|bids|metrics|metadata|winner_profile_id|delivery_stages|ai_runs|ai_reports|ai_anomaly_events|clawd_[a-z_]+)[^)]*\)',
+      caseSensitive: false,
+    ),
+    RegExp(
+      r'\b(?:admin_alerts|profiles|freights|bids|metrics|metadata|vehicles|drivers|invoices|delivery_stages|ai_runs|ai_reports|ai_anomaly_events|clawd_[a-z_]+)\b',
       caseSensitive: false,
     ),
   ];
@@ -327,6 +331,19 @@ class _PlainEnglishAiText {
       'status="awarded"': 'awarded',
       'amount=': 'amount ',
       'null': 'missing',
+      'pod_late_flag': 'late POD',
+      'pod_missing_overdue_flag': 'overdue missing POD',
+      'pod_delay_days': 'POD delay days',
+      'pod_submitted_at': 'POD submission time',
+      'proof_or_ack_delay': 'proof or acknowledgement delay',
+      'duplicate_eway': 'duplicate e-way bill',
+      'eway_mismatch': 'e-way bill mismatch',
+      'route_cost_spike': 'route cost spike',
+      'high_extra_charge': 'high extra charge',
+      'ack_pending_days': 'acknowledgement pending days',
+      'bill_to_dispatch_delay_days': 'bill-to-dispatch delay days',
+      'pod_missing_flag': 'missing POD',
+      'last_location_age_hours': 'stale location update',
     };
 
     for (final entry in replacements.entries) {
@@ -344,10 +361,87 @@ class _PlainEnglishAiText {
               'details',
             )
             .replaceAll(RegExp(r'\bfields?\b', caseSensitive: false), 'details')
-            .replaceAll(RegExp(r'\btable\b', caseSensitive: false), 'records')
+            .replaceAll(RegExp(r'\btables?\b', caseSensitive: false), 'records')
+            .replaceAll(RegExp(r'\bviews?\b', caseSensitive: false), 'reports')
+            .replaceAll(RegExp(r'\bJSON\b', caseSensitive: false), 'details')
+            .replaceAll(RegExp(r'\bSQL\b', caseSensitive: false), 'backend checks')
             .replaceAll(
               RegExp(r'\bUUIDs?\b', caseSensitive: false),
               'record IDs',
+            )
+            .replaceAll(
+              RegExp(
+                r'\b(?:payment is blocked|payment blocked|blocked payment|payment has been blocked|payment was blocked)\b',
+                caseSensitive: false,
+              ),
+              'payment needs manual review',
+            )
+            .replaceAll(
+              RegExp(
+                r'\b(?:Is )?payment needs manual review\?\s*No\.?\s*',
+                caseSensitive: false,
+              ),
+              '',
+            )
+            .replaceAll(
+              RegExp(
+                r'\bNothing here says payment needs manual review\.?\s*',
+                caseSensitive: false,
+              ),
+              'No automatic payment stop is applied. ',
+            )
+            .replaceAll(
+              RegExp(
+                r"(?:#{1,6}\s*)?[—-]?\s*\bthere(?:'s| is) no indication that payment needs manual review\.?\s*",
+                caseSensitive: false,
+              ),
+              'No automatic payment stop is applied. ',
+            )
+            .replaceAll(
+              RegExp(
+                r'\bIs payment needs manual review\?\s*',
+                caseSensitive: false,
+              ),
+              '',
+            )
+            .replaceAll(
+              RegExp(
+                r"\bthere(?:'s| is) no indication that payment is (?:automatically )?blocked\.?\s*",
+                caseSensitive: false,
+              ),
+              'No automatic payment stop is applied. ',
+            )
+            .replaceAll(
+              RegExp(
+                r'\b(?:blocked|held|cannot be cleared|should not be cleared) for payment\b',
+                caseSensitive: false,
+              ),
+              'marked for review before payment release',
+            )
+            .replaceAll(
+              RegExp(r'\bblocked\b', caseSensitive: false),
+              'on automatic stop',
+            )
+            .replaceAll(
+              RegExp(
+                r'\bautomatic payment stop is applied in v1\b',
+                caseSensitive: false,
+              ),
+              'No automatic payment stop is applied right now',
+            )
+            .replaceAll(
+              RegExp(
+                r'[—-]\s*there is no automatic payment stop in v1',
+                caseSensitive: false,
+              ),
+              'No automatic payment stop is applied right now',
+            )
+            .replaceAll(
+              RegExp(
+                r'\bautomatic payment stop in v1\b',
+                caseSensitive: false,
+              ),
+              'automatic payment stop right now',
             )
             .replaceAll(RegExp(r'\s+([,.;:])'), r'$1')
             .replaceAll(RegExp(r'[ \t]{2,}'), ' ')

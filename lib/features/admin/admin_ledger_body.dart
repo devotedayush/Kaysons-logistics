@@ -34,6 +34,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
   String? _town;
   String? _ack;
   bool _delayedOnly = false;
+  bool _latePodOnly = false;
   bool _loading = true;
   String? _error;
   List<Map<String, dynamic>> _rows = const [];
@@ -87,6 +88,11 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
       if (_town != null && row['town'] != _town) return false;
       if (_ack != null && row['ack_status'] != _ack) return false;
       if (_delayedOnly && ((_num(row['delay_days']) ?? 0) <= 0)) return false;
+      if (_latePodOnly &&
+          !_flag(row['pod_late_flag']) &&
+          !_flag(row['pod_missing_overdue_flag'])) {
+        return false;
+      }
       return true;
     }).toList();
   }
@@ -158,6 +164,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
       'Settlement Deduction',
       'Balance',
       'Ack Status',
+      'POD Risk',
       'Remarks',
     ];
     final body = rows.map((row) {
@@ -191,6 +198,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
         row['settlement_deduction'],
         row['balance'],
         row['ack_status'],
+        _podRiskLabel(row),
         row['remarks'],
       ].map(_csvCell).join(',');
     });
@@ -298,6 +306,11 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
                 selected: _delayedOnly,
                 onSelected: (v) => setState(() => _delayedOnly = v),
               ),
+              FilterChip(
+                label: const Text('Late POD'),
+                selected: _latePodOnly,
+                onSelected: (v) => setState(() => _latePodOnly = v),
+              ),
             ],
           ),
         ),
@@ -349,6 +362,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
                             DataColumn(label: Text('Total')),
                             DataColumn(label: Text('Balance')),
                             DataColumn(label: Text('Ack')),
+                            DataColumn(label: Text('POD')),
                           ],
                           rows: rows.map(_dataRow).toList(),
                         ),
@@ -394,9 +408,25 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
         DataCell(Text(_money(row['total_freight']))),
         DataCell(Text(_money(row['balance']))),
         DataCell(Text(_text(row['ack_status']))),
+        DataCell(Text(_podRiskLabel(row))),
       ],
     );
   }
+}
+
+bool _flag(dynamic value) {
+  return value == true || value?.toString().toLowerCase() == 'true';
+}
+
+String _podRiskLabel(Map<String, dynamic> row) {
+  final delay = _num(row['pod_delay_days'])?.toStringAsFixed(0);
+  if (_flag(row['pod_late_flag'])) {
+    return delay == null ? 'Late POD' : 'Late POD ${delay}d';
+  }
+  if (_flag(row['pod_missing_overdue_flag'])) {
+    return 'POD overdue';
+  }
+  return 'OK';
 }
 
 class _FilterMenu extends StatelessWidget {

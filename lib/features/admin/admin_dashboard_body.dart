@@ -324,11 +324,17 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
       final critical = openAlerts
           .where((a) => a.severity == 'high' || a.severity == 'critical')
           .length;
+      final latePod = openAlerts.where((a) => a.category == 'late_pod').length;
       insights.add(
         _Insight(
-          title: 'Compliance friction needs active monitoring',
+          title:
+              latePod > 0
+                  ? 'Late POD review is open'
+                  : 'Compliance friction needs active monitoring',
           detail:
-              '${openAlerts.length} alert(s) are still open${critical > 0 ? ', including $critical high-severity cases' : ''}. Focus first on mismatched documents and incomplete vehicle registration.',
+              latePod > 0
+                  ? '$latePod delivery proof alert(s) crossed the 3-day POD SLA. Review these with the receiver and transporter before treating them as normal delays.'
+                  : '${openAlerts.length} alert(s) are still open${critical > 0 ? ', including $critical high-severity cases' : ''}. Focus first on mismatched documents and incomplete vehicle registration.',
           tone: critical > 0 ? _InsightTone.risk : _InsightTone.warning,
         ),
       );

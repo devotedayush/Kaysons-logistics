@@ -8,7 +8,7 @@ Clawd is the explanation and action layer for Kaysons logistics operations. Flut
 
 ```mermaid
 flowchart LR
-  App["Flutter admin/accountant UI"] --> EF["Supabase Edge Function: clawd-admin-ai"]
+  App["Flutter admin/accountant/LM UI"] --> EF["Supabase Edge Function: clawd-admin-ai"]
   App --> Stored["Stored reports, anomalies, prompts"]
 
   EF --> Views["SQL fact and risk views"]
@@ -41,7 +41,7 @@ Clawd does not calculate totals in the model prompt. SQL views calculate freight
 
 ## Edge Function Actions
 
-- `chat`: answers admin/accountant questions using computed facts.
+- `chat`: answers admin/accountant/LM questions using computed facts.
 - `detect_anomalies`: persists SQL anomaly candidates into `ai_anomaly_events` and high-risk `admin_alerts`.
 - `daily_report`: scans anomalies, asks AI for a daily explanation, and stores report history.
 - `monthly_report`: same pattern for month-to-date reporting.
@@ -81,7 +81,7 @@ Examples Clawd can now support:
 
 ## Frontend Rule
 
-The app never stores OpenAI keys and does not run AI logic locally. Admin and accountant screens call the Edge Function or read stored Supabase rows. This keeps private keys server-side, keeps output auditable, and lets Clawd be scheduled later without changing Flutter.
+The app never stores OpenAI keys and does not run AI logic locally. Admin, accountant, and logistics-manager screens call the Edge Function or read stored Supabase rows. This keeps private keys server-side, keeps output auditable, and lets Clawd be scheduled later without changing Flutter.
 
 ## Next Backend Upgrade
 
