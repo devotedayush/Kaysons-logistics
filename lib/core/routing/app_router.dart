@@ -27,6 +27,7 @@ import '../../features/admin/accountant_shell.dart';
 import '../../features/admin/admin_shell.dart';
 import '../../features/admin/admin_profile_screen.dart';
 import '../../features/admin/analytics_screen.dart';
+import '../../features/admin/notifications_screen.dart';
 import '../supabase/auth_service.dart';
 import '../supabase/supabase_bootstrap.dart';
 import '../widgets/desktop_role_shell.dart';
@@ -204,6 +205,15 @@ final GoRouter appRouter = GoRouter(
           ),
     ),
     GoRoute(
+      path: '/lm/notifications',
+      builder:
+          (_, __) => _desktopShell(
+            role: AppRole.logisticsManager,
+            currentIndex: 0,
+            child: const NotificationsScreen(),
+          ),
+    ),
+    GoRoute(
       path: '/lm/track/:id',
       builder:
           (_, state) => _desktopShell(
@@ -294,6 +304,15 @@ final GoRouter appRouter = GoRouter(
           ),
     ),
     GoRoute(
+      path: '/acct/notifications',
+      builder:
+          (_, __) => _desktopShell(
+            role: AppRole.accountant,
+            currentIndex: 0,
+            child: const NotificationsScreen(),
+          ),
+    ),
+    GoRoute(
       path: '/admin',
       builder: (_, __) => const AdminShell(initialIndex: 0),
     ),
@@ -304,6 +323,15 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/admin/bids',
       builder: (_, __) => const AdminShell(initialIndex: 2),
+    ),
+    GoRoute(
+      path: '/admin/bid/:id',
+      builder:
+          (_, state) => _desktopShell(
+            role: AppRole.admin,
+            currentIndex: 2,
+            child: BidManagementScreen(bidId: state.pathParameters['id']!),
+          ),
     ),
     GoRoute(
       path: '/admin/ledger',
@@ -319,6 +347,15 @@ final GoRouter appRouter = GoRouter(
           (_, __) => _desktopShell(
             role: AppRole.admin,
             child: const AdminProfileScreen(),
+          ),
+    ),
+    GoRoute(
+      path: '/admin/notifications',
+      builder:
+          (_, __) => _desktopShell(
+            role: AppRole.admin,
+            currentIndex: 0,
+            child: const NotificationsScreen(),
           ),
     ),
     GoRoute(

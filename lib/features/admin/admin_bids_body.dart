@@ -143,7 +143,7 @@ class _AdminBidsBodyState extends State<AdminBidsBody> {
       _ => const Color(0xFFF3F3F3),
     };
     return InkWell(
-      onTap: () => context.push('/lm/bid/${v['id']}'),
+      onTap: () => context.push('/admin/bid/${v['id']}'),
       borderRadius: BorderRadius.circular(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

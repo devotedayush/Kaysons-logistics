@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/auth_service.dart';
 import '../../core/supabase/supabase_bootstrap.dart';
@@ -42,16 +43,21 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
   Future<void> _loadName() async {
     final uid = AuthService.instance.user?.id;
     if (uid == null) return;
-    final r = await supabase
-        .from('profiles')
-        .select('full_name, email')
-        .eq('id', uid)
-        .maybeSingle();
+    final r =
+        await supabase
+            .from('profiles')
+            .select('full_name, email')
+            .eq('id', uid)
+            .maybeSingle();
     if (!mounted || r == null) return;
-    setState(() => _displayName = (r['full_name'] ??
-            (r['email'] as String?)?.split('@').first ??
-            '')
-        .toString());
+    setState(
+      () =>
+          _displayName =
+              (r['full_name'] ??
+                      (r['email'] as String?)?.split('@').first ??
+                      '')
+                  .toString(),
+    );
   }
 
   Future<void> _pickStart() async {
@@ -88,35 +94,38 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
     setState(() => _loading = true);
     try {
       final now = DateTime.now().toUtc();
-      final rangeStart = _customStart == null
-          ? now.subtract(Duration(days: _rangeDays))
-          : DateTime.utc(
-              _customStart!.year,
-              _customStart!.month,
-              _customStart!.day,
-            );
-      final rangeEnd = _customEnd == null
-          ? null
-          : DateTime.utc(
-              _customEnd!.year,
-              _customEnd!.month,
-              _customEnd!.day,
-              23,
-              59,
-              59,
-            );
-      final todayStart =
-          DateTime.utc(now.year, now.month, now.day);
+      final rangeStart =
+          _customStart == null
+              ? now.subtract(Duration(days: _rangeDays))
+              : DateTime.utc(
+                _customStart!.year,
+                _customStart!.month,
+                _customStart!.day,
+              );
+      final rangeEnd =
+          _customEnd == null
+              ? null
+              : DateTime.utc(
+                _customEnd!.year,
+                _customEnd!.month,
+                _customEnd!.day,
+                23,
+                59,
+                59,
+              );
+      final todayStart = DateTime.utc(now.year, now.month, now.day);
 
       final freightQuery = supabase
           .from('freights')
           .select(
-              'id, created_by, origin, destination_town, cases, weight_kg, status, created_at, dispatched_at, winner_profile_id');
-      final freights = await (rangeEnd == null
-          ? freightQuery.gte('created_at', rangeStart.toIso8601String())
-          : freightQuery
-              .gte('created_at', rangeStart.toIso8601String())
-              .lte('created_at', rangeEnd.toIso8601String()));
+            'id, created_by, origin, destination_town, cases, weight_kg, status, created_at, dispatched_at, winner_profile_id',
+          );
+      final freights =
+          await (rangeEnd == null
+              ? freightQuery.gte('created_at', rangeStart.toIso8601String())
+              : freightQuery
+                  .gte('created_at', rangeStart.toIso8601String())
+                  .lte('created_at', rangeEnd.toIso8601String()));
 
       final wonBids = await supabase
           .from('bids')
@@ -138,12 +147,15 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
       try {
         final alertQuery = supabase
             .from('admin_alerts')
-            .select('id, freight_id, category, severity, title, message, status, created_at');
-        final fetchedAlerts = await (rangeEnd == null
-            ? alertQuery.gte('created_at', rangeStart.toIso8601String())
-            : alertQuery
-                .gte('created_at', rangeStart.toIso8601String())
-                .lte('created_at', rangeEnd.toIso8601String()));
+            .select(
+              'id, freight_id, category, severity, title, message, status, created_at',
+            );
+        final fetchedAlerts =
+            await (rangeEnd == null
+                ? alertQuery.gte('created_at', rangeStart.toIso8601String())
+                : alertQuery
+                    .gte('created_at', rangeStart.toIso8601String())
+                    .lte('created_at', rangeEnd.toIso8601String()));
         alertRows = (fetchedAlerts as List).cast<Map<String, dynamic>>();
       } catch (_) {
         alertRows = const [];
@@ -151,7 +163,7 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
 
       final winAmountByFreight = <String, double>{
         for (final b in wonBids)
-          (b['freight_id'] as String): ((b['amount'] as num).toDouble())
+          (b['freight_id'] as String): ((b['amount'] as num).toDouble()),
       };
 
       // KPIs
@@ -159,8 +171,7 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
       int totalCasesRange = 0;
       int casesToday = 0;
       double revToday = 0;
-      final freightsList =
-          (freights as List).cast<Map<String, dynamic>>();
+      final freightsList = (freights as List).cast<Map<String, dynamic>>();
 
       for (final f in freightsList) {
         final fid = f['id'] as String;
@@ -201,29 +212,36 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
       final perfs = <_ManagerPerf>[];
       for (final m in (managers as List)) {
         final id = m['id'] as String;
-        final label = (m['full_name'] ??
-                m['business_name'] ??
-                (m['email'] as String?)?.split('@').first ??
-                'Unnamed')
-            .toString();
+        final label =
+            (m['full_name'] ??
+                    m['business_name'] ??
+                    (m['email'] as String?)?.split('@').first ??
+                    'Unnamed')
+                .toString();
         final count = byManager[id] ?? 0;
         perfs.add(_ManagerPerf(name: label, bidsHandled: count));
       }
       perfs.sort((a, b) => b.bidsHandled.compareTo(a.bidsHandled));
-      final alerts = alertRows
-          .map(
-            (row) => _AdminAlert(
-              title: (row['title'] ?? 'Alert').toString(),
-              message: (row['message'] ?? '').toString(),
-              category: (row['category'] ?? '').toString(),
-              severity: (row['severity'] ?? 'medium').toString(),
-              status: (row['status'] ?? 'open').toString(),
-              createdAt: DateTime.tryParse((row['created_at'] ?? '').toString()),
-            ),
-          )
-          .toList()
-        ..sort((a, b) => (b.createdAt ?? DateTime(2000))
-            .compareTo(a.createdAt ?? DateTime(2000)));
+      final alerts =
+          alertRows
+              .map(
+                (row) => _AdminAlert(
+                  title: (row['title'] ?? 'Alert').toString(),
+                  message: (row['message'] ?? '').toString(),
+                  category: (row['category'] ?? '').toString(),
+                  severity: (row['severity'] ?? 'medium').toString(),
+                  status: (row['status'] ?? 'open').toString(),
+                  createdAt: DateTime.tryParse(
+                    (row['created_at'] ?? '').toString(),
+                  ),
+                ),
+              )
+              .toList()
+            ..sort(
+              (a, b) => (b.createdAt ?? DateTime(2000)).compareTo(
+                a.createdAt ?? DateTime(2000),
+              ),
+            );
       final insights = _buildInsights(
         freightsList: freightsList,
         winAmountByFreight: winAmountByFreight,
@@ -267,9 +285,10 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
 
     final openCount =
         freightsList.where((f) => f['status'] == 'bidding').length;
-    final lockedCount = freightsList
-        .where((f) => ['locked', 'completed'].contains(f['status']))
-        .length;
+    final lockedCount =
+        freightsList
+            .where((f) => ['locked', 'completed'].contains(f['status']))
+            .length;
     if (openCount > lockedCount && openCount >= 3) {
       insights.add(
         _Insight(
@@ -287,10 +306,9 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
           '${f['origin'] ?? 'Unknown'} → ${f['destination_town'] ?? 'Unknown'}';
       routeCounts[route] = (routeCounts[route] ?? 0) + 1;
     }
-    final duplicate = routeCounts.entries
-        .where((e) => e.value > 1)
-        .toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final duplicate =
+        routeCounts.entries.where((e) => e.value > 1).toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
     if (duplicate.isNotEmpty) {
       final top = duplicate.first;
       insights.add(
@@ -321,9 +339,10 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
 
     final openAlerts = alerts.where((a) => a.status != 'resolved').toList();
     if (openAlerts.isNotEmpty) {
-      final critical = openAlerts
-          .where((a) => a.severity == 'high' || a.severity == 'critical')
-          .length;
+      final critical =
+          openAlerts
+              .where((a) => a.severity == 'high' || a.severity == 'critical')
+              .length;
       final latePod = openAlerts.where((a) => a.category == 'late_pod').length;
       insights.add(
         _Insight(
@@ -368,6 +387,7 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
         children: [
           _AppBar(
             name: _displayName,
+            openAlertCount: _alerts.where((a) => a.status != 'resolved').length,
           ),
           const SizedBox(height: 8),
           Padding(
@@ -398,156 +418,182 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
           const SizedBox(height: 16),
           _loading
               ? const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 40),
-                  child: Center(child: CircularProgressIndicator()),
-                )
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Center(child: CircularProgressIndicator()),
+              )
               : Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                              child: _Kpi(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _Kpi(
                             value: _fmtMoney(_avgFreightPerCase),
                             label: 'Avg Freight / Case',
-                          )),
-                          const SizedBox(width: 8),
-                          Expanded(
-                              child: _Kpi(
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _Kpi(
                             value: _casesToday.toString(),
                             label: 'Cases Today',
-                          )),
-                        ],
-                      ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                              child: _Kpi(
+                  ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _Kpi(
                             value: _activeTransporters.toString(),
                             label: 'Active Transporters',
-                          )),
-                          const SizedBox(width: 8),
-                          Expanded(
-                              child: _Kpi(
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _Kpi(
                             value: _fmtMoney(_revenueToday),
                             label: "Today's Revenue",
-                          )),
-                        ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: Text(
+                      'Freight revenue trend',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: _onSurface,
                       ),
                     ),
-                    const SizedBox(height: 20),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-                      child: Text('Freight revenue trend',
-                          style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w500,
-                              color: _onSurface)),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Container(
-                        height: 180,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFF4FF),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        padding: const EdgeInsets.all(12),
-                        child: _series.every((v) => v == 0)
-                            ? const Center(
-                                child: Text('No data in range',
-                                    style: TextStyle(
-                                        color: _onSurfaceVariant)),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Container(
+                      height: 180,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF4FF),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      child:
+                          _series.every((v) => v == 0)
+                              ? const Center(
+                                child: Text(
+                                  'No data in range',
+                                  style: TextStyle(color: _onSurfaceVariant),
+                                ),
                               )
-                            : CustomPaint(
+                              : CustomPaint(
                                 painter: _LineChart(_series),
                                 size: Size.infinite,
                               ),
-                              ),
                     ),
-                    const SizedBox(height: 24),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      child: Text('AI operational insights',
-                          style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w500,
-                              color: _onSurface)),
-                    ),
-                    ..._insights.map((insight) => _InsightTile(insight: insight)),
-                    const SizedBox(height: 20),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      child: Row(
-                        children: [
-                          const Expanded(
-                            child: Text('Alert notifications',
-                                style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w500,
-                                    color: _onSurface)),
-                          ),
-                          if (_alerts.isNotEmpty)
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFE0E0),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                              child: Text(
-                                '${_alerts.where((a) => a.status != 'resolved').length} open',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFFB3261E),
-                                ),
-                              ),
-                            ),
-                        ],
+                  ),
+                  const SizedBox(height: 24),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Text(
+                      'AI operational insights',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: _onSurface,
                       ),
                     ),
-                    if (_alerts.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                        child: Text(
-                          'No faulty or mismatch alerts were generated in this window.',
-                          style: TextStyle(color: _onSurfaceVariant),
-                        ),
-                      )
-                    else
-                      ..._alerts.take(5).map((alert) => _AlertTile(alert: alert)),
-                    const SizedBox(height: 20),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                      child: Text('Performances By Manager',
-                          style: TextStyle(
+                  ),
+                  ..._insights.map((insight) => _InsightTile(insight: insight)),
+                  const SizedBox(height: 20),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'Alert notifications',
+                            style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w500,
-                              color: _onSurface)),
-                    ),
-                    if (_managers.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-                        child: Text(
-                            'No logistics managers yet.',
-                            style: TextStyle(color: _onSurfaceVariant)),
-                      )
-                    else
-                      ..._managers.asMap().entries.map(
-                            (e) => _ManagerRow(
-                              perf: e.value,
-                              rank: e.key,
-                              total: _managers.length,
+                              color: _onSurface,
                             ),
                           ),
-                  ],
-                ),
+                        ),
+                        if (_alerts.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFE0E0),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              '${_alerts.where((a) => a.status != 'resolved').length} open',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFB3261E),
+                              ),
+                            ),
+                          ),
+                        TextButton.icon(
+                          onPressed: () => context.push('/admin/notifications'),
+                          icon: const Icon(Icons.open_in_new, size: 16),
+                          label: const Text('View all'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_alerts.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                      child: Text(
+                        'No faulty or mismatch alerts were generated in this window.',
+                        style: TextStyle(color: _onSurfaceVariant),
+                      ),
+                    )
+                  else
+                    ..._alerts.take(3).map((alert) => _AlertTile(alert: alert)),
+                  const SizedBox(height: 20),
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: Text(
+                      'Performances By Manager',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w500,
+                        color: _onSurface,
+                      ),
+                    ),
+                  ),
+                  if (_managers.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+                      child: Text(
+                        'No logistics managers yet.',
+                        style: TextStyle(color: _onSurfaceVariant),
+                      ),
+                    )
+                  else
+                    ..._managers.asMap().entries.map(
+                      (e) => _ManagerRow(
+                        perf: e.value,
+                        rank: e.key,
+                        total: _managers.length,
+                      ),
+                    ),
+                ],
+              ),
         ],
       ),
     );
@@ -555,8 +601,9 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
 }
 
 class _AppBar extends StatelessWidget {
-  const _AppBar({required this.name});
+  const _AppBar({required this.name, required this.openAlertCount});
   final String name;
+  final int openAlertCount;
 
   @override
   Widget build(BuildContext context) {
@@ -568,11 +615,23 @@ class _AppBar extends StatelessWidget {
             child: Text(
               name.isEmpty ? 'Welcome' : 'Welcome, $name',
               style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w500,
-                  color: _onSurface),
+                fontSize: 22,
+                fontWeight: FontWeight.w500,
+                color: _onSurface,
+              ),
               overflow: TextOverflow.ellipsis,
             ),
+          ),
+          IconButton(
+            tooltip: 'Notifications',
+            onPressed: () => context.push('/admin/notifications'),
+            icon:
+                openAlertCount > 0
+                    ? Badge.count(
+                      count: openAlertCount,
+                      child: const Icon(Icons.notifications_outlined),
+                    )
+                    : const Icon(Icons.notifications_outlined),
           ),
         ],
       ),
@@ -671,7 +730,10 @@ class _InsightTile extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   insight.detail,
-                  style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: _onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -748,7 +810,9 @@ class _AlertTile extends StatelessWidget {
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.75),
                         borderRadius: BorderRadius.circular(999),
@@ -769,8 +833,10 @@ class _AlertTile extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     alert.message,
-                    style:
-                        const TextStyle(fontSize: 12, color: _onSurfaceVariant),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: _onSurfaceVariant,
+                    ),
                   ),
                 ],
                 const SizedBox(height: 6),
@@ -809,17 +875,24 @@ class _Kpi extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          const Icon(Icons.inventory_2_outlined,
-              size: 32, color: Color(0xFFB39DC8)),
+          const Icon(
+            Icons.inventory_2_outlined,
+            size: 32,
+            color: Color(0xFFB39DC8),
+          ),
           const Spacer(),
-          Text(value,
-              style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                  color: _onSurface)),
-          Text(label,
-              style:
-                  const TextStyle(fontSize: 12, color: _onSurfaceVariant)),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              color: _onSurface,
+            ),
+          ),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
+          ),
         ],
       ),
     );
@@ -868,22 +941,32 @@ class _ManagerRow extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.person_outline,
-                size: 22, color: Color(0xFFB39DC8)),
+            child: const Icon(
+              Icons.person_outline,
+              size: 22,
+              color: Color(0xFFB39DC8),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(perf.name,
-                    style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: _onSurface)),
-                Text('Handling: ${perf.bidsHandled} bids',
-                    style: const TextStyle(
-                        fontSize: 12, color: _onSurfaceVariant)),
+                Text(
+                  perf.name,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w500,
+                    color: _onSurface,
+                  ),
+                ),
+                Text(
+                  'Handling: ${perf.bidsHandled} bids',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: _onSurfaceVariant,
+                  ),
+                ),
               ],
             ),
           ),
@@ -922,20 +1005,25 @@ class _LineChart extends CustomPainter {
     }
 
     // axes
-    final axis = Paint()
-      ..color = const Color(0xFFCAC4D0)
-      ..strokeWidth = 1;
-    canvas.drawLine(Offset(0, size.height - 2),
-        Offset(size.width, size.height - 2), axis);
+    final axis =
+        Paint()
+          ..color = const Color(0xFFCAC4D0)
+          ..strokeWidth = 1;
+    canvas.drawLine(
+      Offset(0, size.height - 2),
+      Offset(size.width, size.height - 2),
+      axis,
+    );
     canvas.drawLine(const Offset(0, 0), Offset(0, size.height - 2), axis);
 
     // line
-    final line = Paint()
-      ..color = const Color(0xFF6750A4)
-      ..strokeWidth = 2.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
+    final line =
+        Paint()
+          ..color = const Color(0xFF6750A4)
+          ..strokeWidth = 2.5
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
     canvas.drawPath(path, line);
   }
 

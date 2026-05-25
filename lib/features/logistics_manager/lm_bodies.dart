@@ -676,6 +676,11 @@ class _AppBar extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          IconButton(
+            tooltip: 'Notifications',
+            icon: const Icon(Icons.notifications_outlined, color: _onSurface),
+            onPressed: () => context.push('/lm/notifications'),
+          ),
         ],
       ),
     );
