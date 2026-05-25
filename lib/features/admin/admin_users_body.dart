@@ -299,7 +299,7 @@ class _AdminUsersBodyState extends State<AdminUsersBody>
             builder: (context, constraints) {
               final narrow = constraints.maxWidth < 560;
               final roleField = DropdownButtonFormField<String>(
-                initialValue: u.role,
+                value: u.role,
                 decoration: const InputDecoration(
                   labelText: 'Role',
                   border: OutlineInputBorder(),
@@ -318,7 +318,7 @@ class _AdminUsersBodyState extends State<AdminUsersBody>
                 },
               );
               final managerField = DropdownButtonFormField<String>(
-                initialValue:
+                value:
                     _logisticsManagers.containsKey(u.managerId)
                         ? u.managerId
                         : null,

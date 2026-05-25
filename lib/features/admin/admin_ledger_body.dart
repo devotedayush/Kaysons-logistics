@@ -447,7 +447,7 @@ class _FilterMenu extends StatelessWidget {
     return SizedBox(
       width: 190,
       child: DropdownButtonFormField<String?>(
-        initialValue: value,
+        value: value,
         isExpanded: true,
         decoration: InputDecoration(
           labelText: label,
@@ -816,7 +816,7 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
                               SizedBox(
                                 width: 260,
                                 child: DropdownButtonFormField<String>(
-                                  initialValue: _transporterId,
+                                  value: _transporterId,
                                   decoration: const InputDecoration(
                                     labelText: 'Transporter',
                                     border: OutlineInputBorder(),
@@ -837,7 +837,7 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
                               SizedBox(
                                 width: 180,
                                 child: DropdownButtonFormField<String>(
-                                  initialValue: _ack,
+                                  value: _ack,
                                   decoration: const InputDecoration(
                                     labelText: 'Ack status',
                                     border: OutlineInputBorder(),
@@ -1242,7 +1242,7 @@ class _ChargeDraftRow extends StatelessWidget {
             SizedBox(
               width: 180,
               child: DropdownButtonFormField<String>(
-                initialValue: draft.kind,
+                value: draft.kind,
                 decoration: const InputDecoration(
                   labelText: 'Kind',
                   border: OutlineInputBorder(),
