@@ -40,7 +40,7 @@ Or install the built APK on a phone:
 adb install -r "dist/kaysons-arm64-v8a-release.apk"
 ```
 
-### A3. Seed four demo accounts (≈3 min)
+### A3. Seed six demo accounts (≈3 min)
 
 One password for everyone: `demopass123`. Emails are fake — no inbox needed.
 
@@ -48,6 +48,8 @@ One password for everyone: `demopass123`. Emails are fake — no inbox needed.
 |---|---|---|
 | Admin | `admin@kaysons.demo` | `demopass123` |
 | Logistics Manager | `lm@kaysons.demo` | `demopass123` |
+| Dispatch Manager | `dm@kaysons.demo` | `demopass123` |
+| Accountant | `accountant@kaysons.demo` | `demopass123` |
 | Transporter A | `ta@kaysons.demo` | `demopass123` |
 | Transporter B | `tb@kaysons.demo` | `demopass123` |
 
@@ -65,9 +67,18 @@ Supabase → SQL editor → New query → paste + run:
 ```sql
 update profiles set role = 'admin',             status = 'approved' where email = 'admin@kaysons.demo';
 update profiles set role = 'logistics_manager', status = 'approved' where email = 'lm@kaysons.demo';
+update profiles set role = 'accountant',        status = 'approved', full_name = 'Demo Accountant' where email = 'accountant@kaysons.demo';
+update profiles
+set role = 'dispatch_manager',
+    status = 'approved',
+    full_name = 'Demo Dispatch Manager',
+    manager_id = (select id from profiles where email = 'lm@kaysons.demo')
+where email = 'dm@kaysons.demo';
 update profiles set role = 'transporter',       status = 'approved', business_name = 'Jagdamba Enterprises' where email = 'ta@kaysons.demo';
 update profiles set role = 'transporter',       status = 'approved', business_name = 'Karan Transport'      where email = 'tb@kaysons.demo';
 ```
+
+The accountant gets the finance surfaces: Ledger, Analytics, and Clawd. The dispatch manager reports to the logistics manager and fills/checks dispatch, pickup, transit, and delivery proof details on awarded/closed freight.
 
 ### A5. (Optional) Pre-load fake freights, bids, invoices
 

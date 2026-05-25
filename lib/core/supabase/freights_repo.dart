@@ -67,10 +67,7 @@ class FreightsRepo {
     final existing = Map<String, dynamic>.from(
       current['delivery_stages'] as Map? ?? {},
     );
-    existing[stage] = {
-      ...data,
-      'submitted_at': submittedAt.toIso8601String(),
-    };
+    existing[stage] = {...data, 'submitted_at': submittedAt.toIso8601String()};
     if (stage == 'dispatched') {
       existing.remove('vehicle_confirmation');
     }
@@ -92,6 +89,45 @@ class FreightsRepo {
       update['status'] = 'completed';
     }
     await supabase.from('freights').update(update).eq('id', freightId);
+    if (stage == 'delivered') {
+      await _createLatePodAlertIfNeeded(
+        freightId: freightId,
+        freight: current,
+        submittedAt: submittedAt,
+        podPhotoPath: data['pod_photo_path']?.toString(),
+      );
+    }
+  }
+
+  Future<void> saveDeliveryStageCheck({
+    required String freightId,
+    required String stage,
+    required Map<String, dynamic> data,
+  }) async {
+    final submittedAt = DateTime.now();
+    final current =
+        await supabase
+            .from('freights')
+            .select(
+              'delivery_stages, dispatched_at, origin, destination_town, winner_profile_id',
+            )
+            .eq('id', freightId)
+            .single();
+    final existing = Map<String, dynamic>.from(
+      current['delivery_stages'] as Map? ?? {},
+    );
+    existing[stage] = {...data, 'submitted_at': submittedAt.toIso8601String()};
+    if (stage == 'dispatched') {
+      existing.remove('vehicle_confirmation');
+    }
+    if (stage == 'in_transit' &&
+        (data['last_location'] ?? '').toString().trim().isNotEmpty) {
+      existing[stage]['location_updated_at'] = submittedAt.toIso8601String();
+    }
+    await supabase
+        .from('freights')
+        .update({'delivery_stages': existing})
+        .eq('id', freightId);
     if (stage == 'delivered') {
       await _createLatePodAlertIfNeeded(
         freightId: freightId,
