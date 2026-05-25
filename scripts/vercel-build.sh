@@ -26,4 +26,6 @@ flutter pub get
 
 printf "SUPABASE_URL=%s\nSUPABASE_ANON_KEY=%s\n" "$SUPABASE_URL" "$SUPABASE_ANON_KEY" > .env
 
-flutter build web --release
+flutter build web --release \
+  --dart-define="SUPABASE_URL=$SUPABASE_URL" \
+  --dart-define="SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY"
