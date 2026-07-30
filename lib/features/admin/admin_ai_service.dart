@@ -38,6 +38,11 @@ class AdminAiService {
     return ClawdDetectionResult.fromData(response.data);
   }
 
+  Future<ClawdSnapshot> loadSnapshot() async {
+    final data = await supabase.rpc('clawd_admin_snapshot');
+    return ClawdSnapshot.fromData(data);
+  }
+
   Future<ClawdResponse> runTemplate({
     required String templateId,
     Map<String, dynamic> variables = const {},
@@ -93,6 +98,7 @@ class AdminAiService {
     final rows = await supabase
         .from('ai_anomaly_events')
         .select()
+        .order('business_priority_score', ascending: false)
         .order('detected_at', ascending: false)
         .limit(40);
     return (rows as List)
@@ -140,8 +146,9 @@ class ClawdDailyReport {
   final Map<String, dynamic> report;
   final Map<String, dynamic> metrics;
 
-  String get summary =>
-      _PlainEnglishAiText.clean((report['summary'] ?? '').toString());
+  String get summary => _PlainEnglishAiText.clean(
+    _StructuredReportMarkdown.format(report['summary']),
+  );
   List<dynamic> get anomalies => (report['anomalies'] as List?) ?? const [];
   String get reportDate =>
       (report['report_date'] ?? report['period_end'] ?? '').toString();
@@ -153,6 +160,70 @@ class ClawdDailyReport {
       report: Map<String, dynamic>.from(map['report'] as Map? ?? const {}),
       metrics: Map<String, dynamic>.from(map['metrics'] as Map? ?? const {}),
     );
+  }
+}
+
+class _StructuredReportMarkdown {
+  const _StructuredReportMarkdown._();
+
+  static String format(dynamic raw) {
+    final original = (raw ?? '').toString().trim();
+    if (original.isEmpty || !original.startsWith('{')) return original;
+
+    try {
+      final decoded = jsonDecode(original);
+      if (decoded is! Map) return original;
+      final report = Map<String, dynamic>.from(decoded);
+      final sections = <String>[];
+
+      _addText(sections, report['summary']);
+
+      final riskLevel = (report['risk_level'] ?? '').toString().trim();
+      final riskScore = report['risk_score'];
+      if (riskLevel.isNotEmpty || riskScore != null) {
+        final label =
+            riskLevel.isEmpty
+                ? 'Risk review'
+                : '${riskLevel[0].toUpperCase()}${riskLevel.substring(1)} risk';
+        final score =
+            riskScore is num ? ' · ${riskScore.toStringAsFixed(0)}/100' : '';
+        sections.add('**$label$score**');
+      }
+
+      _addSection(sections, 'Business impact', report['business_impact']);
+      _addSection(sections, 'Evidence', report['evidence_summary']);
+      _addList(sections, 'Recommended actions', report['recommended_actions']);
+      _addList(sections, 'Follow-up questions', report['follow_up_questions']);
+
+      return sections.join('\n\n').trim();
+    } on FormatException {
+      return original;
+    }
+  }
+
+  static void _addText(List<String> sections, dynamic value) {
+    final text = (value ?? '').toString().trim();
+    if (text.isNotEmpty) sections.add(text);
+  }
+
+  static void _addSection(
+    List<String> sections,
+    String heading,
+    dynamic value,
+  ) {
+    final text = (value ?? '').toString().trim();
+    if (text.isNotEmpty) sections.add('## $heading\n\n$text');
+  }
+
+  static void _addList(List<String> sections, String heading, dynamic value) {
+    if (value is! List) return;
+    final items =
+        value
+            .map((item) => item.toString().trim())
+            .where((item) => item.isNotEmpty)
+            .map((item) => '- $item')
+            .toList();
+    if (items.isNotEmpty) sections.add('## $heading\n\n${items.join('\n')}');
   }
 }
 
@@ -175,6 +246,51 @@ class ClawdDetectionResult {
       events: (map['events'] as List?) ?? const [],
     );
   }
+}
+
+class ClawdSnapshot {
+  const ClawdSnapshot({
+    required this.period,
+    required this.totals,
+    required this.riskSummary,
+    required this.companyTotals,
+    required this.transporters,
+  });
+
+  final Map<String, dynamic> period;
+  final Map<String, dynamic> totals;
+  final Map<String, dynamic> riskSummary;
+  final List<Map<String, dynamic>> companyTotals;
+  final List<Map<String, dynamic>> transporters;
+
+  factory ClawdSnapshot.fromData(dynamic data) {
+    final map = _asMap(data);
+    return ClawdSnapshot(
+      period: _asMap(map['period']),
+      totals: _asMap(map['totals']),
+      riskSummary: _asMap(map['risk_summary']),
+      companyTotals: _asMapList(map['company_totals']),
+      transporters: _asMapList(map['transporter_rankings']),
+    );
+  }
+
+  String get periodLabel {
+    final start = DateTime.tryParse((period['period_start'] ?? '').toString());
+    final end = DateTime.tryParse((period['period_end'] ?? '').toString());
+    if (start == null || end == null) return 'Latest period';
+    if (start.year == end.year && start.month == end.month) {
+      return '${_monthName(start.month)} ${start.year}';
+    }
+    return '${period['period_start']} to ${period['period_end']}';
+  }
+
+  int get dispatches => _int(totals['dispatches']);
+  int get podPending => _int(totals['pod_pending']);
+  double get freight => _double(totals['freight']);
+  double get reviewValue => _double(totals['review_value']);
+  int get duplicateEwayRisks => _int(riskSummary['duplicate_eway_risks']);
+  int get routeCostSpikeRisks => _int(riskSummary['route_cost_spike_risks']);
+  int get highExtraChargeRisks => _int(riskSummary['high_extra_charge_risks']);
 }
 
 class ClawdPromptTemplate {
@@ -244,6 +360,7 @@ class ClawdAnomaly {
     required this.evidence,
     required this.metrics,
     required this.createdAt,
+    required this.businessPriorityScore,
   });
 
   final String id;
@@ -256,6 +373,7 @@ class ClawdAnomaly {
   final Map<String, dynamic> evidence;
   final Map<String, dynamic> metrics;
   final String createdAt;
+  final double businessPriorityScore;
 
   factory ClawdAnomaly.fromMap(Map<String, dynamic> map) {
     return ClawdAnomaly(
@@ -269,6 +387,8 @@ class ClawdAnomaly {
       evidence: Map<String, dynamic>.from(map['evidence'] as Map? ?? const {}),
       metrics: Map<String, dynamic>.from(map['metrics'] as Map? ?? const {}),
       createdAt: (map['detected_at'] ?? '').toString(),
+      businessPriorityScore:
+          (map['business_priority_score'] as num?)?.toDouble() ?? 0,
     );
   }
 }
@@ -279,6 +399,53 @@ Map<String, dynamic> parseTemplateVariables(String raw) {
   final decoded = jsonDecode(trimmed);
   if (decoded is Map) return Map<String, dynamic>.from(decoded);
   throw const FormatException('Variables must be a JSON object.');
+}
+
+Map<String, dynamic> _asMap(dynamic value) {
+  if (value is Map) return Map<String, dynamic>.from(value);
+  if (value is String && value.trim().isNotEmpty) {
+    final decoded = jsonDecode(value);
+    if (decoded is Map) return Map<String, dynamic>.from(decoded);
+  }
+  return <String, dynamic>{};
+}
+
+List<Map<String, dynamic>> _asMapList(dynamic value) {
+  final list = value is List ? value : const [];
+  return list
+      .whereType<Object>()
+      .map(_asMap)
+      .where((row) => row.isNotEmpty)
+      .toList();
+}
+
+int _int(dynamic value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+double _double(dynamic value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+String _monthName(int month) {
+  const months = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ];
+  return months[month - 1];
 }
 
 class _PlainEnglishAiText {
@@ -364,7 +531,10 @@ class _PlainEnglishAiText {
             .replaceAll(RegExp(r'\btables?\b', caseSensitive: false), 'records')
             .replaceAll(RegExp(r'\bviews?\b', caseSensitive: false), 'reports')
             .replaceAll(RegExp(r'\bJSON\b', caseSensitive: false), 'details')
-            .replaceAll(RegExp(r'\bSQL\b', caseSensitive: false), 'backend checks')
+            .replaceAll(
+              RegExp(r'\bSQL\b', caseSensitive: false),
+              'backend checks',
+            )
             .replaceAll(
               RegExp(r'\bUUIDs?\b', caseSensitive: false),
               'record IDs',
@@ -437,10 +607,7 @@ class _PlainEnglishAiText {
               'No automatic payment stop is applied right now',
             )
             .replaceAll(
-              RegExp(
-                r'\bautomatic payment stop in v1\b',
-                caseSensitive: false,
-              ),
+              RegExp(r'\bautomatic payment stop in v1\b', caseSensitive: false),
               'automatic payment stop right now',
             )
             .replaceAll(RegExp(r'\s+([,.;:])'), r'$1')
@@ -448,6 +615,91 @@ class _PlainEnglishAiText {
             .replaceAll(RegExp(r'\n{3,}'), '\n\n')
             .trim();
 
-    return text;
+    return _normalizeMarkdownTables(text);
+  }
+
+  /// Repairs pipe tables that an AI has compressed onto one line.
+  ///
+  /// GitHub-flavoured Markdown requires the header, separator, and every row
+  /// to be on separate lines. Models occasionally return the same table as
+  /// `| header | |---| | value |`, which otherwise renders as plain text.
+  static String _normalizeMarkdownTables(String source) {
+    final separatorPattern = RegExp(
+      r'\|\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|',
+    );
+    var text = source;
+    var searchFrom = 0;
+
+    while (true) {
+      final separatorStart = text.indexOf(separatorPattern, searchFrom);
+      if (separatorStart < 0) break;
+      final separator = separatorPattern.matchAsPrefix(text, separatorStart)!;
+
+      final columnCount =
+          separator
+              .group(0)!
+              .split('|')
+              .where((cell) => cell.trim().isNotEmpty)
+              .length;
+      if (columnCount < 2) {
+        searchFrom = separator.end;
+        continue;
+      }
+
+      var headerStart = separator.start - 1;
+      for (var i = 0; i <= columnCount; i++) {
+        headerStart = text.lastIndexOf('|', headerStart);
+        if (headerStart < 0) break;
+        if (i < columnCount) headerStart--;
+      }
+      if (headerStart < 0) {
+        searchFrom = separator.end;
+        continue;
+      }
+
+      final header = text.substring(headerStart, separator.start).trim();
+      if (header.split('|').length - 2 != columnCount) {
+        searchFrom = separator.end;
+        continue;
+      }
+
+      final rows = <String>[];
+      var cursor = separator.end;
+      while (true) {
+        while (cursor < text.length &&
+            (text[cursor] == ' ' ||
+                text[cursor] == '\t' ||
+                text[cursor] == '\n' ||
+                text[cursor] == '\r')) {
+          cursor++;
+        }
+        if (cursor >= text.length || text[cursor] != '|') break;
+
+        final rowStart = cursor;
+        var rowEnd = cursor;
+        var delimiters = 0;
+        while (delimiters < columnCount && rowEnd + 1 < text.length) {
+          rowEnd = text.indexOf('|', rowEnd + 1);
+          if (rowEnd < 0) break;
+          delimiters++;
+        }
+        if (rowEnd < 0 || delimiters != columnCount) break;
+        rows.add(text.substring(rowStart, rowEnd + 1).trim());
+        cursor = rowEnd + 1;
+      }
+
+      final normalized = [
+        header,
+        separator.group(0)!.trim(),
+        ...rows,
+      ].join('\n');
+      text = text.replaceRange(headerStart, cursor, '\n$normalized\n');
+      searchFrom = headerStart + normalized.length + 2;
+    }
+
+    return text
+        .replaceAll(RegExp(r'[ \t]+\n'), '\n')
+        .replaceAll(RegExp(r'\n{3,}'), '\n\n')
+        .trim();
   }
 }

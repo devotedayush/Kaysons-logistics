@@ -778,9 +778,9 @@ class _SavedVehiclePicker extends StatelessWidget {
   static String _vehicleSummary(Map<String, dynamic> vehicle) {
     final capacity = [
       if ((vehicle['capacity_qt'] ?? '').toString().trim().isNotEmpty)
-        '${vehicle['capacity_qt']} QT',
+        '${vehicle['capacity_qt']} Cases',
       if ((vehicle['capacity_weight_kg'] ?? '').toString().trim().isNotEmpty)
-        '${vehicle['capacity_weight_kg']} WT',
+        '${vehicle['capacity_weight_kg']} Ton',
     ].join(' · ');
     return [
       (vehicle['vehicle_type'] ?? '').toString(),
@@ -1105,9 +1105,9 @@ class _PickupPanel extends StatefulWidget {
 }
 
 class _PickupPanelState extends State<_PickupPanel> {
-  late final TextEditingController _invoice;
   late final TextEditingController _phone;
-  String? _invoicePhotoPath;
+  String? _hiddenInvoiceNumber;
+  String? _hiddenInvoicePhotoPath;
   String? _sitePhotoPath;
   bool _saving = false;
 
@@ -1115,15 +1115,14 @@ class _PickupPanelState extends State<_PickupPanel> {
   void initState() {
     super.initState();
     final s = widget.saved as Map<String, dynamic>? ?? {};
-    _invoice = TextEditingController(text: s['invoice_number'] ?? '');
     _phone = TextEditingController(text: s['driver_phone'] ?? '');
-    _invoicePhotoPath = s['invoice_photo_path'] as String?;
+    _hiddenInvoiceNumber = s['invoice_number'] as String?;
+    _hiddenInvoicePhotoPath = s['invoice_photo_path'] as String?;
     _sitePhotoPath = s['site_photo_path'] as String?;
   }
 
   @override
   void dispose() {
-    _invoice.dispose();
     _phone.dispose();
     super.dispose();
   }
@@ -1136,26 +1135,7 @@ class _PickupPanelState extends State<_PickupPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _SectionHeader('Add Bill details'),
-          _LabelField(
-            label: 'Enter Invoice number',
-            child: PillTextField(
-              controller: _invoice,
-              hint: 'RM - MAR - 8765 - 600 - 1GG',
-              textAlign: TextAlign.start,
-            ),
-          ),
-          _LabelField(
-            label: 'Enter Invoice Photograph',
-            child: _UploadField(
-              label: 'Upload a photo of Invoice',
-              bidId: widget.bidId,
-              stage: 'pickup',
-              kind: 'invoice',
-              initialPath: _invoicePhotoPath,
-              onUploaded: (path) => _invoicePhotoPath = path,
-            ),
-          ),
+          const _SectionHeader('Pickup details'),
           _LabelField(
             label: 'Enter Driver Phone Number',
             child: PillTextField(
@@ -1185,9 +1165,11 @@ class _PickupPanelState extends State<_PickupPanel> {
                     : () async {
                       setState(() => _saving = true);
                       await _save(context, widget.bidId, 'pickup', {
-                        'invoice_number': _invoice.text.trim(),
+                        if (_hiddenInvoiceNumber != null)
+                          'invoice_number': _hiddenInvoiceNumber,
                         'driver_phone': _phone.text.trim(),
-                        'invoice_photo_path': _invoicePhotoPath,
+                        if (_hiddenInvoicePhotoPath != null)
+                          'invoice_photo_path': _hiddenInvoicePhotoPath,
                         'site_photo_path': _sitePhotoPath,
                       });
                       if (mounted) setState(() => _saving = false);

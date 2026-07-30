@@ -680,7 +680,7 @@ class _HeaderHero extends StatelessWidget {
 }
 
 List<RoutePoint> _routePointsFor(Map<String, dynamic> freight) {
-  final stopDetails = (freight['stop_details'] as List?) ?? const [];
+  final stopDetails = _stopDetailsList(freight['stop_details']);
   final stopPoints =
       stopDetails
           .where((row) => row is Map && row['kind'] != 'destination')
@@ -718,7 +718,7 @@ List<RoutePoint> _routePointsFor(Map<String, dynamic> freight) {
 }
 
 String? _destinationMeta(Map<String, dynamic> freight) {
-  final stopDetails = (freight['stop_details'] as List?) ?? const [];
+  final stopDetails = _stopDetailsList(freight['stop_details']);
   for (final row in stopDetails) {
     if (row is Map && row['kind'] == 'destination') {
       return _quantityMeta(row['cases'], row['weight_kg']);
@@ -727,12 +727,16 @@ String? _destinationMeta(Map<String, dynamic> freight) {
   return null;
 }
 
+List<dynamic> _stopDetailsList(dynamic value) {
+  return value is List ? value : const [];
+}
+
 String? _quantityMeta(dynamic cases, dynamic weight) {
   final caseText = (cases ?? '').toString();
   final weightText = (weight ?? '').toString();
   final parts = [
-    if (caseText.isNotEmpty && caseText != 'null') '$caseText QT',
-    if (weightText.isNotEmpty && weightText != 'null') '$weightText WT',
+    if (caseText.isNotEmpty && caseText != 'null') '$caseText Cases',
+    if (weightText.isNotEmpty && weightText != 'null') '$weightText Ton',
   ];
   return parts.isEmpty ? null : parts.join(' · ');
 }

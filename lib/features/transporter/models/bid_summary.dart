@@ -20,7 +20,7 @@ class BidSummary {
   final int timeLeftMinutes;
 
   String get route => '$fromTown → $toTown';
-  String get summary => '$cases QT - $weight WT - $freight Freight';
+  String get summary => '$cases Cases - $weight Ton - $freight Freight';
 
   String get timeLeftLabel {
     if (timeLeftMinutes >= 60) {

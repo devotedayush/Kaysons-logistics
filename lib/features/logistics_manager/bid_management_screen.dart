@@ -98,11 +98,11 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
                               children: [
                                 _InfoPill(
                                   icon: Icons.inventory_2_outlined,
-                                  label: '${freight['cases'] ?? 0} QT',
+                                  label: '${freight['cases'] ?? 0} Cases',
                                 ),
                                 _InfoPill(
                                   icon: Icons.scale_outlined,
-                                  label: '${freight['weight_kg'] ?? 0} WT',
+                                  label: '${freight['weight_kg'] ?? 0} Ton',
                                 ),
                                 _InfoPill(
                                   icon: Icons.circle,
@@ -269,7 +269,7 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
   }
 
   List<RoutePoint> _routePointsFor(Map<String, dynamic> freight) {
-    final stopDetails = (freight['stop_details'] as List?) ?? const [];
+    final stopDetails = _stopDetailsList(freight['stop_details']);
     final stopPoints =
         stopDetails
             .where((row) => row is Map && row['kind'] != 'destination')
@@ -307,7 +307,7 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
   }
 
   String? _destinationMeta(Map<String, dynamic> freight) {
-    final stopDetails = (freight['stop_details'] as List?) ?? const [];
+    final stopDetails = _stopDetailsList(freight['stop_details']);
     for (final row in stopDetails) {
       if (row is Map && row['kind'] == 'destination') {
         return _quantityMeta(row['cases'], row['weight_kg']);
@@ -320,8 +320,8 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
     final caseText = (cases ?? '').toString();
     final weightText = (weight ?? '').toString();
     final parts = [
-      if (caseText.isNotEmpty && caseText != 'null') '$caseText QT',
-      if (weightText.isNotEmpty && weightText != 'null') '$weightText WT',
+      if (caseText.isNotEmpty && caseText != 'null') '$caseText Cases',
+      if (weightText.isNotEmpty && weightText != 'null') '$weightText Ton',
     ];
     return parts.isEmpty ? null : parts.join(' · ');
   }
@@ -376,6 +376,10 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
       ),
     );
   }
+}
+
+List<dynamic> _stopDetailsList(dynamic value) {
+  return value is List ? value : const [];
 }
 
 class _InfoPill extends StatelessWidget {

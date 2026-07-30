@@ -8,6 +8,16 @@ import '../../core/widgets/pill_text_field.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/route_timeline.dart';
 
+const _vehicleCapacityCategories = [
+  'Up to 1 MT',
+  'Up to 3 MT',
+  '3-6 MT',
+  '6-9 MT',
+  '9-12 MT',
+  '12-15 MT',
+  '15+ MT',
+];
+
 class _StopDraft {
   const _StopDraft({
     required this.name,
@@ -49,6 +59,8 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
   bool _isBid = true;
   bool _anonymous = true;
   bool _publishing = false;
+  bool _vehicleCapacityEdited = false;
+  String? _vehicleCapacityCategory;
 
   DateTime _opensAt = DateTime.now();
   DateTime _closesAt = DateTime.now().add(const Duration(hours: 2));
@@ -67,7 +79,10 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
   }
 
   void _onQuantityChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {
+      if (!_vehicleCapacityEdited) _vehicleCapacityCategory = null;
+    });
   }
 
   Future<void> _loadTransporters() async {
@@ -144,6 +159,7 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
     if (name.isEmpty) return;
     setState(() {
       _stops.add(_StopDraft(name: name, cases: cases, weightKg: weight));
+      if (!_vehicleCapacityEdited) _vehicleCapacityCategory = null;
       _stopController.clear();
       _stopCases.clear();
       _stopWeight.clear();
@@ -169,15 +185,15 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
       (stop) => RoutePoint(
         label: stop.name,
         kind: RoutePointKind.stop,
-        meta: '${stop.cases} QT · ${stop.weightKg.toStringAsFixed(0)} WT',
+        meta: '${stop.cases} Cases · ${stop.weightKg.toStringAsFixed(0)} Ton',
       ),
     ),
     RoutePoint(
       label: _to.text.trim(),
       kind: RoutePointKind.destination,
       meta:
-          '${int.tryParse(_cases.text.trim()) ?? 0} QT · '
-          '${(double.tryParse(_weight.text.trim()) ?? 0).toStringAsFixed(0)} WT',
+          '${int.tryParse(_cases.text.trim()) ?? 0} Cases · '
+          '${(double.tryParse(_weight.text.trim()) ?? 0).toStringAsFixed(0)} Ton',
     ),
   ];
 
@@ -213,6 +229,9 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
         'destination_town': _to.text.trim(),
         'cases': _totalCases,
         'weight_kg': _totalWeight,
+        'vehicle_capacity_category':
+            _vehicleCapacityCategory ??
+            _suggestVehicleCapacityCategory(_totalWeight),
         'stops': _stops.map((stop) => stop.name).toList(),
         'stop_details': [
           ..._stops.map((stop) => stop.toJson()),
@@ -286,6 +305,9 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final capacityValue =
+        _vehicleCapacityCategory ??
+        _suggestVehicleCapacityCategory(_totalWeight);
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -349,7 +371,7 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                                       ),
                                     ),
                                     Text(
-                                      '${e.value.cases} QT · ${e.value.weightKg.toStringAsFixed(0)} WT',
+                                      '${e.value.cases} Cases · ${e.value.weightKg.toStringAsFixed(0)} Ton',
                                       style: const TextStyle(
                                         fontSize: 14,
                                         color: Color(0xFF49454F),
@@ -359,7 +381,12 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                                       icon: const Icon(Icons.close, size: 18),
                                       onPressed:
                                           () => setState(
-                                            () => _stops.removeAt(e.key),
+                                            () {
+                                              _stops.removeAt(e.key);
+                                              if (!_vehicleCapacityEdited) {
+                                                _vehicleCapacityCategory = null;
+                                              }
+                                            },
                                           ),
                                     ),
                                   ],
@@ -381,7 +408,7 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                       Expanded(
                         child: PillTextField(
                           controller: _stopCases,
-                          hint: 'Stop cases QT',
+                          hint: 'Stop cases',
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.start,
                         ),
@@ -390,7 +417,7 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                       Expanded(
                         child: PillTextField(
                           controller: _stopWeight,
-                          hint: 'Stop weight WT',
+                          hint: 'Stop metric ton',
                           keyboardType: TextInputType.number,
                           textAlign: TextAlign.start,
                         ),
@@ -425,7 +452,7 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                   Expanded(
                     child: PillTextField(
                       controller: _cases,
-                      hint: 'Destination cases QT',
+                      hint: 'Destination cases',
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.start,
                     ),
@@ -434,7 +461,7 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                   Expanded(
                     child: PillTextField(
                       controller: _weight,
-                      hint: 'Destination weight WT',
+                      hint: 'Destination metric ton',
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.start,
                     ),
@@ -444,6 +471,14 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                 ],
               ),
               _TotalQuantityCard(cases: _totalCases, weight: _totalWeight),
+              _VehicleCapacityPicker(
+                value: capacityValue,
+                onChanged:
+                    (value) => setState(() {
+                      _vehicleCapacityCategory = value;
+                      _vehicleCapacityEdited = true;
+                    }),
+              ),
               RouteTimeline(points: _routePoints),
               const SizedBox(height: 14),
               _labeled(
@@ -787,6 +822,41 @@ class _DateTimeField extends StatelessWidget {
   }
 }
 
+class _VehicleCapacityPicker extends StatelessWidget {
+  const _VehicleCapacityPicker({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: DropdownButtonFormField<String>(
+        value: value,
+        decoration: InputDecoration(
+          labelText: 'Vehicle capacity',
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(28)),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
+        ),
+        items:
+            _vehicleCapacityCategories
+                .map(
+                  (category) => DropdownMenuItem(
+                    value: category,
+                    child: Text(category),
+                  ),
+                )
+                .toList(),
+        onChanged: onChanged,
+      ),
+    );
+  }
+}
+
 class _TotalQuantityCard extends StatelessWidget {
   const _TotalQuantityCard({required this.cases, required this.weight});
 
@@ -814,7 +884,7 @@ class _TotalQuantityCard extends StatelessWidget {
             ),
           ),
           Text(
-            '$cases QT · ${weight.toStringAsFixed(0)} WT',
+            '$cases Cases · ${weight.toStringAsFixed(0)} Ton',
             style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
@@ -825,4 +895,14 @@ class _TotalQuantityCard extends StatelessWidget {
       ),
     );
   }
+}
+
+String _suggestVehicleCapacityCategory(double weightMt) {
+  if (weightMt <= 1) return 'Up to 1 MT';
+  if (weightMt <= 3) return 'Up to 3 MT';
+  if (weightMt <= 6) return '3-6 MT';
+  if (weightMt <= 9) return '6-9 MT';
+  if (weightMt <= 12) return '9-12 MT';
+  if (weightMt <= 15) return '12-15 MT';
+  return '15+ MT';
 }

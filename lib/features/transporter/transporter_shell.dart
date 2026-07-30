@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/auth_service.dart';
+import '../../core/widgets/compact_mobile_navigation.dart';
 import '../../core/widgets/responsive_tabbed_shell.dart';
 import '../../core/widgets/shell_settings_button.dart';
 import 'bids_screen.dart';
 import 'fleet_screen.dart';
 import 'home_screen.dart';
-import 'widgets/transporter_bottom_nav.dart';
 
 class TransporterShell extends StatefulWidget {
   const TransporterShell({super.key, this.initialIndex = 0});
@@ -60,6 +60,12 @@ class _TransporterShellState extends State<TransporterShell> {
         physics: const ClampingScrollPhysics(),
         children: const [TransporterHomeBody(), BidsBody(), FleetBody()],
       ),
+      mobilePageView: PageView(
+        controller: _pc,
+        onPageChanged: (i) => setState(() => _index = i),
+        physics: const NeverScrollableScrollPhysics(),
+        children: const [TransporterHomeBody(), BidsBody(), FleetBody()],
+      ),
       sidebarFooter: ShellSettingsButton(
         onProfile: () => context.push('/profile'),
         onLogout: () async {
@@ -67,9 +73,27 @@ class _TransporterShellState extends State<TransporterShell> {
           if (context.mounted) context.go('/welcome');
         },
       ),
-      mobileNavigation: TransporterBottomNav(
+      mobileNavigation: CompactMobileNavigation(
         currentIndex: _index,
-        onTap: _goto,
+        onSelect: _goto,
+        primaryIndices: const [0, 1, 2],
+        destinations: const [
+          CompactMobileDestination(
+            icon: Icons.dashboard_outlined,
+            selectedIcon: Icons.dashboard,
+            label: 'Home',
+          ),
+          CompactMobileDestination(
+            icon: Icons.gavel_outlined,
+            selectedIcon: Icons.gavel,
+            label: 'Bids',
+          ),
+          CompactMobileDestination(
+            icon: Icons.local_shipping_outlined,
+            selectedIcon: Icons.local_shipping,
+            label: 'Fleet',
+          ),
+        ],
         onProfile: () => context.push('/profile'),
         onLogout: () async {
           await AuthService.instance.signOut();

@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/auth_service.dart';
+import '../../core/widgets/compact_mobile_navigation.dart';
+import '../../core/widgets/mobile_desktop_feature.dart';
 import '../../core/widgets/responsive_tabbed_shell.dart';
 import '../../core/widgets/shell_settings_button.dart';
 import 'admin_ai_body.dart';
 import 'admin_bids_body.dart';
-import 'admin_bottom_nav.dart';
 import 'admin_dashboard_body.dart';
 import 'admin_ledger_body.dart';
 import 'admin_users_body.dart';
@@ -67,6 +68,38 @@ class _AdminShellState extends State<AdminShell> {
           AdminAiBody(),
         ],
       ),
+      mobilePageView: PageView(
+        controller: _pc,
+        onPageChanged: (i) => setState(() => _index = i),
+        physics: const NeverScrollableScrollPhysics(),
+        children: const [
+          AdminDashboardBody(),
+          AdminUsersBody(),
+          AdminBidsBody(),
+          MobileDesktopFeature(
+            icon: Icons.receipt_long_outlined,
+            title: 'Ledger belongs on the web',
+            description:
+                'Use the mobile app for approvals, bid oversight, and urgent operational checks.',
+            desktopFeatures: [
+              'Bulk CSV import and manual ledger entry',
+              'Advanced invoice, POD, route, and date filters',
+              'Detailed financial exports and monthly reports',
+            ],
+          ),
+          MobileDesktopFeature(
+            icon: Icons.psychology_alt_outlined,
+            title: 'Clawd analysis is a web workspace',
+            description:
+                'Complex investigation and reporting needs more room than a phone can offer comfortably.',
+            desktopFeatures: [
+              'Expanded AI conversations and saved prompts',
+              'Daily and monthly operational reports',
+              'Anomaly detection and review queue management',
+            ],
+          ),
+        ],
+      ),
       sidebarFooter: ShellSettingsButton(
         onProfile: () => context.push('/admin/profile'),
         onLogout: () async {
@@ -74,9 +107,37 @@ class _AdminShellState extends State<AdminShell> {
           if (context.mounted) context.go('/welcome');
         },
       ),
-      mobileNavigation: AdminBottomNav(
+      mobileNavigation: CompactMobileNavigation(
         currentIndex: _index,
-        onTap: _goto,
+        onSelect: _goto,
+        primaryIndices: const [0, 1, 2],
+        destinations: const [
+          CompactMobileDestination(
+            icon: Icons.dashboard_outlined,
+            selectedIcon: Icons.dashboard,
+            label: 'Home',
+          ),
+          CompactMobileDestination(
+            icon: Icons.people_outline,
+            selectedIcon: Icons.people,
+            label: 'Users',
+          ),
+          CompactMobileDestination(
+            icon: Icons.gavel_outlined,
+            selectedIcon: Icons.gavel,
+            label: 'Bids',
+          ),
+          CompactMobileDestination(
+            icon: Icons.receipt_long_outlined,
+            selectedIcon: Icons.receipt_long,
+            label: 'Ledger',
+          ),
+          CompactMobileDestination(
+            icon: Icons.psychology_alt_outlined,
+            selectedIcon: Icons.psychology_alt,
+            label: 'Clawd',
+          ),
+        ],
         onProfile: () => context.push('/admin/profile'),
         onLogout: () async {
           await AuthService.instance.signOut();

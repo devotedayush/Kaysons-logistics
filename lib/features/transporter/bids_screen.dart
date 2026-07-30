@@ -137,6 +137,7 @@ class _BidsBodyState extends State<BidsBody> {
   Widget _tile(BuildContext context, Map<String, dynamic> v) {
     final minsLeft = v['minsLeft'] as int;
     final urgent = minsLeft > 0 && minsLeft < 30;
+    final statusLabel = _bidStatusLabel(v['status'] as String, minsLeft);
     final label =
         minsLeft <= 0
             ? 'Closed'
@@ -186,9 +187,18 @@ class _BidsBodyState extends State<BidsBody> {
                         ),
                       ),
                       Text(
-                        '${v['cases']} QT · ${v['weight_kg']} WT',
+                        '${v['cases']} Cases · ${v['weight_kg']} Ton',
                         style: const TextStyle(
                           fontSize: 13,
+                          color: Color(0xFF49454F),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        statusLabel,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
                           color: Color(0xFF49454F),
                         ),
                       ),
@@ -223,5 +233,11 @@ class _BidsBodyState extends State<BidsBody> {
         ],
       ),
     );
+  }
+
+  String _bidStatusLabel(String status, int minsLeft) {
+    if (status == 'completed') return 'Status: Completed';
+    if (status == 'bidding' && minsLeft > 0) return 'Status: Open';
+    return 'Status: Closed';
   }
 }

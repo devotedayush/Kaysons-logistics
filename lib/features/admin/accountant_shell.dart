@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/auth_service.dart';
+import '../../core/widgets/compact_mobile_navigation.dart';
+import '../../core/widgets/mobile_desktop_feature.dart';
 import '../../core/widgets/responsive_tabbed_shell.dart';
 import '../../core/widgets/shell_settings_button.dart';
 import 'admin_ai_body.dart';
@@ -59,6 +61,26 @@ class _AccountantShellState extends State<AccountantShell> {
         physics: const ClampingScrollPhysics(),
         children: const [AdminLedgerBody(), AnalyticsBody(), AdminAiBody()],
       ),
+      mobilePageView: PageView(
+        controller: _pc,
+        onPageChanged: (i) => setState(() => _index = i),
+        physics: const NeverScrollableScrollPhysics(),
+        children: const [
+          AdminLedgerBody(),
+          AnalyticsBody(),
+          MobileDesktopFeature(
+            icon: Icons.psychology_alt_outlined,
+            title: 'Clawd works best on the web',
+            description:
+                'The mobile accountant view stays focused on ledger checks and quick business metrics.',
+            desktopFeatures: [
+              'Expanded AI analysis and follow-up questions',
+              'Saved report prompts and structured parameters',
+              'Anomaly detection, review, and resolution',
+            ],
+          ),
+        ],
+      ),
       sidebarFooter: ShellSettingsButton(
         onProfile: () => context.push('/acct/profile'),
         onLogout: () async {
@@ -66,9 +88,27 @@ class _AccountantShellState extends State<AccountantShell> {
           if (context.mounted) context.go('/welcome');
         },
       ),
-      mobileNavigation: _AccountantBottomNav(
+      mobileNavigation: CompactMobileNavigation(
         currentIndex: _index,
-        onTap: _goto,
+        onSelect: _goto,
+        primaryIndices: const [0, 1],
+        destinations: const [
+          CompactMobileDestination(
+            icon: Icons.receipt_long_outlined,
+            selectedIcon: Icons.receipt_long,
+            label: 'Ledger',
+          ),
+          CompactMobileDestination(
+            icon: Icons.analytics_outlined,
+            selectedIcon: Icons.analytics,
+            label: 'Insights',
+          ),
+          CompactMobileDestination(
+            icon: Icons.psychology_alt_outlined,
+            selectedIcon: Icons.psychology_alt,
+            label: 'Clawd',
+          ),
+        ],
         onProfile: () => context.push('/acct/profile'),
         onLogout: () async {
           await AuthService.instance.signOut();
@@ -92,150 +132,6 @@ class _AccountantShellState extends State<AccountantShell> {
           label: Text('Clawd'),
         ),
       ],
-    );
-  }
-}
-
-class _AccountantBottomNav extends StatelessWidget {
-  const _AccountantBottomNav({
-    required this.currentIndex,
-    required this.onTap,
-    required this.onProfile,
-    required this.onLogout,
-  });
-
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-  final VoidCallback onProfile;
-  final Future<void> Function() onLogout;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF3EDF7),
-        borderRadius: BorderRadius.circular(80),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _NavItem(
-            icon: Icons.receipt_long_outlined,
-            label: 'Ledger',
-            selected: currentIndex == 0,
-            onTap: () => onTap(0),
-          ),
-          _NavItem(
-            icon: Icons.analytics_outlined,
-            label: 'Analytics',
-            selected: currentIndex == 1,
-            onTap: () => onTap(1),
-          ),
-          _NavItem(
-            icon: Icons.psychology_alt_outlined,
-            label: 'Clawd',
-            selected: currentIndex == 2,
-            onTap: () => onTap(2),
-          ),
-          PopupMenuButton<String>(
-            tooltip: 'Profile and logout',
-            onSelected: (value) async {
-              if (value == 'profile') onProfile();
-              if (value == 'logout') await onLogout();
-            },
-            itemBuilder:
-                (context) => const [
-                  PopupMenuItem(
-                    value: 'profile',
-                    child: Row(
-                      children: [
-                        Icon(Icons.person_outline, size: 18),
-                        SizedBox(width: 10),
-                        Text('Profile'),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'logout',
-                    child: Row(
-                      children: [
-                        Icon(Icons.logout, size: 18),
-                        SizedBox(width: 10),
-                        Text('Logout'),
-                      ],
-                    ),
-                  ),
-                ],
-            child: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.account_circle_outlined, size: 22),
-                  SizedBox(height: 4),
-                  Text('More', style: TextStyle(fontSize: 12)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  const _NavItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = selected ? const Color(0xFF1D1B20) : const Color(0xFF49454F);
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(40),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 2),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 54,
-                height: 32,
-                decoration: BoxDecoration(
-                  color:
-                      selected ? const Color(0xFFE8DEF8) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(100),
-                ),
-                child: Icon(icon, color: color, size: 22),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 12,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

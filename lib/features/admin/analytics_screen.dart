@@ -200,7 +200,7 @@ class _AnalyticsBodyState extends State<AnalyticsBody> {
                             value: totalCases.toStringAsFixed(0),
                           ),
                           _StatCard(
-                            label: 'MT / Weight',
+                            label: 'Metric Ton',
                             value: totalWeight.toStringAsFixed(2),
                           ),
                           _StatCard(

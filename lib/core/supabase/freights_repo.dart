@@ -20,8 +20,16 @@ class FreightsRepo {
         .order('created_at', ascending: false);
   }
 
+  Stream<List<Map<String, dynamic>>> streamOperationalFreights() {
+    return supabase
+        .from('freights')
+        .stream(primaryKey: ['id'])
+        .eq('record_origin', 'live')
+        .order('created_at', ascending: false);
+  }
+
   Stream<List<Map<String, dynamic>>> streamAcceptedDispatchFreights() {
-    return streamAllFreights().map(
+    return streamOperationalFreights().map(
       (rows) =>
           rows
               .where(
@@ -87,6 +95,14 @@ class FreightsRepo {
     }
     if (stage == 'delivered') {
       update['status'] = 'completed';
+      final podPath = (data['pod_photo_path'] ?? '').toString().trim();
+      if (podPath.isNotEmpty) {
+        update['ack_status'] = 'received';
+        update['ack_received_at'] = submittedAt.toIso8601String();
+        update['pod_received_date'] = submittedAt.toIso8601String().substring(0, 10);
+        update['pod_file_path'] = podPath;
+        update['pod_received_by'] = supabase.auth.currentUser?.id;
+      }
     }
     await supabase.from('freights').update(update).eq('id', freightId);
     if (stage == 'delivered') {
@@ -124,10 +140,18 @@ class FreightsRepo {
         (data['last_location'] ?? '').toString().trim().isNotEmpty) {
       existing[stage]['location_updated_at'] = submittedAt.toIso8601String();
     }
-    await supabase
-        .from('freights')
-        .update({'delivery_stages': existing})
-        .eq('id', freightId);
+    final update = <String, dynamic>{'delivery_stages': existing};
+    if (stage == 'delivered') {
+      final podPath = (data['pod_photo_path'] ?? '').toString().trim();
+      if (podPath.isNotEmpty) {
+        update['ack_status'] = 'received';
+        update['ack_received_at'] = submittedAt.toIso8601String();
+        update['pod_received_date'] = submittedAt.toIso8601String().substring(0, 10);
+        update['pod_file_path'] = podPath;
+        update['pod_received_by'] = supabase.auth.currentUser?.id;
+      }
+    }
+    await supabase.from('freights').update(update).eq('id', freightId);
     if (stage == 'delivered') {
       await _createLatePodAlertIfNeeded(
         freightId: freightId,

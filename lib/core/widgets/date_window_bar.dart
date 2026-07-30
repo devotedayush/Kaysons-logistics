@@ -53,6 +53,11 @@ class DateWindowBar extends StatelessWidget {
               onTap: () => onSelectRange(30),
             ),
             _RangeChip(
+              label: '90 days',
+              selected: !hasCustom && rangeDays == 90,
+              onTap: () => onSelectRange(90),
+            ),
+            _RangeChip(
               label: _customLabel,
               selected: hasCustom,
               onTap: onPickStart,

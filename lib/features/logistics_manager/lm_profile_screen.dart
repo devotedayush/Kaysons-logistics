@@ -402,9 +402,9 @@ class _VehicleDirectory extends StatelessWidget {
                 final owner = (row['owner_label'] ?? 'Transporter').toString();
                 final capacity = [
                   if ((row['capacity_qt'] ?? '').toString().isNotEmpty)
-                    '${row['capacity_qt']} QT',
+                    '${row['capacity_qt']} Cases',
                   if ((row['capacity_weight_kg'] ?? '').toString().isNotEmpty)
-                    '${row['capacity_weight_kg']} WT',
+                    '${row['capacity_weight_kg']} Ton',
                 ].join(' · ');
                 return _DirectoryTile(
                   icon: Icons.local_shipping_outlined,

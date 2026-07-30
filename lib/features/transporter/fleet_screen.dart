@@ -142,7 +142,7 @@ class _FleetBodyState extends State<FleetBody> {
     final vehicle = (e['vehicle_number'] ?? '').toString();
     final driver = (e['driver_name'] ?? '').toString();
     final summary = [
-      '${e['cases'] ?? 0} QT · ${e['weight_kg'] ?? 0} WT',
+      '${e['cases'] ?? 0} Cases · ${e['weight_kg'] ?? 0} Ton',
       if (vehicle.isNotEmpty) vehicle,
       if (driver.isNotEmpty) driver,
     ].join(' · ');

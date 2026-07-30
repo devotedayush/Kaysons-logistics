@@ -5,6 +5,7 @@ import 'admin_ai_service.dart';
 
 const _onSurface = Color(0xFF1D1B20);
 const _onSurfaceVariant = Color(0xFF49454F);
+const _border = Color(0xFFE4E0E8);
 
 class AdminAiBody extends StatefulWidget {
   const AdminAiBody({super.key});
@@ -20,7 +21,7 @@ class _AdminAiBodyState extends State<AdminAiBody> {
     const _ClawdMessage(
       fromClawd: true,
       text:
-          'I am Clawd. I read the backend ledger facts, explain risks, and store every report for audit.',
+          'I am Clawd. I use the current ledger snapshot, risk queue, and reports to answer operations questions.',
     ),
   ];
 
@@ -28,6 +29,7 @@ class _AdminAiBodyState extends State<AdminAiBody> {
   bool _asking = false;
   bool _reporting = false;
   bool _detecting = false;
+  ClawdSnapshot? _snapshot;
   ClawdDailyReport? _latestReport;
   List<ClawdPromptTemplate> _templates = const [];
   List<ClawdStoredReport> _reports = const [];
@@ -52,16 +54,18 @@ class _AdminAiBodyState extends State<AdminAiBody> {
     try {
       final service = AdminAiService.instance;
       final results = await Future.wait([
+        service.loadSnapshot(),
         service.loadPromptTemplates(),
         service.loadReports(),
         service.loadAnomalies(),
       ]);
       if (!mounted) return;
-      final templates = results[0] as List<ClawdPromptTemplate>;
+      final templates = results[1] as List<ClawdPromptTemplate>;
       setState(() {
+        _snapshot = results[0] as ClawdSnapshot;
         _templates = templates;
-        _reports = results[1] as List<ClawdStoredReport>;
-        _anomalies = results[2] as List<ClawdAnomaly>;
+        _reports = results[2] as List<ClawdStoredReport>;
+        _anomalies = results[3] as List<ClawdAnomaly>;
         _selectedTemplate ??= templates.isEmpty ? null : templates.first;
       });
     } catch (e) {
@@ -71,8 +75,8 @@ class _AdminAiBodyState extends State<AdminAiBody> {
     }
   }
 
-  Future<void> _ask() async {
-    final question = _question.text.trim();
+  Future<void> _ask([String? prompt]) async {
+    final question = (prompt ?? _question.text).trim();
     if (question.isEmpty || _asking) return;
     setState(() {
       _asking = true;
@@ -132,13 +136,13 @@ class _AdminAiBodyState extends State<AdminAiBody> {
           _ClawdMessage(
             fromClawd: true,
             text:
-                'Anomaly scan complete. Checked ${result.scanned} signals and stored ${result.stored} review item(s).',
+                'Risk scan complete. Checked ${result.scanned} ranked signal(s) and stored ${result.stored} review item(s).',
           ),
         );
       });
       await _refresh();
     } catch (e) {
-      _addError('Anomaly scan could not run: $e');
+      _addError('Risk scan could not run: $e');
     } finally {
       if (mounted) setState(() => _detecting = false);
     }
@@ -199,7 +203,7 @@ class _AdminAiBodyState extends State<AdminAiBody> {
                     decoration: const InputDecoration(
                       labelText: 'Prompt',
                       hintText:
-                          'Review {{route}} for sudden freight increase and possible e-way risk.',
+                          'Review {{route}} for freight increase and POD risk.',
                     ),
                   ),
                 ],
@@ -235,8 +239,82 @@ class _AdminAiBodyState extends State<AdminAiBody> {
       await AdminAiService.instance.updateAnomalyStatus(anomaly.id, status);
       await _refresh();
     } catch (e) {
-      _addError('Anomaly status could not be updated: $e');
+      _addError('Risk status could not be updated: $e');
     }
+  }
+
+  Future<void> _showExpandedChat() async {
+    await showDialog<void>(
+      context: context,
+      builder:
+          (dialogContext) => StatefulBuilder(
+            builder: (context, setDialogState) {
+              Future<void> ask([String? prompt]) async {
+                final pending = _ask(prompt);
+                setDialogState(() {});
+                await pending;
+                if (dialogContext.mounted) setDialogState(() {});
+              }
+
+              return Dialog.fullscreen(
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.psychology_alt_outlined, size: 30),
+                            const SizedBox(width: 10),
+                            const Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Clawd chat',
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Choose a quick prompt or ask an operations question.',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: _onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              tooltip: 'Close expanded chat',
+                              onPressed:
+                                  () => Navigator.of(dialogContext).pop(),
+                              icon: const Icon(Icons.close),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _QuickPrompts(onPrompt: (prompt) => ask(prompt)),
+                        const SizedBox(height: 12),
+                        Expanded(
+                          child: _ChatPane(
+                            messages: _messages,
+                            question: _question,
+                            asking: _asking,
+                            onAsk: ask,
+                            expanded: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+    );
   }
 
   void _addError(String text) {
@@ -268,49 +346,163 @@ class _AdminAiBodyState extends State<AdminAiBody> {
                   ? const Center(child: CircularProgressIndicator())
                   : LayoutBuilder(
                     builder: (context, constraints) {
-                      final narrow = constraints.maxWidth < 980;
-                      final panels = _SidePanels(
-                        templates: _templates,
-                        selectedTemplate: _selectedTemplate,
-                        variables: _variables,
-                        anomalies: _anomalies,
-                        reports: _reports,
-                        onTemplateChanged:
-                            (template) =>
-                                setState(() => _selectedTemplate = template),
-                        onRunTemplate: _runSelectedTemplate,
-                        onAddPrompt: _showPromptDialog,
-                        onUpdateAnomaly: _updateAnomaly,
-                      );
-                      final chat = _ChatPane(
+                      final wide = constraints.maxWidth >= 1100;
+                      final workspace = _Workspace(
+                        snapshot: _snapshot,
                         messages: _messages,
                         question: _question,
                         asking: _asking,
+                        anomalies: _anomalies,
+                        reports: _reports,
+                        templates: _templates,
+                        selectedTemplate: _selectedTemplate,
+                        variables: _variables,
                         onAsk: _ask,
+                        onQuickPrompt: _ask,
+                        onExpandChat: _showExpandedChat,
+                        onUpdateAnomaly: _updateAnomaly,
+                        onTemplateChanged:
+                            (value) =>
+                                setState(() => _selectedTemplate = value),
+                        onRunTemplate: _runSelectedTemplate,
+                        onAddPrompt: _showPromptDialog,
                       );
-
-                      if (narrow) {
-                        return ListView(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                          children: [
-                            SizedBox(height: 620, child: chat),
-                            const SizedBox(height: 12),
-                            panels,
-                          ],
-                        );
+                      if (!wide) {
+                        return workspace;
                       }
-
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(flex: 7, child: chat),
-                          SizedBox(width: 390, child: panels),
-                        ],
-                      );
+                      return workspace;
                     },
                   ),
         ),
       ],
+    );
+  }
+}
+
+class _Workspace extends StatelessWidget {
+  const _Workspace({
+    required this.snapshot,
+    required this.messages,
+    required this.question,
+    required this.asking,
+    required this.anomalies,
+    required this.reports,
+    required this.templates,
+    required this.selectedTemplate,
+    required this.variables,
+    required this.onAsk,
+    required this.onQuickPrompt,
+    required this.onExpandChat,
+    required this.onUpdateAnomaly,
+    required this.onTemplateChanged,
+    required this.onRunTemplate,
+    required this.onAddPrompt,
+  });
+
+  final ClawdSnapshot? snapshot;
+  final List<_ClawdMessage> messages;
+  final TextEditingController question;
+  final bool asking;
+  final List<ClawdAnomaly> anomalies;
+  final List<ClawdStoredReport> reports;
+  final List<ClawdPromptTemplate> templates;
+  final ClawdPromptTemplate? selectedTemplate;
+  final TextEditingController variables;
+  final Future<void> Function([String? prompt]) onAsk;
+  final ValueChanged<String> onQuickPrompt;
+  final VoidCallback onExpandChat;
+  final Future<void> Function(ClawdAnomaly anomaly, String status)
+  onUpdateAnomaly;
+  final ValueChanged<ClawdPromptTemplate?> onTemplateChanged;
+  final VoidCallback onRunTemplate;
+  final VoidCallback onAddPrompt;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final wide = constraints.maxWidth >= 1100;
+        if (!wide) {
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            children: [
+              _RiskSummary(snapshot: snapshot),
+              const SizedBox(height: 12),
+              _QuickPrompts(onPrompt: onQuickPrompt),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 520,
+                child: _ChatPane(
+                  messages: messages,
+                  question: question,
+                  asking: asking,
+                  onAsk: onAsk,
+                  onExpand: onExpandChat,
+                ),
+              ),
+              const SizedBox(height: 12),
+              _ReviewQueue(anomalies: anomalies, onUpdate: onUpdateAnomaly),
+              const SizedBox(height: 12),
+              _ToolsPanel(
+                templates: templates,
+                selectedTemplate: selectedTemplate,
+                variables: variables,
+                reports: reports,
+                onTemplateChanged: onTemplateChanged,
+                onRunTemplate: onRunTemplate,
+                onAddPrompt: onAddPrompt,
+              ),
+            ],
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              flex: 7,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 8, 16),
+                children: [
+                  _RiskSummary(snapshot: snapshot),
+                  const SizedBox(height: 12),
+                  _QuickPrompts(onPrompt: onQuickPrompt),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    height: 500,
+                    child: _ChatPane(
+                      messages: messages,
+                      question: question,
+                      asking: asking,
+                      onAsk: onAsk,
+                      onExpand: onExpandChat,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: 430,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(8, 8, 16, 16),
+                children: [
+                  _ReviewQueue(anomalies: anomalies, onUpdate: onUpdateAnomaly),
+                  const SizedBox(height: 12),
+                  _ToolsPanel(
+                    templates: templates,
+                    selectedTemplate: selectedTemplate,
+                    variables: variables,
+                    reports: reports,
+                    onTemplateChanged: onTemplateChanged,
+                    onRunTemplate: onRunTemplate,
+                    onAddPrompt: onAddPrompt,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -339,7 +531,7 @@ class _Header extends StatelessWidget {
         runSpacing: 10,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          const Icon(Icons.psychology_alt_outlined, size: 42),
+          const Icon(Icons.psychology_alt_outlined, size: 38),
           const SizedBox(
             width: 360,
             child: Column(
@@ -349,12 +541,12 @@ class _Header extends StatelessWidget {
                   'Clawd',
                   style: TextStyle(
                     fontSize: 26,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     color: _onSurface,
                   ),
                 ),
                 Text(
-                  'Backend AI for fraud, ledger, and operations intelligence',
+                  'Operations analyst for freight, POD, e-way, and cost review',
                   style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
                 ),
               ],
@@ -388,197 +580,301 @@ class _Header extends StatelessWidget {
   }
 }
 
+class _RiskSummary extends StatelessWidget {
+  const _RiskSummary({required this.snapshot});
+
+  final ClawdSnapshot? snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = snapshot;
+    return _Panel(
+      title:
+          s == null
+              ? 'Current Risk Summary'
+              : 'Current Risk Summary · ${s.periodLabel}',
+      child:
+          s == null
+              ? const Text(
+                'No snapshot loaded.',
+                style: TextStyle(color: _onSurfaceVariant),
+              )
+              : Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _MetricPill('Dispatches', s.dispatches.toString()),
+                  _MetricPill('Freight', _fmtMoney(s.freight)),
+                  _MetricPill(
+                    'POD pending',
+                    s.podPending.toString(),
+                    warning: s.podPending > 0,
+                  ),
+                  _MetricPill(
+                    'Review value',
+                    _fmtMoney(s.reviewValue),
+                    warning: s.reviewValue > 0,
+                  ),
+                  _MetricPill(
+                    'Duplicate e-way',
+                    s.duplicateEwayRisks.toString(),
+                    warning: s.duplicateEwayRisks > 0,
+                  ),
+                  _MetricPill(
+                    'Route spikes',
+                    s.routeCostSpikeRisks.toString(),
+                    warning: s.routeCostSpikeRisks > 0,
+                  ),
+                  _MetricPill(
+                    'Extra charges',
+                    s.highExtraChargeRisks.toString(),
+                    warning: s.highExtraChargeRisks > 0,
+                  ),
+                ],
+              ),
+    );
+  }
+}
+
+class _QuickPrompts extends StatelessWidget {
+  const _QuickPrompts({required this.onPrompt});
+
+  final ValueChanged<String> onPrompt;
+
+  @override
+  Widget build(BuildContext context) {
+    final prompts = [
+      'Summarize April 2026 logistics',
+      'Show POD pending by transporter',
+      'Find highest freight per MT routes',
+      'Check duplicate invoice and e-way risk',
+      'Compare Bunge vs Cargill',
+    ];
+    return _Panel(
+      title: 'Quick Prompts',
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children:
+            prompts
+                .map(
+                  (prompt) => ActionChip(
+                    avatar: const Icon(Icons.bolt_outlined, size: 16),
+                    label: Text(prompt),
+                    onPressed: () => onPrompt(prompt),
+                  ),
+                )
+                .toList(),
+      ),
+    );
+  }
+}
+
 class _ChatPane extends StatelessWidget {
   const _ChatPane({
     required this.messages,
     required this.question,
     required this.asking,
     required this.onAsk,
+    this.onExpand,
+    this.expanded = false,
   });
 
   final List<_ClawdMessage> messages;
   final TextEditingController question;
   final bool asking;
-  final VoidCallback onAsk;
+  final Future<void> Function([String? prompt]) onAsk;
+  final VoidCallback? onExpand;
+  final bool expanded;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            itemCount: messages.length,
-            itemBuilder:
-                (context, index) => _MessageBubble(message: messages[index]),
-          ),
-        ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: question,
-                    minLines: 1,
-                    maxLines: 4,
-                    decoration: InputDecoration(
-                      hintText: 'Ask about e-way risk, route costs, delays...',
-                      filled: true,
-                      fillColor: const Color(0xFFF8F5FB),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                    onSubmitted: (_) => onAsk(),
+    return _Panel(
+      title: 'Ask Clawd',
+      fill: expanded,
+      trailing:
+          onExpand == null
+              ? null
+              : TextButton.icon(
+                onPressed: onExpand,
+                icon: const Icon(Icons.open_in_full, size: 18),
+                label: const Text('Expand'),
+              ),
+      child: Column(
+        children: [
+          if (expanded)
+            Expanded(child: _MessageList(messages: messages))
+          else
+            SizedBox(height: 380, child: _MessageList(messages: messages)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: question,
+                  minLines: 1,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    hintText:
+                        'Ask about POD, routes, e-way bills, or transporter costs...',
                   ),
+                  onSubmitted: (_) => onAsk(),
                 ),
-                const SizedBox(width: 10),
-                IconButton.filled(
-                  tooltip: 'Send',
-                  onPressed: asking ? null : onAsk,
-                  icon:
-                      asking
-                          ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                          : const Icon(Icons.send),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 8),
+              IconButton.filled(
+                tooltip: 'Send',
+                onPressed: asking ? null : () => onAsk(),
+                icon:
+                    asking
+                        ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                        : const Icon(Icons.send),
+              ),
+            ],
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-class _SidePanels extends StatelessWidget {
-  const _SidePanels({
+class _MessageList extends StatelessWidget {
+  const _MessageList({required this.messages});
+
+  final List<_ClawdMessage> messages;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: messages.length,
+      itemBuilder: (context, index) => _MessageBubble(message: messages[index]),
+    );
+  }
+}
+
+class _ReviewQueue extends StatelessWidget {
+  const _ReviewQueue({required this.anomalies, required this.onUpdate});
+
+  final List<ClawdAnomaly> anomalies;
+  final Future<void> Function(ClawdAnomaly anomaly, String status) onUpdate;
+
+  @override
+  Widget build(BuildContext context) {
+    final open = anomalies.where((a) => a.status == 'open').take(8).toList();
+    return _Panel(
+      title: 'Open Review Queue',
+      child:
+          open.isEmpty
+              ? const Text(
+                'No stored review items yet. Run Scan risks.',
+                style: TextStyle(color: _onSurfaceVariant),
+              )
+              : Column(
+                children:
+                    open
+                        .map(
+                          (anomaly) => _AnomalyTile(
+                            anomaly: anomaly,
+                            onUpdate: onUpdate,
+                          ),
+                        )
+                        .toList(),
+              ),
+    );
+  }
+}
+
+class _ToolsPanel extends StatelessWidget {
+  const _ToolsPanel({
     required this.templates,
     required this.selectedTemplate,
     required this.variables,
-    required this.anomalies,
     required this.reports,
     required this.onTemplateChanged,
     required this.onRunTemplate,
     required this.onAddPrompt,
-    required this.onUpdateAnomaly,
   });
 
   final List<ClawdPromptTemplate> templates;
   final ClawdPromptTemplate? selectedTemplate;
   final TextEditingController variables;
-  final List<ClawdAnomaly> anomalies;
   final List<ClawdStoredReport> reports;
   final ValueChanged<ClawdPromptTemplate?> onTemplateChanged;
   final VoidCallback onRunTemplate;
   final VoidCallback onAddPrompt;
-  final Future<void> Function(ClawdAnomaly anomaly, String status)
-  onUpdateAnomaly;
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(8, 8, 16, 16),
-      children: [
-        _Panel(
-          title: 'Saved prompts',
-          action: IconButton(
-            tooltip: 'Add prompt',
-            onPressed: onAddPrompt,
-            icon: const Icon(Icons.add),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              DropdownButtonFormField<ClawdPromptTemplate>(
-                value: selectedTemplate,
-                items:
-                    templates
-                        .map(
-                          (template) => DropdownMenuItem(
-                            value: template,
-                            child: Text(template.name),
-                          ),
-                        )
-                        .toList(),
-                onChanged: onTemplateChanged,
-                decoration: const InputDecoration(labelText: 'Prompt'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: variables,
-                minLines: 2,
-                maxLines: 4,
-                decoration: const InputDecoration(
-                  labelText: 'Variables JSON',
-                  hintText: '{"route":"Karnal to Delhi"}',
-                ),
-              ),
-              const SizedBox(height: 8),
-              FilledButton.icon(
-                onPressed: selectedTemplate == null ? null : onRunTemplate,
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Run prompt'),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        _Panel(
-          title: 'Open risk signals',
-          child: Column(
-            children:
-                anomalies.isEmpty
-                    ? const [
-                      Text(
-                        'No stored risk signals yet.',
-                        style: TextStyle(color: _onSurfaceVariant),
+    return _Panel(
+      title: 'Reports & Saved Prompts',
+      trailing: IconButton(
+        tooltip: 'Add prompt',
+        onPressed: onAddPrompt,
+        icon: const Icon(Icons.add),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DropdownButtonFormField<ClawdPromptTemplate>(
+            initialValue: selectedTemplate,
+            items:
+                templates
+                    .map(
+                      (template) => DropdownMenuItem(
+                        value: template,
+                        child: Text(template.name),
                       ),
-                    ]
-                    : anomalies
-                        .take(8)
-                        .map(
-                          (anomaly) => _AnomalyTile(
-                            anomaly: anomaly,
-                            onUpdate: onUpdateAnomaly,
-                          ),
-                        )
-                        .toList(),
+                    )
+                    .toList(),
+            onChanged: onTemplateChanged,
+            decoration: const InputDecoration(labelText: 'Saved prompt'),
           ),
-        ),
-        const SizedBox(height: 12),
-        _Panel(
-          title: 'Report history',
-          child: Column(
-            children:
-                reports.isEmpty
-                    ? const [
-                      Text(
-                        'Reports will appear after Clawd runs.',
-                        style: TextStyle(color: _onSurfaceVariant),
-                      ),
-                    ]
-                    : reports.take(6).map(_ReportTile.new).toList(),
+          const SizedBox(height: 8),
+          TextField(
+            controller: variables,
+            minLines: 2,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Variables JSON',
+              hintText: '{"route":"Ludhiana to Amritsar"}',
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 8),
+          FilledButton.icon(
+            onPressed: selectedTemplate == null ? null : onRunTemplate,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Run prompt'),
+          ),
+          const Divider(height: 24),
+          if (reports.isEmpty)
+            const Text(
+              'Reports will appear after Clawd runs.',
+              style: TextStyle(color: _onSurfaceVariant),
+            )
+          else
+            ...reports.take(5).map(_ReportTile.new),
+        ],
+      ),
     );
   }
 }
 
 class _Panel extends StatelessWidget {
-  const _Panel({required this.title, required this.child, this.action});
+  const _Panel({
+    required this.title,
+    required this.child,
+    this.trailing,
+    this.fill = false,
+  });
 
   final String title;
   final Widget child;
-  final Widget? action;
+  final Widget? trailing;
+  final bool fill;
 
   @override
   Widget build(BuildContext context) {
@@ -586,9 +882,9 @@ class _Panel extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFFFF),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE4E0E8)),
+        border: Border.all(color: _border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -599,45 +895,58 @@ class _Panel extends StatelessWidget {
                 child: Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 15,
+                    fontSize: 16,
                     fontWeight: FontWeight.w800,
                     color: _onSurface,
                   ),
                 ),
               ),
-              if (action != null) action!,
+              if (trailing != null) trailing!,
             ],
           ),
           const SizedBox(height: 10),
-          child,
+          if (fill) Expanded(child: child) else child,
         ],
       ),
     );
   }
 }
 
-class _ReportNotice extends StatelessWidget {
-  const _ReportNotice({required this.report});
+class _MetricPill extends StatelessWidget {
+  const _MetricPill(this.label, this.value, {this.warning = false});
 
-  final ClawdDailyReport report;
+  final String label;
+  final String value;
+  final bool warning;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      width: 150,
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF4FF),
+        color: warning ? const Color(0xFFFFF7E8) : const Color(0xFFF7F2FA),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFD3DEF6)),
+        border: Border.all(color: warning ? const Color(0xFFE9C46A) : _border),
       ),
-      child: Text(
-        '${report.reportType.toUpperCase()} analysis saved for ${report.reportDate}',
-        style: const TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-          color: _onSurface,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              color: _onSurface,
+            ),
+          ),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
+          ),
+        ],
       ),
     );
   }
@@ -666,14 +975,18 @@ class _AnomalyTile extends StatelessWidget {
                 text: anomaly.severity,
                 color: _severityColor(anomaly.severity),
               ),
-              _Badge(text: anomaly.status, color: const Color(0xFFE6E0E9)),
+              _Badge(
+                text:
+                    'priority ${anomaly.businessPriorityScore.toStringAsFixed(0)}',
+                color: const Color(0xFFEFF4FF),
+              ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
             label,
             style: const TextStyle(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
               color: _onSurface,
             ),
           ),
@@ -689,23 +1002,44 @@ class _AnomalyTile extends StatelessWidget {
             spacing: 6,
             children: [
               TextButton(
-                onPressed:
-                    anomaly.status == 'resolved'
-                        ? null
-                        : () => onUpdate(anomaly, 'resolved'),
+                onPressed: () => onUpdate(anomaly, 'resolved'),
                 child: const Text('Resolved'),
               ),
               TextButton(
-                onPressed:
-                    anomaly.status == 'false_positive'
-                        ? null
-                        : () => onUpdate(anomaly, 'false_positive'),
+                onPressed: () => onUpdate(anomaly, 'false_positive'),
                 child: const Text('False positive'),
               ),
             ],
           ),
           const Divider(height: 12),
         ],
+      ),
+    );
+  }
+}
+
+class _ReportNotice extends StatelessWidget {
+  const _ReportNotice({required this.report});
+
+  final ClawdDailyReport report;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF4FF),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFFD3DEF6)),
+      ),
+      child: Text(
+        '${report.reportType.toUpperCase()} analysis saved for ${report.reportDate}',
+        style: const TextStyle(
+          fontSize: 13,
+          fontWeight: FontWeight.w800,
+          color: _onSurface,
+        ),
       ),
     );
   }
@@ -726,7 +1060,7 @@ class _ReportTile extends StatelessWidget {
           Text(
             '${report.reportType} · ${report.periodStart} to ${report.periodEnd}',
             style: const TextStyle(
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
               color: _onSurface,
             ),
           ),
@@ -758,7 +1092,7 @@ class _Badge extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         child: Text(
           text,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
         ),
       ),
     );
@@ -785,14 +1119,32 @@ class _MessageBubble extends StatelessWidget {
       child: Container(
         constraints: const BoxConstraints(maxWidth: 760),
         margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(8),
         ),
         child:
             message.fromClawd && !message.isError
-                ? _MarkdownMessage(text: message.text)
+                ? MarkdownBody(
+                  data: message.text,
+                  selectable: true,
+                  styleSheet: MarkdownStyleSheet.fromTheme(
+                    Theme.of(context),
+                  ).copyWith(
+                    p: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontSize: 14,
+                      height: 1.42,
+                    ),
+                    h2: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                    h3: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                    listIndent: 22,
+                  ),
+                )
                 : SelectableText(
                   message.text,
                   style: const TextStyle(
@@ -801,82 +1153,6 @@ class _MessageBubble extends StatelessWidget {
                     color: _onSurface,
                   ),
                 ),
-      ),
-    );
-  }
-}
-
-class _MarkdownMessage extends StatelessWidget {
-  const _MarkdownMessage({required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final base = Theme.of(context).textTheme.bodyMedium?.copyWith(
-      color: _onSurface,
-      fontSize: 14,
-      height: 1.42,
-    );
-    final headingColor = _onSurface.withValues(alpha: 0.95);
-
-    return MarkdownBody(
-      data: text,
-      selectable: true,
-      styleSheet: MarkdownStyleSheet.fromTheme(Theme.of(context)).copyWith(
-        p: base,
-        strong: base?.copyWith(fontWeight: FontWeight.w800),
-        em: base?.copyWith(fontStyle: FontStyle.italic),
-        h1: base?.copyWith(
-          color: headingColor,
-          fontSize: 20,
-          fontWeight: FontWeight.w800,
-          height: 1.2,
-        ),
-        h2: base?.copyWith(
-          color: headingColor,
-          fontSize: 17,
-          fontWeight: FontWeight.w800,
-          height: 1.25,
-        ),
-        h3: base?.copyWith(
-          color: headingColor,
-          fontSize: 15,
-          fontWeight: FontWeight.w800,
-          height: 1.3,
-        ),
-        h1Padding: const EdgeInsets.only(top: 4, bottom: 8),
-        h2Padding: const EdgeInsets.only(top: 8, bottom: 6),
-        h3Padding: const EdgeInsets.only(top: 6, bottom: 4),
-        blockSpacing: 10,
-        listIndent: 22,
-        listBullet: base,
-        tableHead: base?.copyWith(fontWeight: FontWeight.w800),
-        tableBody: base,
-        tableBorder: TableBorder.all(color: const Color(0xFFE0D7E7)),
-        tableCellsPadding: const EdgeInsets.symmetric(
-          horizontal: 8,
-          vertical: 6,
-        ),
-        tableHeadCellsDecoration: const BoxDecoration(color: Color(0xFFEDE3F4)),
-        blockquote: base?.copyWith(color: _onSurfaceVariant),
-        blockquotePadding: const EdgeInsets.fromLTRB(12, 8, 10, 8),
-        blockquoteDecoration: const BoxDecoration(
-          color: Color(0xFFFDF8FF),
-          border: Border(left: BorderSide(color: Color(0xFFBBA7CD), width: 4)),
-        ),
-        code: base?.copyWith(
-          color: const Color(0xFF3B3142),
-          fontFamily: 'monospace',
-          fontSize: 13,
-          backgroundColor: const Color(0xFFF1E9F5),
-        ),
-        codeblockPadding: const EdgeInsets.all(10),
-        codeblockDecoration: BoxDecoration(
-          color: const Color(0xFFF1E9F5),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: const Color(0xFFE0D7E7)),
-        ),
       ),
     );
   }
@@ -893,6 +1169,13 @@ Color _severityColor(String severity) {
     default:
       return const Color(0xFFE6F4EA);
   }
+}
+
+String _fmtMoney(double value) {
+  if (value >= 10000000) return '₹${(value / 10000000).toStringAsFixed(2)} Cr';
+  if (value >= 100000) return '₹${(value / 100000).toStringAsFixed(2)} L';
+  if (value >= 1000) return '₹${(value / 1000).toStringAsFixed(1)}K';
+  return '₹${value.toStringAsFixed(0)}';
 }
 
 class _ClawdMessage {

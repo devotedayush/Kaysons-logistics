@@ -196,9 +196,9 @@ class _VehicleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final capacity = [
-      if (_value('capacity_qt').trim() != '-') '${_value('capacity_qt')} QT',
+      if (_value('capacity_qt').trim() != '-') '${_value('capacity_qt')} Cases',
       if (_value('capacity_weight_kg').trim() != '-')
-        '${_value('capacity_weight_kg')} WT',
+        '${_value('capacity_weight_kg')} Ton',
     ].join(' · ');
 
     return Container(
@@ -526,7 +526,7 @@ class _VehicleFormSheetState extends State<_VehicleFormSheet> {
                     children: [
                       Expanded(
                         child: _Field(
-                          label: 'Capacity QT',
+                          label: 'Capacity Cases',
                           child: PillTextField(
                             controller: _capacityQt,
                             hint: '160',
@@ -538,7 +538,7 @@ class _VehicleFormSheetState extends State<_VehicleFormSheet> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: _Field(
-                          label: 'Weight WT',
+                          label: 'Metric Ton',
                           child: PillTextField(
                             controller: _capacityWeight,
                             hint: '28',

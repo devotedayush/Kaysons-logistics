@@ -110,7 +110,7 @@ class _TransporterHomeBodyState extends State<TransporterHomeBody> {
                             return _BidTile(
                               route: v['route'] as String,
                               summary:
-                                  '${v['cases']} QT · ${v['weight_kg']} WT',
+                                  '${v['cases']} Cases · ${v['weight_kg']} Ton',
                               minsLeft: v['minsLeft'] as int,
                               date: v['created'] as DateTime?,
                               onTap: () => context.push('/bid/${v['id']}'),
@@ -163,12 +163,6 @@ class _TransporterHomeBodyState extends State<TransporterHomeBody> {
                         title: 'Drivers',
                         subtitle: 'Per vehicle',
                         onTap: () => context.push('/drivers'),
-                      ),
-                      _QuickOption(
-                        icon: Icons.receipt_long_outlined,
-                        title: 'Invoice history',
-                        subtitle: 'From fleet',
-                        onTap: () => context.go('/fleet'),
                       ),
                     ],
                   ),

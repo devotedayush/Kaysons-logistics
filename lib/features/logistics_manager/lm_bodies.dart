@@ -278,7 +278,7 @@ class _LmDashboardBodyState extends State<LmDashboardBody> {
                             (key, value) =>
                                 MapEntry(key, value.round().clamp(0, 999999)),
                           ),
-                          unit: ' WT',
+                          unit: ' Ton',
                         ),
                       ],
                     ),
@@ -297,7 +297,7 @@ class _LmDashboardBodyState extends State<LmDashboardBody> {
                       final v = freightView(f);
                       return _BidPreview(
                         route: v['route'] as String,
-                        summary: '${v['cases']} QT · ${v['weight_kg']} WT',
+                        summary: '${v['cases']} Cases · ${v['weight_kg']} Ton',
                         minsLeft: v['minsLeft'] as int,
                         date: v['created'] as DateTime?,
                         onTap: () => context.push('/lm/bid/${v['id']}'),
@@ -403,7 +403,7 @@ class _LmBidsBodyState extends State<LmBidsBody> {
           ),
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: FreightsRepo.instance.streamAllFreights(),
+              stream: FreightsRepo.instance.streamOperationalFreights(),
               builder: (context, snap) {
                 if (!snap.hasData) {
                   return const Center(child: CircularProgressIndicator());
@@ -452,7 +452,7 @@ class _LmBidsBodyState extends State<LmBidsBody> {
                     final v = freightView(row);
                     return _FreightTile(
                       route: v['route'] as String,
-                      summary: '${v['cases']} QT · ${v['weight_kg']} WT',
+                      summary: '${v['cases']} Cases · ${v['weight_kg']} Ton',
                       status: v['status'] as String,
                       minsLeft: v['minsLeft'] as int,
                       date: v['created'] as DateTime?,
@@ -494,7 +494,7 @@ class LmFleetBody extends StatelessWidget {
         ),
         Expanded(
           child: StreamBuilder<List<Map<String, dynamic>>>(
-            stream: FreightsRepo.instance.streamAllFreights(),
+            stream: FreightsRepo.instance.streamOperationalFreights(),
             builder: (context, snap) {
               if (!snap.hasData) {
                 return const Center(child: CircularProgressIndicator());
@@ -569,7 +569,7 @@ class _FleetTile extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              '${freight['cases'] ?? 0} QT · ${freight['weight_kg'] ?? 0} WT · ${(freight['status'] ?? '').toString().toUpperCase()}',
+              '${freight['cases'] ?? 0} Cases · ${freight['weight_kg'] ?? 0} Ton · ${(freight['status'] ?? '').toString().toUpperCase()}',
               style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
             ),
             const SizedBox(height: 10),
@@ -1033,11 +1033,10 @@ class _FreightTile extends StatelessWidget {
   final DateTime? date;
   final VoidCallback onTap;
 
-  String get _time {
-    if (status != 'bidding') return status;
-    if (minsLeft <= 0) return 'closed';
-    if (minsLeft >= 60) return '${minsLeft ~/ 60}h ${minsLeft % 60}m left';
-    return '${minsLeft}m left';
+  String get _statusLabel {
+    if (status == 'completed') return 'Status: Completed';
+    if (status == 'bidding' && minsLeft > 0) return 'Status: Open';
+    return 'Status: Closed';
   }
 
   Color get _badgeColor {
@@ -1107,11 +1106,10 @@ class _FreightTile extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        _time.toUpperCase(),
+                        _statusLabel,
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
                           color: _onSurfaceVariant,
                         ),
                       ),

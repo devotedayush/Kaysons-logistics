@@ -11,6 +11,7 @@ class ResponsiveTabbedShell extends StatelessWidget {
     required this.pageView,
     required this.mobileNavigation,
     required this.destinations,
+    this.mobilePageView,
     this.sidebarFooter,
     this.contentMaxWidth = 1360,
     this.wideBreakpoint = 1024,
@@ -24,6 +25,7 @@ class ResponsiveTabbedShell extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onDestinationSelected;
   final Widget pageView;
+  final Widget? mobilePageView;
   final Widget mobileNavigation;
   final List<NavigationRailDestination> destinations;
   final Widget? sidebarFooter;
@@ -52,7 +54,12 @@ class ResponsiveTabbedShell extends StatelessWidget {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 900),
-        child: Column(children: [Expanded(child: pageView), mobileNavigation]),
+        child: Column(
+          children: [
+            Expanded(child: mobilePageView ?? pageView),
+            mobileNavigation,
+          ],
+        ),
       ),
     );
   }

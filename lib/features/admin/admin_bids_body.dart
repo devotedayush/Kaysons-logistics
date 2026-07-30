@@ -89,7 +89,7 @@ class _AdminBidsBodyState extends State<AdminBidsBody> {
         ),
         Expanded(
           child: StreamBuilder<List<Map<String, dynamic>>>(
-            stream: FreightsRepo.instance.streamAllFreights(),
+            stream: FreightsRepo.instance.streamOperationalFreights(),
             builder: (context, snap) {
               if (!snap.hasData) {
                 return const Center(child: CircularProgressIndicator());
@@ -136,6 +136,8 @@ class _AdminBidsBodyState extends State<AdminBidsBody> {
 
   Widget _tile(BuildContext context, Map<String, dynamic> v) {
     final status = v['status'] as String;
+    final minsLeft = v['minsLeft'] as int;
+    final statusLabel = _bidStatusLabel(status, minsLeft);
     final bg = switch (status) {
       'bidding' => const Color(0xFFF6EDFB),
       'awarded' || 'dispatched' => const Color(0xFFE1F5E1),
@@ -184,18 +186,17 @@ class _AdminBidsBodyState extends State<AdminBidsBody> {
                         ),
                       ),
                       Text(
-                        '${v['cases']} QT · ${v['weight_kg']} WT',
+                        '${v['cases']} Cases · ${v['weight_kg']} Ton',
                         style: const TextStyle(
                           fontSize: 12,
                           color: _onSurfaceVariant,
                         ),
                       ),
                       Text(
-                        status.toUpperCase(),
+                        'Status: $statusLabel',
                         style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
                           color: _onSurfaceVariant,
                         ),
                       ),
@@ -209,5 +210,11 @@ class _AdminBidsBodyState extends State<AdminBidsBody> {
         ],
       ),
     );
+  }
+
+  String _bidStatusLabel(String status, int minsLeft) {
+    if (status == 'completed') return 'Completed';
+    if (status == 'bidding' && minsLeft > 0) return 'Open';
+    return 'Closed';
   }
 }

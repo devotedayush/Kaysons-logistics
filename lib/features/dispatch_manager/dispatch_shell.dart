@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/supabase/auth_service.dart';
 import '../../core/supabase/freights_repo.dart';
 import '../../core/supabase/supabase_bootstrap.dart';
+import '../../core/widgets/compact_mobile_navigation.dart';
 import '../../core/widgets/responsive_tabbed_shell.dart';
 import '../../core/widgets/shell_settings_button.dart';
 
@@ -60,6 +61,12 @@ class _DispatchShellState extends State<DispatchShell> {
         physics: const ClampingScrollPhysics(),
         children: const [DispatchDashboardBody(), DispatchFleetBody()],
       ),
+      mobilePageView: PageView(
+        controller: _pc,
+        onPageChanged: (i) => setState(() => _index = i),
+        physics: const NeverScrollableScrollPhysics(),
+        children: const [DispatchDashboardBody(), DispatchFleetBody()],
+      ),
       sidebarFooter: ShellSettingsButton(
         onProfile: () => context.push('/dm/profile'),
         onLogout: () async {
@@ -67,9 +74,22 @@ class _DispatchShellState extends State<DispatchShell> {
           if (context.mounted) context.go('/welcome');
         },
       ),
-      mobileNavigation: _DispatchBottomNav(
+      mobileNavigation: CompactMobileNavigation(
         currentIndex: _index,
-        onTap: _goto,
+        onSelect: _goto,
+        primaryIndices: const [0, 1],
+        destinations: const [
+          CompactMobileDestination(
+            icon: Icons.dashboard_outlined,
+            selectedIcon: Icons.dashboard,
+            label: 'Today',
+          ),
+          CompactMobileDestination(
+            icon: Icons.local_shipping_outlined,
+            selectedIcon: Icons.local_shipping,
+            label: 'Deliveries',
+          ),
+        ],
         onProfile: () => context.push('/dm/profile'),
         onLogout: () async {
           await AuthService.instance.signOut();
@@ -329,7 +349,7 @@ class _DeliveryTile extends StatelessWidget {
             ),
             const SizedBox(height: 3),
             Text(
-              '${freight['cases'] ?? 0} QT · ${freight['weight_kg'] ?? 0} WT · ${(freight['status'] ?? '').toString().toUpperCase()}',
+              '${freight['cases'] ?? 0} Cases · ${freight['weight_kg'] ?? 0} Ton · ${(freight['status'] ?? '').toString().toUpperCase()}',
               style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
             ),
             const SizedBox(height: 8),
@@ -474,6 +494,8 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
+// Kept temporarily for backwards-compatible visual snapshots.
+// ignore: unused_element
 class _DispatchBottomNav extends StatelessWidget {
   const _DispatchBottomNav({
     required this.currentIndex,

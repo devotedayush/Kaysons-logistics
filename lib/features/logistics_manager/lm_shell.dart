@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/auth_service.dart';
+import '../../core/widgets/compact_mobile_navigation.dart';
+import '../../core/widgets/mobile_desktop_feature.dart';
 import '../../core/widgets/responsive_tabbed_shell.dart';
 import '../../core/widgets/shell_settings_button.dart';
 import '../admin/admin_ledger_body.dart';
@@ -64,6 +66,28 @@ class _LogisticsShellState extends State<LogisticsShell> {
           LmDispatchTeamBody(),
         ],
       ),
+      mobilePageView: PageView(
+        controller: _pc,
+        onPageChanged: (i) => setState(() => _index = i),
+        physics: const NeverScrollableScrollPhysics(),
+        children: const [
+          LmDashboardBody(),
+          LmBidsBody(),
+          LmFleetBody(),
+          MobileDesktopFeature(
+            icon: Icons.receipt_long_outlined,
+            title: 'Detailed ledger is on the web',
+            description:
+                'On mobile, stay focused on publishing loads, awarding bids, and tracking deliveries.',
+            desktopFeatures: [
+              'Invoice and POD reconciliation',
+              'Multi-field filters and bulk ledger entry',
+              'Monthly, route, and transporter reports',
+            ],
+          ),
+          LmDispatchTeamBody(),
+        ],
+      ),
       sidebarFooter: ShellSettingsButton(
         onProfile: () => context.push('/lm/profile'),
         onLogout: () async {
@@ -71,9 +95,37 @@ class _LogisticsShellState extends State<LogisticsShell> {
           if (context.mounted) context.go('/welcome');
         },
       ),
-      mobileNavigation: _LmBottomNav(
+      mobileNavigation: CompactMobileNavigation(
         currentIndex: _index,
-        onTap: _goto,
+        onSelect: _goto,
+        primaryIndices: const [0, 1, 2],
+        destinations: const [
+          CompactMobileDestination(
+            icon: Icons.dashboard_outlined,
+            selectedIcon: Icons.dashboard,
+            label: 'Home',
+          ),
+          CompactMobileDestination(
+            icon: Icons.gavel_outlined,
+            selectedIcon: Icons.gavel,
+            label: 'Bids',
+          ),
+          CompactMobileDestination(
+            icon: Icons.local_shipping_outlined,
+            selectedIcon: Icons.local_shipping,
+            label: 'Fleet',
+          ),
+          CompactMobileDestination(
+            icon: Icons.receipt_long_outlined,
+            selectedIcon: Icons.receipt_long,
+            label: 'Ledger',
+          ),
+          CompactMobileDestination(
+            icon: Icons.assignment_ind_outlined,
+            selectedIcon: Icons.assignment_ind,
+            label: 'Dispatch',
+          ),
+        ],
         onProfile: () => context.push('/lm/profile'),
         onLogout: () async {
           await AuthService.instance.signOut();
@@ -107,208 +159,6 @@ class _LogisticsShellState extends State<LogisticsShell> {
           label: Text('Dispatch'),
         ),
       ],
-    );
-  }
-}
-
-class _LmBottomNav extends StatelessWidget {
-  const _LmBottomNav({
-    required this.currentIndex,
-    required this.onTap,
-    required this.onProfile,
-    required this.onLogout,
-  });
-
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-  final VoidCallback onProfile;
-  final Future<void> Function() onLogout;
-
-  @override
-  Widget build(BuildContext context) {
-    final compact = MediaQuery.sizeOf(context).width < 420;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF3EDF7),
-        borderRadius: BorderRadius.circular(80),
-      ),
-      padding: EdgeInsets.symmetric(horizontal: compact ? 2 : 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _LmNavItem(
-            icon: Icons.dashboard_outlined,
-            label: 'Home',
-            selected: currentIndex == 0,
-            compact: compact,
-            onTap: () => onTap(0),
-          ),
-          _LmNavItem(
-            icon: Icons.gavel_outlined,
-            label: 'Bids',
-            selected: currentIndex == 1,
-            compact: compact,
-            onTap: () => onTap(1),
-          ),
-          _LmNavItem(
-            icon: Icons.local_shipping_outlined,
-            label: 'Fleet',
-            selected: currentIndex == 2,
-            compact: compact,
-            onTap: () => onTap(2),
-          ),
-          _LmNavItem(
-            icon: Icons.receipt_long_outlined,
-            label: 'Ledger',
-            selected: currentIndex == 3,
-            compact: compact,
-            onTap: () => onTap(3),
-          ),
-          _LmNavItem(
-            icon: Icons.assignment_ind_outlined,
-            label: 'Dispatch',
-            selected: currentIndex == 4,
-            compact: compact,
-            onTap: () => onTap(4),
-          ),
-          _LmMoreNavItem(
-            compact: compact,
-            onProfile: onProfile,
-            onLogout: onLogout,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LmNavItem extends StatelessWidget {
-  const _LmNavItem({
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.compact,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final bool compact;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = selected ? const Color(0xFF1D1B20) : const Color(0xFF49454F);
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(40),
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: compact ? 8 : 10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: compact ? 44 : 52,
-                height: 30,
-                decoration: BoxDecoration(
-                  color:
-                      selected ? const Color(0xFFEADDFF) : Colors.transparent,
-                  borderRadius: BorderRadius.circular(40),
-                ),
-                child: Icon(icon, size: 21, color: color),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: compact ? 10 : 11,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _LmMoreNavItem extends StatelessWidget {
-  const _LmMoreNavItem({
-    required this.compact,
-    required this.onProfile,
-    required this.onLogout,
-  });
-
-  final bool compact;
-  final VoidCallback onProfile;
-  final Future<void> Function() onLogout;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: PopupMenuButton<String>(
-        tooltip: 'Profile and logout',
-        onSelected: (value) async {
-          if (value == 'profile') onProfile();
-          if (value == 'logout') await onLogout();
-        },
-        itemBuilder:
-            (context) => const [
-              PopupMenuItem(
-                value: 'profile',
-                child: Row(
-                  children: [
-                    Icon(Icons.person_outline, size: 18),
-                    SizedBox(width: 10),
-                    Text('Profile'),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'logout',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout, size: 18),
-                    SizedBox(width: 10),
-                    Text('Logout'),
-                  ],
-                ),
-              ),
-            ],
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: compact ? 8 : 10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: compact ? 44 : 52,
-                height: 30,
-                child: const Icon(
-                  Icons.account_circle_outlined,
-                  size: 21,
-                  color: Color(0xFF49454F),
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                'More',
-                style: TextStyle(
-                  fontSize: compact ? 10 : 11,
-                  fontWeight: FontWeight.w500,
-                  color: const Color(0xFF49454F),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

@@ -74,6 +74,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 24),
+                  const Text(
+                    'Kaysons Sales Private Limited Logistics',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   Text(
                     'Welcome back',
                     style: textTheme.headlineMedium?.copyWith(

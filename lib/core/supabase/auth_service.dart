@@ -71,6 +71,13 @@ class AuthService {
     required String password,
   }) async {
     await _auth.signInWithPassword(email: email, password: password);
+    final profile = await fetchAccessProfile();
+    if (profile?['status'] != 'approved') {
+      await _auth.signOut();
+      throw AuthException(
+        'This account is not approved for operational access.',
+      );
+    }
   }
 
   Future<void> sendPhoneOtp(String phone) {
@@ -105,14 +112,17 @@ class AuthService {
   Future<void> signOut() => _auth.signOut();
 
   Future<AppRole> fetchRole() async {
-    final uid = user?.id;
-    if (uid == null) return AppRole.transporter;
-    final row =
-        await supabase
-            .from('profiles')
-            .select('role')
-            .eq('id', uid)
-            .maybeSingle();
+    final row = await fetchAccessProfile();
     return _parseRole(row?['role'] as String?);
+  }
+
+  Future<Map<String, dynamic>?> fetchAccessProfile() async {
+    final uid = user?.id;
+    if (uid == null) return null;
+    return await supabase
+        .from('profiles')
+        .select('role, status')
+        .eq('id', uid)
+        .maybeSingle();
   }
 }

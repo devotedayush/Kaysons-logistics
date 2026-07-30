@@ -49,7 +49,7 @@ class LmTrackScreen extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                '${freight['cases'] ?? 0} QT · ${freight['weight_kg'] ?? 0} WT · ${(freight['status'] ?? '').toString().toUpperCase()}',
+                '${freight['cases'] ?? 0} Cases · ${freight['weight_kg'] ?? 0} Ton · ${(freight['status'] ?? '').toString().toUpperCase()}',
                 style: const TextStyle(fontSize: 13, color: Color(0xFF49454F)),
               ),
               const SizedBox(height: 12),
