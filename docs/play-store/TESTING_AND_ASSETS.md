@@ -7,13 +7,32 @@
 | Play icon, 512 × 512 PNG | `assets/app-icon-512.png` | Ready from supplied official mark |
 | Feature graphic, 1024 × 500 PNG | `assets/feature-graphic-1024x500.png` | Ready; review final brand presentation |
 | Official wordmark source | `assets/kaysons-official-logo.png` | Ready |
-| Phone screenshots | Not generated | Must capture from the real release |
+| Phone screenshots | `assets/screenshots/phone/` | Ready; 7 genuine 432 × 768 app captures |
 | 7-inch tablet screenshots | Not generated | Optional unless tablet targeting/quality requires them |
 | 10-inch tablet screenshots | Not generated | Optional unless tablet targeting/quality requires them |
 | Promo video | Not generated | Optional |
 
 Do not use fabricated UI mockups as screenshots. Capture the signed release
 with review-safe data so screenshots match the current app.
+
+## Captured phone screenshots
+
+All captures use the real Flutter mobile layout at 432 × 768 pixels, which is
+inside Google Play's accepted phone-screenshot size and aspect-ratio range.
+Only synthetic demo routes and dedicated Google Play reviewer identities are
+visible.
+
+1. `01-transporter-home.png` — transporter overview
+2. `02-awarded-freight.png` — delivered freight milestones
+3. `03-logistics-dashboard.png` — logistics-manager summary and quick links
+4. `04-logistics-bids.png` — closed bid list and publish action
+5. `05-delivery-tracking.png` — delivery progress
+6. `06-account-privacy-path.png` — discoverable mobile account/privacy menu
+7. `07-account-deletion-controls.png` — privacy and deletion screen
+
+The first five are suitable store-listing candidates. The last two are useful
+for policy review and account-deletion evidence; include them in the store
+listing only if privacy controls are part of the marketing story.
 
 ## Recommended phone screenshots
 
@@ -40,6 +59,9 @@ vehicle plates, invoices, e-way bills and customer information before capture.
 - Sign in and sign out
 - Verify incorrect password and unapproved account handling
 - Verify every reviewer credential from a clean install
+- Open Account & privacy from each role
+- Submit and cancel an in-app deletion request
+- Submit a request from the public webpage without signing in
 
 ### Transporter
 

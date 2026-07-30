@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 class CompactMobileDestination {
   const CompactMobileDestination({
@@ -71,6 +72,8 @@ class CompactMobileNavigation extends StatelessWidget {
                       onSelect(int.parse(value.substring(5)));
                     } else if (value == 'profile') {
                       onProfile();
+                    } else if (value == 'privacy' && context.mounted) {
+                      context.push('/account/privacy');
                     } else if (value == 'logout') {
                       await onLogout();
                     }
@@ -92,6 +95,13 @@ class CompactMobileNavigation extends StatelessWidget {
                           child: _MenuRow(
                             icon: Icons.person_outline,
                             label: 'Profile',
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'privacy',
+                          child: _MenuRow(
+                            icon: Icons.privacy_tip_outlined,
+                            label: 'Account & privacy',
                           ),
                         ),
                         const PopupMenuItem(

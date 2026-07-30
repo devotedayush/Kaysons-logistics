@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Request deletion of a Kaysons Logistics account and associated data." />
+    <title>Delete Account — Kaysons Logistics</title>
+    <link rel="stylesheet" href="../site.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <nav class="nav" aria-label="Main navigation">
+        <a class="brand" href="../" aria-label="Kaysons Logistics home">
+          <img src="../play-store/assets/kaysons-official-logo.png" alt="Kay Sons Oils Private Limited" />
+        </a>
+        <div class="nav-links">
+          <a href="../">Support</a>
+          <a href="../privacy/">Privacy</a>
+          <a href="./" aria-current="page">Delete account</a>
+        </div>
+      </nav>
+    </header>
+
+    <main class="page">
+      <section class="hero">
+        <p class="eyebrow">Kaysons Logistics</p>
+        <h1>Request account deletion</h1>
+        <p class="lede">
+          Use the email attached to your account. You do not need the app or an
+          active login to submit this request.
+        </p>
+      </section>
+
+      <section class="policy">
+        <h2>Before you submit</h2>
+        <ul>
+          <li>Kay Sons Oils Private Limited will verify the request using the registered account email.</li>
+          <li>Verified requests are normally completed within 30 days.</li>
+          <li>Account credentials and associated personal data will be deleted or de-identified.</li>
+          <li>Some freight, invoice, settlement, fraud-prevention or legal records may be retained in restricted form for the periods described in our <a href="../privacy/#account-deletion">Privacy Policy</a>.</li>
+        </ul>
+
+        <form id="deletion-form" class="form">
+          <label>
+            Account email
+            <input id="email" name="email" type="email" autocomplete="email" maxlength="320" required placeholder="name@example.com" />
+          </label>
+
+          <label>
+            Reason <span style="font-weight: 500; color: #625b71">(optional)</span>
+            <textarea id="reason" name="reason" maxlength="1000" rows="4" placeholder="Anything our privacy team should know"></textarea>
+          </label>
+
+          <label class="honeypot" aria-hidden="true">
+            Company website
+            <input id="company-website" name="company_website" type="text" tabindex="-1" autocomplete="off" />
+          </label>
+
+          <label class="check">
+            <input id="confirmed" name="confirmed" type="checkbox" required />
+            <span>I confirm that I am requesting permanent deletion of this Kaysons Logistics account and its associated data.</span>
+          </label>
+
+          <div id="form-status" class="status" role="status" aria-live="polite"></div>
+          <button id="submit-button" type="submit">Submit deletion request</button>
+        </form>
+
+        <p class="meta">
+          Prefer email? Send the request from your registered address to
+          <a href="mailto:ksopltd@hotmail.com?subject=Kaysons%20Logistics%20account%20deletion">ksopltd@hotmail.com</a>.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      Kay Sons Oils Private Limited ·
+      <a href="../privacy/">Privacy Policy</a>
+    </footer>
+
+    <script>
+      const endpoint =
+        "https://rdfjfvtaehykzbuahjce.supabase.co/functions/v1/account-deletion-request";
+      const form = document.getElementById("deletion-form");
+      const statusBox = document.getElementById("form-status");
+      const submitButton = document.getElementById("submit-button");
+
+      function showStatus(message, kind) {
+        statusBox.textContent = message;
+        statusBox.className = `status show ${kind}`;
+      }
+
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        submitButton.disabled = true;
+        submitButton.textContent = "Submitting…";
+        statusBox.className = "status";
+
+        try {
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              email: document.getElementById("email").value,
+              reason: document.getElementById("reason").value,
+              company_website: document.getElementById("company-website").value,
+              confirmed: document.getElementById("confirmed").checked,
+            }),
+          });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || "The request could not be submitted.");
+          showStatus(result.message, "success");
+          form.reset();
+        } catch (error) {
+          showStatus(error.message || "The request could not be submitted. Try again later.", "error");
+        } finally {
+          submitButton.disabled = false;
+          submitButton.textContent = "Submit deletion request";
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -72,10 +72,13 @@ Initial Google Play release of Kaysons Logistics.
 
 ## Contact fields
 
-- Support email: `[REQUIRED: public monitored support email]`
-- Support phone: `[OPTIONAL: public support phone]`
-- Website: `[REQUIRED: production website URL]`
-- Privacy policy: `[REQUIRED: public privacy-policy URL]`
+- Support email: `ksopltd@hotmail.com`
+- Support phone: `+91 99923 11111`
+- Website: `https://www.kay-sons.in/`
+- Privacy policy:
+  `https://devotedayush.github.io/Kaysons-logistics/privacy/`
+- Account deletion:
+  `https://devotedayush.github.io/Kaysons-logistics/delete-account/`
 
 ## Copy checks
 

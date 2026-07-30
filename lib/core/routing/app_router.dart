@@ -28,6 +28,7 @@ import '../../features/admin/admin_shell.dart';
 import '../../features/admin/admin_profile_screen.dart';
 import '../../features/admin/analytics_screen.dart';
 import '../../features/admin/notifications_screen.dart';
+import '../../features/account/account_privacy_screen.dart';
 import '../supabase/auth_service.dart';
 import '../supabase/supabase_bootstrap.dart';
 import '../widgets/desktop_role_shell.dart';
@@ -82,6 +83,7 @@ final GoRouter appRouter = GoRouter(
     final isPublic = _publicPaths.contains(path);
     if (!loggedIn && !isPublic) return '/login';
     if (!loggedIn || isPublic) return null;
+    if (path.startsWith('/account/')) return null;
     final role = await AuthService.instance.fetchRole();
     final allowed = switch (role) {
       AppRole.admin => path.startsWith('/admin'),
@@ -123,6 +125,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/register/contact',
       builder: (_, __) => const RegisterContactScreen(),
+    ),
+    GoRoute(
+      path: '/account/privacy',
+      builder: (_, __) => const AccountPrivacyScreen(),
     ),
     GoRoute(
       path: '/home',

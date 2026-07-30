@@ -28,38 +28,49 @@ approval. Add up to five reviewer instruction sets:
 
 ### Transporter reviewer
 
-- Username/email: `[REQUIRED: permanent reviewer transporter email]`
-- Password: `[REQUIRED: permanent reviewer password]`
+- Username/email: `play-review-transporter@kaysons.demo`
+- Password: copy the Transporter password from the private
+  `play-reviewer-credentials.md` release-backup file
 - Instructions: Sign in with the supplied email and password. The account is
-  pre-approved and contains review-safe fleet and bid data.
+  pre-approved and contains no personal customer data. No OTP, MFA, subscription
+  or location restriction applies.
 
 ### Logistics manager reviewer
 
-- Username/email: `[REQUIRED: permanent reviewer logistics-manager email]`
-- Password: `[REQUIRED: permanent reviewer password]`
+- Username/email: `play-review-lm@kaysons.demo`
+- Password: copy the Logistics Manager password from the private
+  `play-reviewer-credentials.md` release-backup file
 - Instructions: Sign in with the supplied email and password. Use this account
   to review freight creation, bids, fleet tracking and dispatch-team features.
+  No OTP or additional approval is required.
 
 ### Dispatch manager reviewer
 
-- Username/email: `[REQUIRED: permanent reviewer dispatch-manager email]`
-- Password: `[REQUIRED: permanent reviewer password]`
+- Username/email: `play-review-dispatch@kaysons.demo`
+- Password: copy the Dispatch Manager password from the private
+  `play-reviewer-credentials.md` release-backup file
 - Instructions: This account is assigned to the supplied logistics manager and
-  contains accepted review deliveries.
+  can review dispatch and delivery-tracking screens without OTP.
 
 ### Accountant reviewer
 
-- Username/email: `[REQUIRED: permanent reviewer accountant email]`
-- Password: `[REQUIRED: permanent reviewer password]`
+- Username/email: `play-review-accountant@kaysons.demo`
+- Password: copy the Accountant password from the private
+  `play-reviewer-credentials.md` release-backup file
 - Instructions: Use this account for ledger and analytics access.
 
 ### Administrator reviewer
 
-- Username/email: `[REQUIRED: permanent reviewer admin email]`
-- Password: `[REQUIRED: permanent reviewer password]`
+- Username/email: `play-review-admin@kaysons.demo`
+- Password: copy the Administrator password from the private
+  `play-reviewer-credentials.md` release-backup file
 - Instructions: Use this account for user approval and administrative
   oversight. Do not require OTP, VPN, location restrictions or expiring
   credentials during review.
+
+The private credential file is stored at:
+`~/Documents/Kaysons-Logistics-Release-Backup/play-reviewer-credentials.md`.
+Do not commit it, attach it to a public issue, or add it to the store listing.
 
 ## Content rating questionnaire
 
@@ -98,7 +109,7 @@ system picker. No high-risk permission declaration should be required.
 |---|---|
 | Does the app collect or share required user data types? | Yes |
 | Is all collected data encrypted in transit? | Yes, using HTTPS/WSS to Supabase and service APIs |
-| Can users request deletion? | **Do not answer Yes until both deletion paths listed in `README.md` are live.** |
+| Can users request deletion? | Yes. A signed-in request path and a public no-login web form are implemented. |
 | Is data processed ephemerally only? | No |
 | Is data collection required? | Some types are required for accounts and logistics operation; documents and some business details are optional or workflow-dependent |
 
@@ -143,18 +154,28 @@ The app supports in-app account creation. Google therefore requires:
 2. A public web URL where a former or current user can request deletion without
    reinstalling the app.
 
-Current status: `[REQUIRED: implement and publish before production review]`.
+Current implementation:
+
+- In-app path: Profile or Settings → Account & privacy → Request account
+  deletion
+- Public URL:
+  `https://devotedayush.github.io/Kaysons-logistics/delete-account/`
+- Identity check: registered account email
+- Normal completion target: within 30 days after verification
+- Account credentials and associated personal data are deleted or de-identified;
+  legally required freight, invoice, settlement, fraud-prevention and audit
+  records may be retained in restricted form for the periods disclosed in the
+  privacy policy
 
 ## Privacy policy
 
-Use `PRIVACY_POLICY_DRAFT.md` only after:
+Privacy policy URL:
+`https://devotedayush.github.io/Kaysons-logistics/privacy/`
 
-- filling every placeholder;
-- confirming retention and deletion practices;
-- confirming Supabase/OpenAI contractual roles;
-- obtaining legal review; and
-- publishing it at a stable public URL linked both in Play Console and inside
-  the app.
+The policy identifies Kay Sons Oils Private Limited as operator, describes
+Supabase, OpenAI and GitHub Pages processing, includes retention periods, and
+links the public deletion form. Obtain legal review before production and
+re-review it whenever data practices change.
 
 ## AI-generated content
 

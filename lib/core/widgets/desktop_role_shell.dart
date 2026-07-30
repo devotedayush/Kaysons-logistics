@@ -124,6 +124,13 @@ class _RoleSidebar extends StatelessWidget {
           const SizedBox(height: 8),
           _DesktopNavTile(
             selected: false,
+            icon: Icons.privacy_tip_outlined,
+            label: 'Account & privacy',
+            onTap: () => context.push('/account/privacy'),
+          ),
+          const SizedBox(height: 8),
+          _DesktopNavTile(
+            selected: false,
             icon: Icons.logout,
             label: 'Logout',
             onTap: () async {

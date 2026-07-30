@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 class ShellSettingsButton extends StatelessWidget {
   const ShellSettingsButton({
@@ -18,6 +19,9 @@ class ShellSettingsButton extends StatelessWidget {
         if (value == 'profile') {
           onProfile?.call();
         }
+        if (value == 'privacy' && context.mounted) {
+          context.push('/account/privacy');
+        }
         if (value == 'logout') {
           await onLogout();
         }
@@ -35,6 +39,16 @@ class ShellSettingsButton extends StatelessWidget {
                   ],
                 ),
               ),
+            const PopupMenuItem<String>(
+              value: 'privacy',
+              child: Row(
+                children: [
+                  Icon(Icons.privacy_tip_outlined, size: 18),
+                  SizedBox(width: 10),
+                  Text('Account & privacy'),
+                ],
+              ),
+            ),
             const PopupMenuItem<String>(
               value: 'logout',
               child: Row(

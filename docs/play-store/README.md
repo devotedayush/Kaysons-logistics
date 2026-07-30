@@ -7,36 +7,51 @@ to Google Play.
 
 - Signed Android App Bundle:
   `build/app/outputs/bundle/release/app-release.aab`
+- Current AAB SHA-256:
+  `442d59f3e3e13ead3e99fe02cc15c6932f22fdaa1f5af8372379ec3853936d4f`
 - Play icon: `assets/app-icon-512.png`
 - Feature graphic: `assets/feature-graphic-1024x500.png`
 - Official supplied logo: `assets/kaysons-official-logo.png`
 - Public upload certificate: `assets/upload-certificate.pem`
 - Store copy: `STORE_LISTING.md`
 - Play Console declarations: `PLAY_CONSOLE_ANSWERS.md`
-- Privacy-policy draft: `PRIVACY_POLICY_DRAFT.md`
+- Privacy-policy publication record: `PRIVACY_POLICY.md`
 - Release procedure: `RELEASE_RUNBOOK.md`
 - Testing and graphics checklist: `TESTING_AND_ASSETS.md`
 
-## Publication blockers that require an owner decision
+## Completed release-readiness work
+
+- Android upload key copied to the private release backup at
+  `~/Documents/Kaysons-Logistics-Release-Backup/`
+- Package ID confirmed as `com.kaysons.kaysons_logistics`
+- Legal operator, address, support email, phone and official website filled
+- In-app account-deletion request implemented
+- Public privacy policy and no-login deletion request pages created
+- Five permanent, approved, role-specific Play reviewer accounts created and
+  login-verified
+- Reviewer passwords stored in the private release backup, not Git
+
+## Remaining publication checks
 
 Do not submit to production until these are completed:
 
-1. Replace every `[REQUIRED: ...]` field in the policy and Console documents.
-2. Obtain legal approval for the privacy policy and publish it at a public URL.
-3. Add a working in-app account-deletion request path and a public web deletion
-   request URL. Account creation exists, so both are required by Google Play.
-4. Create permanent reviewer accounts for every role that needs review.
-5. Capture phone screenshots from the signed release connected to production or
-   review-safe data.
-6. Confirm that `com.kaysons.kaysons_logistics` is the permanent package ID.
-   It cannot be changed after the first Play upload.
-7. Back up `android/upload-keystore.jks` and `android/key.properties` in
-   separate secure locations. They are intentionally excluded from Git.
+1. Have qualified counsel approve the privacy and retention wording.
+2. Confirm `ksopltd@hotmail.com` is actively monitored for deletion and Play
+   review correspondence.
+3. Add reviewer passwords from the private credential file to Play Console.
+4. Upload screenshots listed in `TESTING_AND_ASSETS.md`.
+5. Determine whether the Play developer account is a new personal account. If
+   so, complete the 12-tester/14-continuous-day closed test before applying for
+   production access.
+6. Copy the private signing backup into an encrypted company vault or password
+   manager-controlled storage; the local private backup is not a substitute for
+   an off-device disaster-recovery copy.
 
 ## Current release identity
 
 - App name: Kaysons Logistics
 - Package ID: `com.kaysons.kaysons_logistics`
+- Package ID decision: Confirmed for first Google Play upload
 - Version name: `1.0.0`
 - Version code: `1`
 - Minimum Android: API 24

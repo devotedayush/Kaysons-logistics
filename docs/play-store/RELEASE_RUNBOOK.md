@@ -21,7 +21,14 @@ Upload certificate fingerprints:
 
 ## Immediate key-backup action
 
-Before uploading the first bundle:
+Completed locally on July 30, 2026:
+
+- private backup directory:
+  `~/Documents/Kaysons-Logistics-Release-Backup/`
+- `upload-keystore.jks` and `key.properties` copied with owner-only permissions
+- source and backup keystore SHA-256 values verified to match
+
+Before uploading the first bundle, also make an off-device backup:
 
 1. Copy `upload-keystore.jks` to an encrypted company vault.
 2. Store the alias and passwords from `key.properties` in a password manager.
@@ -110,6 +117,9 @@ Expected release metadata:
 Google Play permanently associates the application with
 `com.kaysons.kaysons_logistics` after first upload. Confirm ownership and naming
 before uploading. Changing it later creates a different app.
+
+**Decision recorded July 30, 2026:** use
+`com.kaysons.kaysons_logistics` as the permanent Google Play package ID.
 
 ## Toolchain maintenance
 

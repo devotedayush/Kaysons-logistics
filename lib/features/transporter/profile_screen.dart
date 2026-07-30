@@ -391,6 +391,13 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
           ),
           const SizedBox(height: 8),
           _actionTile(
+            icon: Icons.privacy_tip_outlined,
+            label: 'Account & privacy',
+            subtitle: 'Privacy policy and account deletion',
+            onTap: () => context.push('/account/privacy'),
+          ),
+          const SizedBox(height: 8),
+          _actionTile(
             icon: Icons.logout,
             label: 'Logout',
             subtitle: 'Sign out and return to welcome screen',
