@@ -15,7 +15,6 @@ if [ ! -x "$FLUTTER_HOME/bin/flutter" ]; then
 fi
 
 git config --global --add safe.directory "$FLUTTER_HOME"
-git -C "$FLUTTER_HOME" fetch --depth 1 origin master:refs/remotes/origin/master
 
 export PATH="$FLUTTER_HOME/bin:$PATH"
 export LUCI_CONTEXT=true

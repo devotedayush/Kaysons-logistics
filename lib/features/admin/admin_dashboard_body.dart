@@ -814,7 +814,7 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<int>(
-              initialValue: _year,
+              value: _year,
               items: [
                 for (
                   var year = DateTime.now().year - 2;

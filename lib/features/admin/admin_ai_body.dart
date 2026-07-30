@@ -820,7 +820,7 @@ class _ToolsPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           DropdownButtonFormField<ClawdPromptTemplate>(
-            initialValue: selectedTemplate,
+            value: selectedTemplate,
             items:
                 templates
                     .map(
