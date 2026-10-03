@@ -23,7 +23,7 @@
 
     <main class="page">
       <section class="hero">
-        <p class="eyebrow">Effective 30 July 2026</p>
+        <p class="eyebrow">Effective 3 October 2026</p>
         <h1>Privacy Policy</h1>
         <p class="lede">
           This policy explains how Kay Sons Oils Private Limited handles information
@@ -53,7 +53,7 @@
 
         <h2>3. Information we collect</h2>
         <ul>
-          <li>Account details such as name, email, phone, user ID, role, approval status and authentication records.</li>
+          <li>Account details such as name, email, phone, user ID, role, approval status and authentication records. For phone sign-in, Supabase Auth sends the phone number and one-time verification code to Amazon Simple Notification Service (Amazon SNS, an AWS service) for SMS delivery.</li>
           <li>Business details such as company name, GSTIN, registration details, service area and business contacts.</li>
           <li>Fleet and personnel details such as vehicle registrations, capacity, RC and insurance details, driver name, phone and licence details.</li>
           <li>Settlement and financial records such as account-holder and bank-account information, cheque images, freight amounts, charges, invoices and settlement status.</li>
@@ -86,6 +86,7 @@
         <ul>
           <li>Authorized users participating in or overseeing the same logistics workflow.</li>
           <li>Supabase, which provides authentication, database, storage and server-function infrastructure.</li>
+          <li>Amazon SNS, which receives the phone number and one-time verification code from Supabase Auth to deliver sign-in SMS messages.</li>
           <li>OpenAI, when an authorized user submits a Clawd request through our server-side function.</li>
           <li>GitHub Pages, which hosts these public policy and deletion pages and may process ordinary website access logs.</li>
           <li>Professional advisers, service providers and authorities when legally required or necessary to protect rights, safety and service integrity.</li>
