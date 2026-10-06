@@ -1,0 +1,653 @@
+{
+  "capture_date": "2026-10-02",
+  "read_only": true,
+  "business_mutations_performed": false,
+  "language_note": "Browser language preference is English/Hindi; some phone-login labels and month abbreviations remain English in the current UI.",
+  "assets": [
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-analytics-en.png",
+      "role": "accountant",
+      "locale": "en",
+      "screen": "analytics",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:23:28.760320+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-analytics-hi.png",
+      "role": "accountant",
+      "locale": "hi",
+      "screen": "analytics",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:24:58.387782+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-clawd-en.png",
+      "role": "accountant",
+      "locale": "en",
+      "screen": "clawd",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:23:03.697800+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-clawd-hi.png",
+      "role": "accountant",
+      "locale": "hi",
+      "screen": "clawd",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:24:31.426662+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-csv-import-en.png",
+      "role": "accountant",
+      "locale": "en",
+      "screen": "csv-import",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:22:52.701907+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-csv-import-hi.png",
+      "role": "accountant",
+      "locale": "hi",
+      "screen": "csv-import",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:24:20.384220+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-export-menu-en.png",
+      "role": "accountant",
+      "locale": "en",
+      "screen": "export-menu",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:22:46.074793+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-export-menu-hi.png",
+      "role": "accountant",
+      "locale": "hi",
+      "screen": "export-menu",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:24:13.617563+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-ledger-default-en.png",
+      "role": "accountant",
+      "locale": "en",
+      "screen": "ledger-default",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:22:38.085419+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-ledger-default-hi.png",
+      "role": "accountant",
+      "locale": "hi",
+      "screen": "ledger-default",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:24:05.523906+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-ledger-en.png",
+      "role": "accountant",
+      "locale": "en",
+      "screen": "ledger",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:22:41.467472+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-ledger-entry-en.png",
+      "role": "accountant",
+      "locale": "en",
+      "screen": "ledger-entry",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:22:49.247234+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-ledger-entry-hi.png",
+      "role": "accountant",
+      "locale": "hi",
+      "screen": "ledger-entry",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:24:16.964136+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-ledger-entry-settlement-en.png",
+      "role": "accountant",
+      "locale": "en",
+      "screen": "ledger-entry-settlement",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:23:51.917223+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-ledger-entry-settlement-hi.png",
+      "role": "accountant",
+      "locale": "hi",
+      "screen": "ledger-entry-settlement",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:25:14.477470+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-ledger-filters-en.png",
+      "role": "accountant",
+      "locale": "en",
+      "screen": "ledger-filters",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:22:43.768586+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-ledger-filters-hi.png",
+      "role": "accountant",
+      "locale": "hi",
+      "screen": "ledger-filters",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:24:11.300554+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-ledger-hi.png",
+      "role": "accountant",
+      "locale": "hi",
+      "screen": "ledger",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:24:08.960985+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-ledger-rows-en.png",
+      "role": "accountant",
+      "locale": "en",
+      "screen": "ledger-rows",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:23:48.479264+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-ledger-rows-hi.png",
+      "role": "accountant",
+      "locale": "hi",
+      "screen": "ledger-rows",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:25:11.060043+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-settings-en.png",
+      "role": "accountant",
+      "locale": "en",
+      "screen": "settings",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:23:31.461021+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/accountant-settings-hi.png",
+      "role": "accountant",
+      "locale": "hi",
+      "screen": "settings",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:24:53.061761+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-bids-en.png",
+      "role": "administrator",
+      "locale": "en",
+      "screen": "bids",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:12:30.745434+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-bids-hi.png",
+      "role": "administrator",
+      "locale": "hi",
+      "screen": "bids",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:17:40.644836+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-clawd-en.png",
+      "role": "administrator",
+      "locale": "en",
+      "screen": "clawd",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:14:04.739410+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-clawd-hi.png",
+      "role": "administrator",
+      "locale": "hi",
+      "screen": "clawd",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:17:27.362334+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-dashboard-en.png",
+      "role": "administrator",
+      "locale": "en",
+      "screen": "dashboard",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:11:54.399523+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-dashboard-hi.png",
+      "role": "administrator",
+      "locale": "hi",
+      "screen": "dashboard",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:17:33.046032+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-export-menu-en.png",
+      "role": "administrator",
+      "locale": "en",
+      "screen": "export-menu",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:13:02.603928+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-export-menu-hi.png",
+      "role": "administrator",
+      "locale": "hi",
+      "screen": "export-menu",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:20:28.063103+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-ledger-default-hi.png",
+      "role": "administrator",
+      "locale": "hi",
+      "screen": "ledger-default",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:17:49.834144+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-ledger-en.png",
+      "role": "administrator",
+      "locale": "en",
+      "screen": "ledger",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:12:54.479051+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-ledger-entry-en.png",
+      "role": "administrator",
+      "locale": "en",
+      "screen": "ledger-entry",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:13:52.302153+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-ledger-entry-hi.png",
+      "role": "administrator",
+      "locale": "hi",
+      "screen": "ledger-entry",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:20:45.739687+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-ledger-filters-en.png",
+      "role": "administrator",
+      "locale": "en",
+      "screen": "ledger-filters",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:13:02.036427+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-ledger-filters-hi.png",
+      "role": "administrator",
+      "locale": "hi",
+      "screen": "ledger-filters",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:20:25.746158+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-ledger-hi.png",
+      "role": "administrator",
+      "locale": "hi",
+      "screen": "ledger",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:20:23.406671+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-settings-en.png",
+      "role": "administrator",
+      "locale": "en",
+      "screen": "settings",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:14:09.795829+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-settings-hi.png",
+      "role": "administrator",
+      "locale": "hi",
+      "screen": "settings",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:20:50.027486+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-user-review-en.png",
+      "role": "administrator",
+      "locale": "en",
+      "screen": "user-review",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:12:16.047537+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/administrator-user-review-hi.png",
+      "role": "administrator",
+      "locale": "hi",
+      "screen": "user-review",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:17:38.532049+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/login-en.png",
+      "role": "login",
+      "locale": "en",
+      "screen": "",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:22:07.881073+00:00"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/office/login-hi.png",
+      "role": "login",
+      "locale": "hi",
+      "screen": "",
+      "capture_method": "Live production Flutter web rendered in headless Google Chrome via agent-browser",
+      "url": "https://kaysons-logistics.vercel.app/",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      },
+      "data": "Authenticated approved reviewer role; historical imported business records and reviewer/demo records; blank entry forms",
+      "privacy": "No credentials, OTPs, tokens or personal contact fields captured. Full approved-user lists omitted; pending review is anonymous.",
+      "captured_at_utc": "2026-10-02T18:20:59.150110+00:00"
+    }
+  ]
+}

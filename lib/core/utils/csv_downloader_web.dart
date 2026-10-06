@@ -2,7 +2,11 @@
 
 import 'dart:html' as html;
 
-void downloadFile(String fileName, String content, String mimeType) {
+Future<void> downloadFile(
+  String fileName,
+  String content,
+  String mimeType,
+) async {
   final blob = html.Blob([content], mimeType);
   final url = html.Url.createObjectUrlFromBlob(blob);
   html.AnchorElement(href: url)
@@ -11,6 +15,6 @@ void downloadFile(String fileName, String content, String mimeType) {
   html.Url.revokeObjectUrl(url);
 }
 
-void downloadCsv(String fileName, String csvContent) {
-  downloadFile(fileName, csvContent, 'text/csv;charset=utf-8');
+Future<void> downloadCsv(String fileName, String csvContent) {
+  return downloadFile(fileName, csvContent, 'text/csv;charset=utf-8');
 }

@@ -1,0 +1,28 @@
+- document:
+  - img "Kaysons logo"
+  - text: Accountant KAYSONS Manage ledgers, reports, and Clawd analysis.
+  - group:
+    - button "Ledger" [ref=e1]
+    - button "Analytics" [ref=e2]
+    - button "Clawd" [ref=e3]
+  - button "Profile Profile" [ref=e4]
+  - group "Clawd Operations analyst for freight, POD, e-way, and cost review":
+    - button "Scan risks" [ref=e5]
+    - button "Daily report" [ref=e6]
+    - button "Monthly report" [ref=e7]
+    - group:
+      - text: Current Risk Summary · April 2026 519 Dispatches ₹20.51 L Freight 164 POD pending ₹3.83 L Review value 2 Duplicate e-way 0 Route spikes 61 Extra charges
+      - group "Quick Prompts":
+        - checkbox "Summarize April 2026 logistics" [ref=e8]
+        - checkbox "Show POD pending by transporter" [ref=e9]
+        - checkbox "Find highest freight per MT routes" [ref=e10]
+        - checkbox "Check duplicate invoice and e-way risk" [ref=e11]
+        - checkbox "Compare Bunge vs Cargill" [ref=e12]
+      - textbox "Ask Clawd Ask about POD, routes, e-way bills, or transporter costs..." [ref=e13]
+      - button "Expand" [ref=e14]
+      - group:
+        - textbox [ref=e15] [disabled]
+      - button "Send" [ref=e16]
+      - group "Open Review Queue critical priority 100 duplicate eway Cargill · ludhiana>talwara critical priority 100 duplicate eway Cargill · ludhiana>talwara critical priority 95 route cost spike Cargill · ludhiana>rampura critical priority 95 route cost spike Bunge · ludhiana>mohali critical priority 95 route cost spike Cargill · ludhiana>dina nagar critical priority 95 route cost spike Cargill · ludhiana>moga critical priority 95 route cost spike Cargill · ludhiana>pathankot critical priority 95 route cost spike Cargill · ludhiana>jalandhar":
+        - button "Resolved" [ref=e17]
+        - button "False positive" [ref=e18]

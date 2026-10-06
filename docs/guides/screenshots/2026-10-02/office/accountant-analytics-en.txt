@@ -1,0 +1,24 @@
+- document:
+  - img "Kaysons logo"
+  - text: Accountant KAYSONS Manage ledgers, reports, and Clawd analysis.
+  - group:
+    - button "Ledger" [ref=e1]
+    - button "Analytics" [ref=e2]
+    - button "Clawd" [ref=e3]
+  - button "Profile Profile" [ref=e4]
+  - group:
+    - group "Analytics":
+      - button "Refresh" [ref=e5]
+    - button "7 days" [ref=e6]
+    - button "15 days" [ref=e7]
+    - button "30 days" [ref=e8]
+    - button "90 days" [ref=e9]
+    - button "Custom dates" [ref=e10]
+    - text: ₹15466 Total freight 81 Cases 167.00 Metric MT ₹93 PMT 2 Pending acknowledgements
+    - group "Transporter business volume Jagdamba Enterprises ₹10000 Unassigned ₹5466 Company-wise freight Unassigned ₹15466 Town-wise freight Agartala ₹10000 Adilabad ₹5466 Delhi ₹0 Delay and acknowledgement alerts No delayed dispatch rows in this window.":
+      - progressbar "65"
+      - progressbar "100"
+      - progressbar "35"
+      - progressbar "65"
+      - progressbar "35"
+      - progressbar "0"

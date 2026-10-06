@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../supabase/supabase_bootstrap.dart';
+import 'workspace_widgets.dart';
 
 const _deliveryDocumentsBucket = 'delivery-documents';
 
@@ -19,15 +20,31 @@ Future<void> openDeliveryDocument(BuildContext context, String path) async {
       mode: LaunchMode.externalApplication,
     );
     if (!opened && context.mounted) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Could not open file')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _documentText(
+              context,
+              'Could not open the file. Please try again.',
+              'फ़ाइल नहीं खुल सकी। फिर प्रयास करें।',
+            ),
+          ),
+        ),
+      );
     }
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Could not open file: $e')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _documentText(
+            context,
+            'Could not open the file. Please try again.',
+            'फ़ाइल नहीं खुल सकी। फिर प्रयास करें।',
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -51,124 +68,163 @@ Future<void> showDeliveryDocumentPreview({
   );
 }
 
-class _StoragePhotoDialog extends StatelessWidget {
+String _documentText(BuildContext context, String en, String hi) =>
+    Localizations.localeOf(context).languageCode == 'hi' ? hi : en;
+
+class _StoragePhotoDialog extends StatefulWidget {
   const _StoragePhotoDialog({
     required this.title,
     required this.path,
     this.onReplace,
   });
-
-  final String title;
-  final String path;
+  final String title, path;
   final VoidCallback? onReplace;
+  @override
+  State<_StoragePhotoDialog> createState() => _StoragePhotoDialogState();
+}
 
+class _StoragePhotoDialogState extends State<_StoragePhotoDialog> {
+  late Future<String> _url = createDeliveryDocumentSignedUrl(widget.path);
   @override
   Widget build(BuildContext context) {
+    String t(String en, String hi) => _documentText(context, en, hi);
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 560),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
+      constraints: const BoxConstraints(maxWidth: 620),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      widget.title,
+                      style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
-                ),
-                IconButton(
-                  tooltip: 'Close',
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            FutureBuilder<String>(
-              future: createDeliveryDocumentSignedUrl(path),
-              builder: (context, snap) {
-                if (snap.connectionState != ConnectionState.done) {
-                  return const SizedBox(
-                    height: 280,
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final url = snap.data;
-                if (url == null || snap.hasError) {
-                  return SizedBox(
-                    height: 180,
-                    child: Center(
-                      child: Text(
-                        'Could not load preview${snap.error == null ? '' : ': ${snap.error}'}',
-                        textAlign: TextAlign.center,
+                  IconButton(
+                    tooltip: t('Close preview', 'प्रमाण बंद करें'),
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                widget.path.split('/').last,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 18),
+              FutureBuilder<String>(
+                future: _url,
+                builder: (context, snap) {
+                  if (snap.connectionState != ConnectionState.done) {
+                    return SizedBox(
+                      height: 220,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const CircularProgressIndicator(),
+                          const SizedBox(height: 16),
+                          Text(t('Opening document…', 'दस्तावेज़ खुल रहा है…')),
+                        ],
                       ),
-                    ),
-                  );
-                }
-                return ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Container(
-                    constraints: const BoxConstraints(maxHeight: 420),
-                    color: const Color(0xFFF6EDFB),
-                    child: InteractiveViewer(
-                      minScale: 0.5,
-                      maxScale: 4,
-                      child: Image.network(
-                        url,
-                        fit: BoxFit.contain,
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return const SizedBox(
-                            height: 280,
-                            child: Center(child: CircularProgressIndicator()),
-                          );
-                        },
-                        errorBuilder:
-                            (_, __, ___) => const SizedBox(
-                              height: 180,
-                              child: Center(child: Text('Preview unavailable')),
+                    );
+                  }
+                  if (snap.hasError || snap.data == null) {
+                    return WorkspaceEmptyState(
+                      title: t(
+                        'Preview could not be loaded',
+                        'प्रमाण नहीं खुल सका',
+                      ),
+                      message: t(
+                        'Try loading it again or use Open file below.',
+                        'फिर प्रयास करें या नीचे फ़ाइल खोलें दबाएँ।',
+                      ),
+                      icon: Icons.insert_drive_file_outlined,
+                      action: OutlinedButton.icon(
+                        onPressed:
+                            () => setState(
+                              () =>
+                                  _url = createDeliveryDocumentSignedUrl(
+                                    widget.path,
+                                  ),
                             ),
+                        icon: const Icon(Icons.refresh),
+                        label: Text(t('Try again', 'फिर प्रयास करें')),
+                      ),
+                    );
+                  }
+                  if (widget.path.toLowerCase().endsWith('.pdf')) {
+                    return GuidanceCard(
+                      title: t('PDF document', 'PDF दस्तावेज़'),
+                      message: t(
+                        'Tap Open file to read all pages in your browser or PDF viewer.',
+                        'सभी पृष्ठ देखने के लिए फ़ाइल खोलें दबाएँ।',
+                      ),
+                      icon: Icons.picture_as_pdf_outlined,
+                    );
+                  }
+                  return ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 380),
+                      child: InteractiveViewer(
+                        minScale: .5,
+                        maxScale: 4,
+                        child: Image.network(
+                          snap.data!,
+                          fit: BoxFit.contain,
+                          loadingBuilder:
+                              (_, child, progress) =>
+                                  progress == null
+                                      ? child
+                                      : const SizedBox(
+                                        height: 220,
+                                        child: Center(
+                                          child: CircularProgressIndicator(),
+                                        ),
+                                      ),
+                          errorBuilder:
+                              (_, _, _) => Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Text(
+                                  t(
+                                    'Image preview unavailable. Use Open file below.',
+                                    'तस्वीर नहीं दिख रही है। नीचे फ़ाइल खोलें दबाएँ।',
+                                  ),
+                                ),
+                              ),
+                        ),
                       ),
                     ),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 14),
-            Wrap(
-              alignment: WrapAlignment.end,
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                if (onReplace != null)
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      onReplace?.call();
-                    },
-                    icon: const Icon(Icons.change_circle_outlined),
-                    label: const Text('Replace'),
-                  ),
+                  );
+                },
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: () => openDeliveryDocument(context, widget.path),
+                icon: const Icon(Icons.open_in_new),
+                label: Text(t('Open file', 'फ़ाइल खोलें')),
+              ),
+              if (widget.onReplace != null) ...[
+                const SizedBox(height: 12),
                 OutlinedButton.icon(
-                  onPressed: () => openDeliveryDocument(context, path),
-                  icon: const Icon(Icons.open_in_new),
-                  label: const Text('Open'),
-                ),
-                FilledButton.icon(
-                  onPressed: () => openDeliveryDocument(context, path),
-                  icon: const Icon(Icons.download_outlined),
-                  label: const Text('Download'),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    widget.onReplace!();
+                  },
+                  icon: const Icon(Icons.upload_file),
+                  label: Text(
+                    t('Replace uploaded file', 'अपलोड की गई फ़ाइल बदलें'),
+                  ),
                 ),
               ],
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/workspace_widgets.dart';
+import 'widgets/office_widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/supabase_bootstrap.dart';
+import '../../core/utils/workflow_formatters.dart';
+import '../../l10n/app_localizations.dart';
 
 const _onSurface = Color(0xFF1D1B20);
 const _onSurfaceVariant = Color(0xFF49454F);
@@ -15,9 +19,22 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   String _filter = 'open';
+  String _search = '';
+  late Future<List<_NotificationItem>> _notifications;
+  @override
+  void initState() {
+    super.initState();
+    _notifications = _loadNotifications();
+  }
+
+  Future<void> _refresh() async {
+    setState(() => _notifications = _loadNotifications());
+    await _notifications;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -27,67 +44,80 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
-        title: const Text('Notifications'),
+        title: Text(l.adminNotifications),
       ),
       body: RefreshIndicator(
-        onRefresh: () async => setState(() {}),
+        onRefresh: _refresh,
         child: FutureBuilder<List<_NotificationItem>>(
-          future: _loadNotifications(),
+          future: _notifications,
           builder: (context, snap) {
             final loading = snap.connectionState == ConnectionState.waiting;
             final items = snap.data ?? const <_NotificationItem>[];
             final visible =
-                _filter == 'all'
-                    ? items
-                    : items.where((item) => item.status == _filter).toList();
+                items
+                    .where(
+                      (item) =>
+                          (_filter == 'all' || item.status == _filter) &&
+                          '${item.title} ${item.message} ${item.category}'
+                              .toLowerCase()
+                              .contains(_search.toLowerCase()),
+                    )
+                    .toList();
             final openCount =
                 items.where((item) => item.status != 'resolved').length;
 
             return ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
-                Row(
-                  children: [
-                    const Expanded(
-                      child: Text(
-                        'Alert notifications',
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w600,
-                          color: _onSurface,
-                        ),
-                      ),
-                    ),
-                    if (openCount > 0)
-                      Badge.count(
-                        count: openCount,
-                        child: const Icon(Icons.notifications_outlined),
-                      )
-                    else
-                      const Icon(Icons.notifications_none_outlined),
-                  ],
+                WorkspaceHeader(
+                  title: l.adminAlertNotifications,
+                  description: officeCopy(
+                    context,
+                    'Read the reason for each alert and check the affected record. Use status filters to focus on work still open.',
+                    'हर सूचना का कारण पढ़ें और संबंधित रिकॉर्ड जाँचें। बाकी काम देखने के लिए स्थिति का फ़िल्टर चुनें।',
+                  ),
+                  icon: Icons.notifications_outlined,
+                  action: OutlinedButton.icon(
+                    onPressed: _refresh,
+                    icon: const Icon(Icons.refresh),
+                    label: Text(l.adminRefresh),
+                  ),
+                  summary: StatusBadge(
+                    label: '$openCount ${l.adminOpen}',
+                    tone:
+                        openCount > 0
+                            ? WorkspaceTone.warning
+                            : WorkspaceTone.success,
+                  ),
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Review POD, document mismatch, vehicle, and registration alerts from one place.',
-                  style: TextStyle(fontSize: 13, color: _onSurfaceVariant),
+                const SizedBox(height: 16),
+                TextField(
+                  onChanged: (value) => setState(() => _search = value),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search),
+                    labelText: officeCopy(
+                      context,
+                      'Search alerts',
+                      'सूचनाएँ खोजें',
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 14),
                 Wrap(
                   spacing: 8,
                   children: [
                     ChoiceChip(
-                      label: const Text('Open'),
+                      label: Text(l.adminOpen),
                       selected: _filter == 'open',
                       onSelected: (_) => setState(() => _filter = 'open'),
                     ),
                     ChoiceChip(
-                      label: const Text('Resolved'),
+                      label: Text(l.adminResolved),
                       selected: _filter == 'resolved',
                       onSelected: (_) => setState(() => _filter = 'resolved'),
                     ),
                     ChoiceChip(
-                      label: const Text('All'),
+                      label: Text(l.adminAll),
                       selected: _filter == 'all',
                       onSelected: (_) => setState(() => _filter = 'all'),
                     ),
@@ -99,15 +129,129 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     padding: EdgeInsets.symmetric(vertical: 48),
                     child: Center(child: CircularProgressIndicator()),
                   )
-                else if (visible.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 48),
-                    child: Center(
-                      child: Text(
-                        'No notifications here right now.',
-                        style: TextStyle(color: _onSurfaceVariant),
-                      ),
+                else if (snap.hasError)
+                  WorkspaceEmptyState(
+                    title: officeCopy(
+                      context,
+                      'Alerts could not be loaded',
+                      'सूचनाएँ लोड नहीं हुईं',
                     ),
+                    message: officeCopy(
+                      context,
+                      'Check your connection and try again.',
+                      'कनेक्शन जाँचें और फिर प्रयास करें।',
+                    ),
+                    icon: Icons.cloud_off_outlined,
+                    action: OutlinedButton(
+                      onPressed: _refresh,
+                      child: Text(l.adminRetry),
+                    ),
+                  )
+                else if (visible.isEmpty)
+                  WorkspaceEmptyState(
+                    title: l.adminNoNotifications,
+                    message: officeCopy(
+                      context,
+                      'There are no alerts matching this search and status.',
+                      'इस खोज और स्थिति की कोई सूचना नहीं है।',
+                    ),
+                    icon: Icons.task_alt_outlined,
+                  )
+                else if (MediaQuery.sizeOf(context).width >= 1000)
+                  DataTable(
+                    columnSpacing: 20,
+                    dataRowMinHeight: 72,
+                    dataRowMaxHeight: 92,
+                    columns: [
+                      DataColumn(
+                        label: Text(officeCopy(context, 'Alert', 'सूचना')),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          officeCopy(context, 'Priority', 'प्राथमिकता'),
+                        ),
+                      ),
+                      DataColumn(label: Text(l.adminStatus)),
+                      DataColumn(
+                        label: Text(officeCopy(context, 'Details', 'जानकारी')),
+                      ),
+                    ],
+                    rows:
+                        visible
+                            .map(
+                              (item) => DataRow(
+                                cells: [
+                                  DataCell(
+                                    SizedBox(
+                                      width: 420,
+                                      child: Text(item.title, maxLines: 3),
+                                    ),
+                                  ),
+                                  DataCell(
+                                    StatusBadge(
+                                      label: item.severity,
+                                      tone:
+                                          item.severity == 'high'
+                                              ? WorkspaceTone.danger
+                                              : WorkspaceTone.warning,
+                                    ),
+                                  ),
+                                  DataCell(
+                                    StatusBadge(
+                                      label:
+                                          item.status == 'resolved'
+                                              ? l.adminResolved
+                                              : l.adminOpen,
+                                      tone:
+                                          item.status == 'resolved'
+                                              ? WorkspaceTone.success
+                                              : WorkspaceTone.info,
+                                    ),
+                                  ),
+                                  DataCell(
+                                    OutlinedButton(
+                                      onPressed:
+                                          () => showDialog<void>(
+                                            context: context,
+                                            builder:
+                                                (context) => AlertDialog(
+                                                  scrollable: true,
+                                                  content: SizedBox(
+                                                    width: 640,
+                                                    child: _NotificationTile(
+                                                      item: item,
+                                                    ),
+                                                  ),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed:
+                                                          () => Navigator.pop(
+                                                            context,
+                                                          ),
+                                                      child: Text(
+                                                        officeCopy(
+                                                          context,
+                                                          'Close',
+                                                          'बंद करें',
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                          ),
+                                      child: Text(
+                                        officeCopy(
+                                          context,
+                                          'Read alert',
+                                          'सूचना पढ़ें',
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                            .toList(),
                   )
                 else
                   ...visible.map((item) => _NotificationTile(item: item)),
@@ -200,9 +344,7 @@ class _NotificationTile extends StatelessWidget {
     if (dt == null) return '';
     final day = dt.day.toString().padLeft(2, '0');
     final month = dt.month.toString().padLeft(2, '0');
-    final hour = dt.hour.toString().padLeft(2, '0');
-    final minute = dt.minute.toString().padLeft(2, '0');
-    return '$day/$month/${dt.year} $hour:$minute';
+    return '$day/$month/${dt.year} ${format12HourTime(dt)}';
   }
 
   @override
@@ -211,8 +353,9 @@ class _NotificationTile extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: _bg,
-        borderRadius: BorderRadius.circular(14),
+        color: Colors.white,
+        border: Border.all(color: _bg),
+        borderRadius: BorderRadius.circular(18),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -243,7 +386,8 @@ class _NotificationTile extends StatelessWidget {
                   Text(
                     item.message,
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
+                      height: 1.5,
                       color: _onSurfaceVariant,
                     ),
                   ),
@@ -288,7 +432,7 @@ class _Pill extends StatelessWidget {
       child: Text(
         label,
         style: TextStyle(
-          fontSize: 10,
+          fontSize: 12,
           fontWeight: FontWeight.w700,
           color: color,
         ),

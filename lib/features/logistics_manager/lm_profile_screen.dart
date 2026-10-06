@@ -1,21 +1,64 @@
+import '../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/auth_service.dart';
 import '../../core/supabase/supabase_bootstrap.dart';
+import '../../core/utils/workflow_formatters.dart';
 import '../../core/widgets/pill_text_field.dart';
 import '../../core/widgets/primary_button.dart';
+import '../../core/widgets/workspace_widgets.dart';
+import '../auth/enrollment_strings.dart';
 
 const _surface = Color(0xFFF8F5FB);
 const _onSurface = Color(0xFF1D1B20);
 const _onSurfaceVariant = Color(0xFF49454F);
-const _outline = Color(0xFFE4DCEB);
 
 class LmProfileScreen extends StatefulWidget {
   const LmProfileScreen({super.key});
 
   @override
   State<LmProfileScreen> createState() => _LmProfileScreenState();
+}
+
+class LmTransporterDirectoryScreen extends StatelessWidget {
+  const LmTransporterDirectoryScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _surface,
+      appBar: AppBar(
+        backgroundColor: _surface,
+        elevation: 0,
+        title: Text(AppLocalizations.of(context)!.opsTransporters),
+      ),
+      body: const SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(16, 8, 16, 28),
+        child: _TransporterDirectory(),
+      ),
+    );
+  }
+}
+
+class LmVehicleDirectoryScreen extends StatelessWidget {
+  const LmVehicleDirectoryScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _surface,
+      appBar: AppBar(
+        backgroundColor: _surface,
+        elevation: 0,
+        title: Text(AppLocalizations.of(context)!.opsVehicles),
+      ),
+      body: const SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(16, 8, 16, 28),
+        child: _VehicleDirectory(),
+      ),
+    );
+  }
 }
 
 class _LmProfileScreenState extends State<LmProfileScreen> {
@@ -78,6 +121,19 @@ class _LmProfileScreenState extends State<LmProfileScreen> {
   Future<void> _save() async {
     final uid = AuthService.instance.user?.id;
     if (uid == null || _saving) return;
+    final rawPhone = _phone.text.trim();
+    if (rawPhone.isNotEmpty) {
+      final normalizedPhone = normalizeIndianPhone(rawPhone);
+      if (normalizedPhone == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.opsInvalidPhone),
+          ),
+        );
+        return;
+      }
+      _phone.text = normalizedPhone;
+    }
     setState(() => _saving = true);
     try {
       try {
@@ -100,9 +156,11 @@ class _LmProfileScreenState extends State<LmProfileScreen> {
       }
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Profile updated')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.opsProfileUpdated),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -115,104 +173,155 @@ class _LmProfileScreenState extends State<LmProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    String t(String en, String hi) => enrollmentText(context, en, hi);
     return Scaffold(
       backgroundColor: _surface,
-      body: SafeArea(
-        child:
-            _loading
-                ? const Center(child: CircularProgressIndicator())
-                : RefreshIndicator(
-                  onRefresh: _load,
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-                    children: [
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.arrow_back),
-                            onPressed: () => context.pop(),
+      appBar: AppBar(
+        title: Text(l.opsManagerProfile),
+        actions: [
+          IconButton(
+            tooltip: l.opsRefresh,
+            onPressed: _load,
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
+      body:
+          _loading
+              ? const Center(child: CircularProgressIndicator())
+              : SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1120),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        WorkspaceHeader(
+                          title:
+                              _name.text.isEmpty
+                                  ? l.opsManagerProfile
+                                  : _name.text,
+                          description: t(
+                            'Update your work contact and coverage area. Account access is managed by your administrator.',
+                            'अपना काम का संपर्क और कार्यक्षेत्र अपडेट करें। खाते की पहुँच प्रशासक तय करते हैं।',
                           ),
-                          const Expanded(
-                            child: Text(
-                              'Manager profile',
-                              style: TextStyle(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w600,
-                                color: _onSurface,
+                          icon: Icons.badge_outlined,
+                          summary: Wrap(
+                            spacing: 10,
+                            runSpacing: 8,
+                            children: [
+                              StatusBadge(
+                                label: _roleLabel(_role),
+                                tone: WorkspaceTone.info,
                               ),
-                            ),
+                              StatusBadge(
+                                label: _title(_status),
+                                tone: WorkspaceTone.success,
+                              ),
+                            ],
                           ),
-                          IconButton(
-                            tooltip: 'Refresh',
-                            onPressed: _load,
-                            icon: const Icon(Icons.refresh),
+                        ),
+                        const SizedBox(height: 24),
+                        WorkspaceFormLayout(
+                          showAsideOnMobile: true,
+                          aside: WorkspaceSection(
+                            title: l.opsAccount,
+                            children: [
+                              _meta(l.opsEmail, _email.isEmpty ? '—' : _email),
+                              _meta(l.opsRole, _roleLabel(_role)),
+                              const SizedBox(height: 10),
+                              OutlinedButton.icon(
+                                onPressed: () => context.push('/account/phone'),
+                                icon: const Icon(Icons.phone_android_outlined),
+                                label: Text(
+                                  t('Manage sign-in phone', 'लॉगिन फोन देखें'),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed:
+                                    () => context.push('/account/privacy'),
+                                icon: const Icon(Icons.privacy_tip_outlined),
+                                label: Text(l.accountPrivacy),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      _card(
-                        title: 'Work details',
-                        subtitle:
-                            'Only manager identity and operating area are needed here.',
-                        child: Column(
-                          children: [
-                            _field('Name', _name, hint: 'Logistics manager'),
-                            _field(
-                              'Phone number',
-                              _phone,
-                              hint: '+91 98765 43210',
-                              keyboardType: TextInputType.phone,
+                          content: WorkspaceSection(
+                            title: l.opsWorkDetails,
+                            description: t(
+                              'These details help the team contact you and assign work in your area.',
+                              'यह जानकारी टीम को आपसे संपर्क करने और आपके क्षेत्र में काम देने में मदद करती है।',
                             ),
-                            _field(
-                              'Area covered',
-                              _coverageArea,
-                              hint: 'Delhi NCR, Haryana, Punjab',
-                            ),
-                            const SizedBox(height: 4),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: SizedBox(
-                                width: 220,
+                            children: [
+                              _field(
+                                l.opsName,
+                                _name,
+                                hint: t('Your full name', 'आपका पूरा नाम'),
+                              ),
+                              _field(
+                                l.opsPhoneNumber,
+                                _phone,
+                                hint: '+91 98765 43210',
+                                keyboardType: TextInputType.phone,
+                              ),
+                              _field(
+                                l.opsAreaCovered,
+                                _coverageArea,
+                                hint: 'Delhi NCR, Haryana, Punjab',
+                              ),
+                              const SizedBox(height: 8),
+                              SizedBox(
+                                width: double.infinity,
                                 child: PrimaryButton(
-                                  label: _saving ? 'Saving...' : 'Save changes',
+                                  label:
+                                      _saving ? l.opsSaving : l.opsSaveChanges,
                                   onPressed: _saving ? null : _save,
                                 ),
                               ),
+                            ],
+                          ),
+                        ),
+                        if (_role == 'logistics_manager' ||
+                            _role == 'admin') ...[
+                          const SizedBox(height: 24),
+                          WorkspaceSection(
+                            title: t('Team directories', 'टीम की सूचियाँ'),
+                            description: t(
+                              'Find transporter contacts or check vehicle information. These lists are read-only.',
+                              'ट्रांसपोर्टर का संपर्क या वाहन की जानकारी देखें। ये सूचियाँ केवल देखने के लिए हैं।',
                             ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      _card(
-                        title: 'Account',
-                        subtitle:
-                            'Business, GST and vehicle ownership stay with transporters.',
-                        child: Column(
-                          children: [
-                            _meta('Email', _email.isEmpty ? '-' : _email),
-                            _meta('Role', _roleLabel(_role)),
-                            _meta('Status', _title(_status)),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      _card(
-                        title: 'All transporters',
-                        subtitle:
-                            'Read-only list for assigning bids and checking responsibility.',
-                        child: const _TransporterDirectory(),
-                      ),
-                      const SizedBox(height: 14),
-                      _card(
-                        title: 'All vehicles',
-                        subtitle:
-                            'Vehicles are added by transporters. Managers verify what arrives.',
-                        child: const _VehicleDirectory(),
-                      ),
-                    ],
+                            children: [
+                              Wrap(
+                                spacing: 12,
+                                runSpacing: 12,
+                                children: [
+                                  OutlinedButton.icon(
+                                    onPressed:
+                                        () => context.push('/lm/transporters'),
+                                    icon: const Icon(Icons.business_outlined),
+                                    label: Text(l.opsAllTransporters),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed:
+                                        () => context.push('/lm/vehicles'),
+                                    icon: const Icon(
+                                      Icons.local_shipping_outlined,
+                                    ),
+                                    label: Text(l.opsAllVehicles),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ),
-      ),
+              ),
     );
   }
 
@@ -230,7 +339,7 @@ class _LmProfileScreenState extends State<LmProfileScreen> {
           Text(
             label,
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: 14,
               fontWeight: FontWeight.w700,
               color: _onSurfaceVariant,
             ),
@@ -242,45 +351,6 @@ class _LmProfileScreenState extends State<LmProfileScreen> {
             textAlign: TextAlign.start,
             keyboardType: keyboardType,
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _card({
-    required String title,
-    required String subtitle,
-    required Widget child,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: _outline),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w700,
-              color: _onSurface,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              fontSize: 12,
-              height: 1.35,
-              color: _onSurfaceVariant,
-            ),
-          ),
-          const SizedBox(height: 14),
-          child,
         ],
       ),
     );
@@ -301,7 +371,7 @@ class _LmProfileScreenState extends State<LmProfileScreen> {
             child: Text(
               label,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 14,
                 fontWeight: FontWeight.w700,
                 color: _onSurfaceVariant,
               ),
@@ -311,7 +381,7 @@ class _LmProfileScreenState extends State<LmProfileScreen> {
             child: Text(
               value,
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: 15,
                 fontWeight: FontWeight.w600,
                 color: _onSurface,
               ),
@@ -325,100 +395,203 @@ class _LmProfileScreenState extends State<LmProfileScreen> {
 
 class _TransporterDirectory extends StatelessWidget {
   const _TransporterDirectory();
-
   @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: supabase
-          .from('profiles')
-          .select('id, full_name, business_name, email, phone, status')
-          .eq('role', 'transporter')
-          .order('business_name', ascending: true)
-          .then((rows) => (rows as List).cast<Map<String, dynamic>>()),
-      builder: (context, snap) {
-        if (!snap.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        final rows = snap.data!;
-        if (rows.isEmpty) {
-          return const Text(
-            'No transporters found.',
-            style: TextStyle(color: _onSurfaceVariant),
-          );
-        }
-        return Column(
-          children:
-              rows
-                  .take(12)
-                  .map(
-                    (row) => _DirectoryTile(
-                      icon: Icons.business_outlined,
-                      title:
-                          (row['business_name'] ??
-                                  row['full_name'] ??
-                                  row['email'] ??
-                                  'Transporter')
-                              .toString(),
-                      subtitle: [
-                        (row['phone'] ?? '').toString(),
-                        _title((row['status'] ?? '').toString()),
-                      ].where((v) => v.trim().isNotEmpty).join(' · '),
-                    ),
-                  )
-                  .toList(),
-        );
-      },
-    );
-  }
+  Widget build(BuildContext context) =>
+      const _SearchableDirectory(vehicles: false);
 }
 
 class _VehicleDirectory extends StatelessWidget {
   const _VehicleDirectory();
+  @override
+  Widget build(BuildContext context) =>
+      const _SearchableDirectory(vehicles: true);
+}
 
+class _SearchableDirectory extends StatefulWidget {
+  const _SearchableDirectory({required this.vehicles});
+  final bool vehicles;
+  @override
+  State<_SearchableDirectory> createState() => _SearchableDirectoryState();
+}
+
+class _SearchableDirectoryState extends State<_SearchableDirectory> {
+  late Future<List<Map<String, dynamic>>> _rows = _fetch();
+  String _query = '';
+  Future<List<Map<String, dynamic>>> _fetch() =>
+      widget.vehicles
+          ? _fetchVehiclesWithOwners()
+          : supabase
+              .from('profiles')
+              .select('id, full_name, business_name, email, phone, status')
+              .eq('role', 'transporter')
+              .order('business_name', ascending: true)
+              .then((rows) => (rows as List).cast<Map<String, dynamic>>());
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _fetchVehiclesWithOwners(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snap.hasError) {
-          return Text(
-            'Vehicle list is unavailable until manager read access is applied.',
-            style: TextStyle(color: Colors.red.shade700),
-          );
-        }
-        final rows = snap.data ?? const <Map<String, dynamic>>[];
-        if (rows.isEmpty) {
-          return const Text(
-            'No vehicles found.',
-            style: TextStyle(color: _onSurfaceVariant),
-          );
-        }
-        return Column(
-          children:
-              rows.take(12).map((row) {
-                final owner = (row['owner_label'] ?? 'Transporter').toString();
-                final capacity = [
-                  if ((row['capacity_qt'] ?? '').toString().isNotEmpty)
-                    '${row['capacity_qt']} Cases',
-                  if ((row['capacity_weight_kg'] ?? '').toString().isNotEmpty)
-                    '${row['capacity_weight_kg']} Ton',
-                ].join(' · ');
-                return _DirectoryTile(
-                  icon: Icons.local_shipping_outlined,
-                  title: (row['registration_number'] ?? 'Vehicle').toString(),
-                  subtitle: [
-                    owner,
-                    (row['vehicle_type'] ?? '').toString(),
-                    capacity,
-                    _title((row['status'] ?? '').toString()),
-                  ].where((v) => v.trim().isNotEmpty).join(' · '),
+    final l = AppLocalizations.of(context)!;
+    String t(String en, String hi) => enrollmentText(context, en, hi);
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1040),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            WorkspaceHeader(
+              title: widget.vehicles ? l.opsAllVehicles : l.opsAllTransporters,
+              description:
+                  widget.vehicles
+                      ? t(
+                        'Search a vehicle number or transporter. Check capacity and ownership before planning a trip.',
+                        'वाहन नंबर या ट्रांसपोर्टर खोजें। सफ़र की योजना से पहले क्षमता और मालिक देखें।',
+                      )
+                      : t(
+                        'Search by name, business or phone to find the right transporter.',
+                        'सही ट्रांसपोर्टर ढूँढने के लिए नाम, व्यवसाय या फोन से खोजें।',
+                      ),
+              icon:
+                  widget.vehicles
+                      ? Icons.local_shipping_outlined
+                      : Icons.business_outlined,
+            ),
+            const SizedBox(height: 18),
+            TextField(
+              onChanged: (v) => setState(() => _query = v.toLowerCase().trim()),
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search),
+                labelText:
+                    widget.vehicles
+                        ? t(
+                          'Search vehicle number or transporter',
+                          'वाहन नंबर या ट्रांसपोर्टर खोजें',
+                        )
+                        : t(
+                          'Search name, business or phone',
+                          'नाम, व्यवसाय या फोन खोजें',
+                        ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            FutureBuilder<List<Map<String, dynamic>>>(
+              future: _rows,
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+                if (snap.hasError) {
+                  return WorkspaceEmptyState(
+                    title: t('List could not be loaded', 'सूची नहीं खुल सकी'),
+                    message: t(
+                      'Try again to load the latest records.',
+                      'नई जानकारी देखने के लिए फिर प्रयास करें।',
+                    ),
+                    action: OutlinedButton.icon(
+                      onPressed: () => setState(() => _rows = _fetch()),
+                      icon: const Icon(Icons.refresh),
+                      label: Text(l.opsRefresh),
+                    ),
+                  );
+                }
+                final rows =
+                    (snap.data ?? [])
+                        .where(
+                          (r) =>
+                              r.values.join(' ').toLowerCase().contains(_query),
+                        )
+                        .toList();
+                if (rows.isEmpty) {
+                  return WorkspaceEmptyState(
+                    title: t('No matching records', 'कोई जानकारी नहीं मिली'),
+                    message: t(
+                      'Try another name or number.',
+                      'दूसरा नाम या नंबर खोजें।',
+                    ),
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      t('${rows.length} records', '${rows.length} रिकॉर्ड'),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final columns = constraints.maxWidth >= 740 ? 2 : 1;
+                        final width =
+                            (constraints.maxWidth - (columns - 1) * 14) /
+                            columns;
+                        return Wrap(
+                          spacing: 14,
+                          runSpacing: 14,
+                          children:
+                              rows.map((row) {
+                                final title =
+                                    widget.vehicles
+                                        ? (row['registration_number'] ?? '—')
+                                            .toString()
+                                        : (row['business_name'] ??
+                                                row['full_name'] ??
+                                                row['email'] ??
+                                                '—')
+                                            .toString();
+                                final values =
+                                    widget.vehicles
+                                        ? [
+                                          row['owner_label'],
+                                          row['vehicle_type'],
+                                          if (row['capacity_qt'] != null)
+                                            '${row['capacity_qt']} ${t('cases', 'केस')}',
+                                          if (row['capacity_weight_kg'] != null)
+                                            '${row['capacity_weight_kg']} MT',
+                                          _title(
+                                            (row['status'] ?? '').toString(),
+                                          ),
+                                        ]
+                                        : [
+                                          row['full_name'],
+                                          row['phone'],
+                                          row['email'],
+                                          _title(
+                                            (row['status'] ?? '').toString(),
+                                          ),
+                                        ];
+                                return SizedBox(
+                                  width: width,
+                                  child: WorkspaceSection(
+                                    title: title,
+                                    children: [
+                                      for (final v in values.where(
+                                        (v) =>
+                                            v != null &&
+                                            v.toString().trim().isNotEmpty,
+                                      ))
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 6,
+                                          ),
+                                          child: SelectableText(v.toString()),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                        );
+                      },
+                    ),
+                  ],
                 );
-              }).toList(),
-        );
-      },
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -458,59 +631,6 @@ Future<List<Map<String, dynamic>>> _fetchVehiclesWithOwners() async {
         'owner_label': ownerLabels[vehicle['profile_id']] ?? 'Transporter',
       },
   ];
-}
-
-class _DirectoryTile extends StatelessWidget {
-  const _DirectoryTile({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: const Color(0xFF6750A4)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: _onSurface,
-                  ),
-                ),
-                if (subtitle.isNotEmpty)
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: _onSurfaceVariant,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 String _roleLabel(String role) {

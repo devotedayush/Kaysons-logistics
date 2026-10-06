@@ -1,17 +1,28 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/auth_service.dart';
 import '../../core/supabase/freights_repo.dart';
 import '../../core/supabase/supabase_bootstrap.dart';
+import '../../core/utils/bid_window.dart';
 import '../../core/widgets/bid_date_label.dart';
-
-const _onSurface = Color(0xFF1D1B20);
-const _onSurfaceVariant = Color(0xFF49454F);
+import '../../core/widgets/workspace_widgets.dart';
+import 'widgets/transporter_workspace.dart';
+import '../../l10n/app_localizations.dart';
 
 /// Body-only version used inside [TransporterShell].
 class TransporterHomeBody extends StatefulWidget {
-  const TransporterHomeBody({super.key});
+  const TransporterHomeBody({
+    super.key,
+    this.openFreightsStream,
+    this.wonFreightsFuture,
+    this.displayName,
+  });
+  final Stream<List<Map<String, dynamic>>>? openFreightsStream;
+  final Future<List<Map<String, dynamic>>>? wonFreightsFuture;
+  final String? displayName;
 
   @override
   State<TransporterHomeBody> createState() => _TransporterHomeBodyState();
@@ -19,14 +30,32 @@ class TransporterHomeBody extends StatefulWidget {
 
 class _TransporterHomeBodyState extends State<TransporterHomeBody> {
   String _displayName = '';
+  late final Stream<List<Map<String, dynamic>>> _openFreightsStream;
+  late final Timer _clock;
 
   @override
   void initState() {
     super.initState();
+    _openFreightsStream =
+        widget.openFreightsStream ?? FreightsRepo.instance.streamOpenFreights();
+    _clock = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => setState(() {}),
+    );
     _loadName();
   }
 
+  @override
+  void dispose() {
+    _clock.cancel();
+    super.dispose();
+  }
+
   Future<void> _loadName() async {
+    if (widget.displayName != null) {
+      setState(() => _displayName = widget.displayName!);
+      return;
+    }
     final uid = AuthService.instance.user?.id;
     if (uid == null) return;
     try {
@@ -49,186 +78,216 @@ class _TransporterHomeBodyState extends State<TransporterHomeBody> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: Row(
-            children: [
-              IconButton(
-                icon: const Icon(Icons.person_outline, color: _onSurface),
-                onPressed: () => context.push('/profile'),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  _displayName.isEmpty ? 'Welcome' : 'Welcome, $_displayName',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w500,
-                    color: _onSurface,
+    final l = AppLocalizations.of(context)!;
+    return RefreshIndicator(
+      onRefresh: _loadName,
+      child: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          WorkspaceHeader(
+            title:
+                _displayName.isEmpty
+                    ? l.tpWelcome
+                    : l.tpWelcomeName(_displayName),
+            description: tpText(
+              context,
+              'Choose your next job or continue a trip. Keep your vehicle and driver details ready before dispatch.',
+              'अगला काम चुनें या चल रही यात्रा जारी रखें। रवाना होने से पहले वाहन और ड्राइवर की जानकारी तैयार रखें।',
+            ),
+            icon: Icons.local_shipping_outlined,
+            eyebrow: l.transporter,
+            action: FilledButton.icon(
+              style: FilledButton.styleFrom(minimumSize: const Size(0, 50)),
+              onPressed: () => context.go('/bids'),
+              icon: const Icon(Icons.search),
+              label: Text(l.tpLatestBids),
+            ),
+          ),
+          const SizedBox(height: 24),
+          SectionHeading(
+            title: tpText(
+              context,
+              'Continue your trips',
+              'अपनी यात्रा जारी रखें',
+            ),
+            description: tpText(
+              context,
+              'Awarded work and delivery updates in one place.',
+              'मिली हुई यात्राएँ और डिलीवरी अपडेट एक जगह।',
+            ),
+            action: TextButton(
+              onPressed: () => context.go('/fleet'),
+              child: Text(tpText(context, 'All trips', 'सभी यात्राएँ')),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _WonBidsStrip(future: widget.wonFreightsFuture),
+          const SizedBox(height: 24),
+          SectionHeading(
+            title: l.tpLatestBids,
+            description: tpText(
+              context,
+              'Read the route and load, then quote your freight.',
+              'मार्ग और माल का विवरण पढ़कर अपना भाड़ा दें।',
+            ),
+          ),
+          const SizedBox(height: 12),
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: _openFreightsStream,
+            builder: (context, snap) {
+              if (snap.hasError) {
+                return WorkspaceEmptyState(
+                  title: tpText(
+                    context,
+                    'Open bids could not be loaded',
+                    'खुली बोलियाँ लोड नहीं हुईं',
                   ),
-                  overflow: TextOverflow.ellipsis,
+                  message: tpText(
+                    context,
+                    'Check your connection and open the bids page to try again.',
+                    'इंटरनेट जाँचकर बोलियों का पृष्ठ फिर खोलें।',
+                  ),
+                  icon: Icons.wifi_off,
+                  action: OutlinedButton(
+                    onPressed: () => context.go('/bids'),
+                    child: Text(l.tpOpenBids),
+                  ),
+                );
+              }
+              if (!snap.hasData) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: CircularProgressIndicator(),
+                  ),
+                );
+              }
+              final freights =
+                  snap.data!
+                      .where(
+                        (f) =>
+                            bidWindowPhase(
+                              status: (f['status'] ?? '').toString(),
+                              opensAt: bidTimestamp(f['bid_opens_at']),
+                              closesAt: bidTimestamp(f['bid_closes_at']),
+                            ) ==
+                            BidWindowPhase.live,
+                      )
+                      .take(4)
+                      .toList();
+              if (freights.isEmpty) {
+                return WorkspaceEmptyState(
+                  title: l.tpNoOpenBidsSoon,
+                  message: tpText(
+                    context,
+                    'You can prepare vehicles and drivers while waiting for new work.',
+                    'नया काम आने तक वाहन और ड्राइवर की जानकारी तैयार कर सकते हैं।',
+                  ),
+                  icon: Icons.gavel_outlined,
+                );
+              }
+              return TransporterCardGrid(
+                children: [
+                  for (final f in freights)
+                    _BidTile(
+                      route: freightView(f)['route'] as String,
+                      summary: l.tpCasesWeight(
+                        '${f['cases'] ?? 0}',
+                        '${f['weight_kg'] ?? 0}',
+                      ),
+                      minsLeft: freightView(f)['minsLeft'] as int,
+                      date: freightView(f)['created'] as DateTime?,
+                      onTap: () => context.push('/bid/${f['id']}'),
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 24),
+          SectionHeading(
+            title: l.tpQuickOptions,
+            description: tpText(
+              context,
+              'Prepare your team before the next trip.',
+              'अगली यात्रा से पहले अपनी टीम तैयार रखें।',
+            ),
+          ),
+          const SizedBox(height: 12),
+          TransporterCardGrid(
+            children: [
+              TransporterTaskCard(
+                title: l.tpVehicles,
+                description: l.tpAddOrDelete,
+                actionLabel: tpText(context, 'Manage vehicles', 'वाहन सँभालें'),
+                icon: Icons.local_shipping_outlined,
+                onTap: () => context.push('/vehicles'),
+              ),
+              TransporterTaskCard(
+                title: l.tpDrivers,
+                description: tpText(
+                  context,
+                  'Save names, phone numbers and licence details.',
+                  'नाम, फोन नंबर और लाइसेंस की जानकारी रखें।',
                 ),
+                actionLabel: tpText(
+                  context,
+                  'Manage drivers',
+                  'ड्राइवर सँभालें',
+                ),
+                icon: Icons.badge_outlined,
+                onTap: () => context.push('/drivers'),
               ),
             ],
           ),
-        ),
-        Expanded(
-          child: RefreshIndicator(
-            onRefresh: _loadName,
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              children: [
-                _SectionTitle(
-                  title: 'Latest bids',
-                  onTap: () => context.go('/bids'),
-                ),
-                StreamBuilder<List<Map<String, dynamic>>>(
-                  stream: FreightsRepo.instance.streamOpenFreights(),
-                  builder: (context, snap) {
-                    if (!snap.hasData) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 32),
-                        child: Center(child: CircularProgressIndicator()),
-                      );
-                    }
-                    final freights = snap.data!;
-                    if (freights.isEmpty) {
-                      return const Padding(
-                        padding: EdgeInsets.fromLTRB(16, 24, 16, 24),
-                        child: Text(
-                          'No open bids right now. Check back soon.',
-                          style: TextStyle(color: _onSurfaceVariant),
-                        ),
-                      );
-                    }
-                    return Column(
-                      children:
-                          freights.map((f) {
-                            final v = freightView(f);
-                            return _BidTile(
-                              route: v['route'] as String,
-                              summary:
-                                  '${v['cases']} Cases · ${v['weight_kg']} Ton',
-                              minsLeft: v['minsLeft'] as int,
-                              date: v['created'] as DateTime?,
-                              onTap: () => context.push('/bid/${v['id']}'),
-                            );
-                          }).toList(),
-                    );
-                  },
-                ),
-                _SectionTitle(
-                  title: 'Won bids',
-                  onTap: () => context.go('/fleet'),
-                ),
-                const _WonBidsStrip(),
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 22, 16, 8),
-                  child: Text(
-                    'Quick options',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w500,
-                      color: _onSurface,
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-                  child: GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount:
-                        MediaQuery.sizeOf(context).width < 430 ? 2 : 4,
-                    mainAxisSpacing: 14,
-                    crossAxisSpacing: 14,
-                    childAspectRatio: 0.88,
-                    children: [
-                      _QuickOption(
-                        icon: Icons.local_shipping_outlined,
-                        title: 'Vehicles',
-                        subtitle: 'Add or delete',
-                        onTap: () => context.push('/vehicles'),
-                      ),
-                      _QuickOption(
-                        icon: Icons.history_outlined,
-                        title: 'Bid history',
-                        subtitle: 'Won and active',
-                        onTap: () => context.go('/fleet'),
-                      ),
-                      _QuickOption(
-                        icon: Icons.badge_outlined,
-                        title: 'Drivers',
-                        subtitle: 'Per vehicle',
-                        onTap: () => context.push('/drivers'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.title, required this.onTap});
-
-  final String title;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w500,
-                  color: _onSurface,
-                ),
-              ),
-            ),
-            const Icon(Icons.arrow_forward, color: _onSurface),
-          ],
-        ),
+          const SizedBox(height: 32),
+        ],
       ),
     );
   }
 }
 
 class _WonBidsStrip extends StatelessWidget {
-  const _WonBidsStrip();
+  const _WonBidsStrip({this.future});
+  final Future<List<Map<String, dynamic>>>? future;
 
   @override
   Widget build(BuildContext context) {
-    final uid = AuthService.instance.user?.id;
-    if (uid == null) {
+    final uid = future == null ? AuthService.instance.user?.id : null;
+    if (uid == null && future == null) {
       return const SizedBox.shrink();
     }
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: supabase
-          .from('freights')
-          .select(
-            'id, origin, destination_town, status, vehicle_number, driver_name',
-          )
-          .eq('winner_profile_id', uid)
-          .order('dispatched_at', ascending: false)
-          .limit(6)
-          .then((rows) => (rows as List).cast<Map<String, dynamic>>()),
+      future:
+          future ??
+          supabase
+              .from('freights')
+              .select(
+                'id, origin, destination_town, status, vehicle_number, driver_name',
+              )
+              .eq('winner_profile_id', uid!)
+              .order('dispatched_at', ascending: false)
+              .limit(6)
+              .then((rows) => (rows as List).cast<Map<String, dynamic>>()),
       builder: (context, snap) {
+        if (snap.hasError) {
+          return WorkspaceEmptyState(
+            title: tpText(
+              context,
+              'Trips could not be loaded',
+              'यात्राएँ लोड नहीं हुईं',
+            ),
+            message: tpText(
+              context,
+              'Open My trips to try again.',
+              'फिर प्रयास करने के लिए अपनी यात्राएँ खोलें।',
+            ),
+            icon: Icons.wifi_off,
+            action: OutlinedButton(
+              onPressed: () => context.go('/fleet'),
+              child: Text(tpText(context, 'My trips', 'मेरी यात्राएँ')),
+            ),
+          );
+        }
         if (!snap.hasData) {
           return const SizedBox(
             height: 116,
@@ -237,132 +296,44 @@ class _WonBidsStrip extends StatelessWidget {
         }
         final rows = snap.data!;
         if (rows.isEmpty) {
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF6EDFB),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Text(
-                'Won bids will appear here after a freight is awarded.',
-                style: TextStyle(color: _onSurfaceVariant),
-              ),
+          return WorkspaceEmptyState(
+            title: AppLocalizations.of(context)!.tpWonBidsEmpty,
+            message: tpText(
+              context,
+              'Your confirmed work appears here after the office awards a trip.',
+              'कार्यालय के यात्रा देने पर आपका पक्का काम यहाँ दिखेगा।',
             ),
+            icon: Icons.route_outlined,
           );
         }
-        return SizedBox(
-          height: 142,
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            scrollDirection: Axis.horizontal,
-            itemCount: rows.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 10),
-            itemBuilder: (_, i) {
-              final row = rows[i];
-              final route = '${row['origin']} → ${row['destination_town']}';
-              final vehicle = (row['vehicle_number'] ?? '').toString();
-              return InkWell(
-                onTap: () => context.push('/bid/${row['id']}/after'),
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  width: 154,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFECE6F0),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.inventory_2_outlined,
-                        color: Color(0xFFB39DC8),
-                        size: 34,
-                      ),
-                      const Spacer(),
-                      Text(
-                        route.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: _onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        vehicle.isEmpty ? 'Awaiting vehicle' : vehicle,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: _onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
+        return TransporterCardGrid(
+          children: [
+            for (final row in rows.take(4))
+              TransporterTaskCard(
+                title: '${row['origin']} → ${row['destination_town']}',
+                description:
+                    (row['vehicle_number'] ?? '').toString().isEmpty
+                        ? tpText(
+                          context,
+                          'Vehicle and driver need to be confirmed before dispatch.',
+                          'रवाना होने से पहले वाहन और ड्राइवर तय करें।',
+                        )
+                        : '${tpText(context, 'Vehicle', 'वाहन')}: ${row['vehicle_number']}',
+                actionLabel: tpText(
+                  context,
+                  row['status'] == 'completed'
+                      ? 'View delivery record'
+                      : 'Open trip & next step',
+                  row['status'] == 'completed'
+                      ? 'डिलीवरी विवरण देखें'
+                      : 'यात्रा और अगला काम देखें',
                 ),
-              );
-            },
-          ),
+                icon: Icons.route_outlined,
+                onTap: () => context.push('/bid/${row['id']}/after'),
+              ),
+          ],
         );
       },
-    );
-  }
-}
-
-class _QuickOption extends StatelessWidget {
-  const _QuickOption({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Container(
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: const Color(0xFFECE6F0),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(icon, size: 42, color: const Color(0xFFB39DC8)),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontWeight: FontWeight.w600,
-              color: _onSurface,
-            ),
-          ),
-          Text(
-            subtitle,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -381,95 +352,32 @@ class _BidTile extends StatelessWidget {
   final DateTime? date;
   final VoidCallback onTap;
 
-  String get _label {
-    if (minsLeft <= 0) return 'Closed';
-    if (minsLeft >= 60) return '${minsLeft ~/ 60} hr ${minsLeft % 60} min left';
-    return '$minsLeft min left';
+  String _label(AppLocalizations l) {
+    if (minsLeft <= 0) return l.tpClosed;
+    if (minsLeft >= 60) {
+      return l.tpTimeHoursLeft(minsLeft ~/ 60, minsLeft % 60);
+    }
+    return l.tpTimeMinutesLeft(minsLeft);
   }
 
   @override
   Widget build(BuildContext context) {
     final urgent = minsLeft > 0 && minsLeft < 30;
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            BidDateLabel(date: date),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF6EDFB),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 56,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFECE6F0),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.inventory_2_outlined,
-                      size: 28,
-                      color: Color(0xFFB39DC8),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          route,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w500,
-                            color: _onSurface,
-                          ),
-                        ),
-                        Text(
-                          summary,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: _onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.access_time,
-                              size: 14,
-                              color: _onSurfaceVariant,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              _label,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color:
-                                    urgent
-                                        ? const Color(0xFFB3261E)
-                                        : _onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right, color: _onSurface),
-                ],
-              ),
-            ),
-          ],
-        ),
+    return TransporterTaskCard(
+      title: route,
+      description: summary,
+      actionLabel: tpText(
+        context,
+        'View load & quote freight',
+        'माल देखें और भाड़ा दें',
       ),
+      icon: Icons.inventory_2_outlined,
+      onTap: onTap,
+      status: StatusBadge(
+        label: _label(AppLocalizations.of(context)!),
+        tone: urgent ? WorkspaceTone.warning : WorkspaceTone.info,
+      ),
+      details: BidDateLabel(date: date),
     );
   }
 }

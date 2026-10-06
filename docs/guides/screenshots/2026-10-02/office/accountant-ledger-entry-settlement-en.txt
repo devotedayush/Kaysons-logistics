@@ -1,0 +1,51 @@
+- document:
+  - group "Dismiss":
+    - dialog:
+      - button [ref=e1]
+      - group:
+        - textbox "Company *" [ref=e2]
+        - textbox "Party" [ref=e3]
+        - textbox "Origin" [ref=e4]
+        - textbox "Branch" [ref=e5]
+        - textbox "Vehicle" [ref=e6]
+        - textbox "Vehicle type" [ref=e7]
+        - textbox "Dispatch GR/Bilty" [ref=e8]
+        - button "Vehicle capacity Up to 1 MT" [ref=e9]
+        - button "Transporter" [ref=e10]
+        - button "Ack status Pending" [ref=e11]
+        - textbox "POD received yyyy-mm-dd" [ref=e12]
+        - textbox "POD Remark" [ref=e13]
+        - button "POD File" [ref=e14]
+        - group "Invoice lines":
+          - button "Add" [ref=e15]
+        - textbox "Invoice" [ref=e16]
+        - textbox "Party" [ref=e17] [nth=1]
+        - textbox "E-way bill" [ref=e18]
+        - button "Add another e-way bill" [ref=e19]
+        - textbox "DEL ref" [ref=e20]
+        - textbox "LR/GR" [ref=e21]
+        - button "Add another GR / Bilty" [ref=e22]
+        - textbox "Town *" [ref=e23]
+        - textbox "Bill date yyyy-mm-dd" [ref=e24]
+        - textbox "Dispatch date yyyy-mm-dd" [ref=e25]
+        - textbox "Cases" [ref=e26]
+        - textbox "Metric MT" [ref=e27]
+        - textbox "Freight share" [ref=e28]
+        - button "Remove invoice" [ref=e29] [disabled]
+        - group "Charges":
+          - button "Add" [ref=e30] [nth=1]
+        - button "Kind freight" [ref=e31]
+        - textbox "Amount" [ref=e32]
+        - textbox "Charge remarks" [ref=e33]
+        - button "Remove charge" [ref=e34] [disabled]
+        - text: Settlement
+        - textbox "Last month balance" [ref=e35]
+        - textbox "Payment" [ref=e36]
+        - textbox "Settlement deduction" [ref=e37]
+        - textbox "Settlement remarks" [ref=e38]
+        - group "Products":
+          - button "Add" [ref=e39] [nth=2]
+        - text: Optional product/category quantities for Karnal-style reports.
+        - textbox "Remarks" [ref=e40]
+      - button "Cancel" [ref=e41]
+      - button "Save entry" [ref=e42]

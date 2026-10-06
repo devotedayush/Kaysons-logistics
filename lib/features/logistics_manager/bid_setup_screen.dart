@@ -1,12 +1,18 @@
+import 'widgets/operational_workspace.dart';
+import '../../core/widgets/workspace_widgets.dart';
+import '../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/auth_service.dart';
 import '../../core/supabase/supabase_bootstrap.dart';
+import '../../core/utils/workflow_formatters.dart';
+import '../../core/utils/bid_window.dart';
 import '../../core/widgets/india_city_field.dart';
 import '../../core/widgets/pill_text_field.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/route_timeline.dart';
+import 'widgets/transporter_audience_picker.dart';
 
 const _vehicleCapacityCategories = [
   'Up to 1 MT',
@@ -57,7 +63,7 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
   final List<_StopDraft> _stops = [];
 
   bool _isBid = true;
-  bool _anonymous = true;
+  bool _selectedOnly = false;
   bool _publishing = false;
   bool _vehicleCapacityEdited = false;
   String? _vehicleCapacityCategory;
@@ -131,6 +137,11 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
     final pickedTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(base),
+      builder:
+          (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+            child: child!,
+          ),
     );
     if (pickedTime == null) return;
     final picked = DateTime(
@@ -185,7 +196,7 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
       (stop) => RoutePoint(
         label: stop.name,
         kind: RoutePointKind.stop,
-        meta: '${stop.cases} Cases · ${stop.weightKg.toStringAsFixed(0)} Ton',
+        meta: '${stop.cases} Cases · ${formatMetricTons(stop.weightKg)} MT',
       ),
     ),
     RoutePoint(
@@ -193,29 +204,71 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
       kind: RoutePointKind.destination,
       meta:
           '${int.tryParse(_cases.text.trim()) ?? 0} Cases · '
-          '${(double.tryParse(_weight.text.trim()) ?? 0).toStringAsFixed(0)} Ton',
+          '${formatMetricTons(double.tryParse(_weight.text.trim()) ?? 0)} MT',
     ),
   ];
 
   Future<void> _publish() async {
     if (_publishing) return;
     if (_from.text.trim().isEmpty || _to.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('From and To are required')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.opsFromToRequired),
+        ),
+      );
       return;
     }
     if (!_isBid && _assignTo == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pick a transporter to assign the freight to'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.opsPickTransporter),
+        ),
+      );
+      return;
+    }
+    if (_isBid && _selectedOnly && _preferred.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.opsChooseAtLeastOneTransporter,
+          ),
+        ),
+      );
+      return;
+    }
+    final baseFreight = _parseAmount(_baseFreight);
+    final callingBid = _parseAmount(_internalCallingBid);
+    final hasInvalidAmount =
+        (_baseFreight.text.trim().isNotEmpty && baseFreight == null) ||
+        (_internalCallingBid.text.trim().isNotEmpty && callingBid == null);
+    if (hasInvalidAmount) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.opsAmountsValid)),
+      );
+      return;
+    }
+    if ((baseFreight != null && baseFreight <= 0) ||
+        (callingBid != null && callingBid <= 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.opsAmountsPositive),
+        ),
+      );
+      return;
+    }
+    if (!_isBid && (baseFreight == null || baseFreight <= 0)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.opsAgreedFreightPositive),
         ),
       );
       return;
     }
     if (_isBid && !_closesAt.isAfter(_opensAt)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Close time must be after open time')),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.opsCloseAfterOpen),
+        ),
       );
       return;
     }
@@ -244,20 +297,26 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
         ],
       };
 
+      // The schema has one freight-level reference amount. Preserve the base
+      // freight field even when the optional calling-bid field is blank.
+      final referenceFreight = callingBid ?? baseFreight;
+      if (referenceFreight != null) {
+        payload['internal_calling_bid'] = referenceFreight;
+      }
+
       if (_isBid) {
         payload.addAll({
-          'internal_calling_bid': double.tryParse(
-            _internalCallingBid.text.trim(),
-          ),
-          'bid_opens_at': _opensAt.toIso8601String(),
-          'bid_closes_at': _closesAt.toIso8601String(),
+          'bid_opens_at': bidTimestampForDatabase(_opensAt),
+          'bid_closes_at': bidTimestampForDatabase(_closesAt),
           'status': 'bidding',
         });
       } else {
         payload.addAll({
+          // Direct assignment has no transporter bid row to award. Persist
+          // its agreed amount with the winner in the same freight insert.
           'status': 'awarded',
           'winner_profile_id': _assignTo,
-          'dispatched_at': DateTime.now().toIso8601String(),
+          'accepted_freight_amount': baseFreight,
         });
       }
 
@@ -265,7 +324,7 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
           await supabase.from('freights').insert(payload).select('id').single();
       final freightId = freight['id'] as String;
 
-      if (_isBid && _preferred.isNotEmpty) {
+      if (_isBid && _selectedOnly) {
         await supabase
             .from('freight_preferred_transporters')
             .insert(
@@ -276,7 +335,7 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                   .toList(),
             );
       }
-      if (_blocked.isNotEmpty) {
+      if (_isBid && !_selectedOnly && _blocked.isNotEmpty) {
         await supabase
             .from('freight_blocked_transporters')
             .insert(
@@ -299,9 +358,16 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
     }
   }
 
+  double? _parseAmount(TextEditingController controller) {
+    final raw = controller.text.trim().replaceAll(',', '');
+    if (raw.isEmpty) return null;
+    final amount = double.tryParse(raw);
+    return amount != null && amount.isFinite ? amount : null;
+  }
+
   String _fmtDateTime(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')} · '
-      '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+      '${format12HourTime(d)}';
 
   @override
   Widget build(BuildContext context) {
@@ -317,123 +383,164 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
-        title: const Text('New requirement'),
+        title: Text(AppLocalizations.of(context)!.opsNewRequirement),
       ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
-          child: ListView(
+          constraints: const BoxConstraints(maxWidth: 960),
+          child: OperationalListView(
             padding: const EdgeInsets.symmetric(horizontal: 18),
             children: [
+              WorkspaceHeader(
+                title: operationalCopy(
+                  context,
+                  'Create a transport request',
+                  'परिवहन अनुरोध बनाएँ',
+                ),
+                description: operationalCopy(
+                  context,
+                  'Add the route and load, choose who can quote, then review before publishing.',
+                  'मार्ग और माल जोड़ें, ट्रांसपोर्टर चुनें और प्रकाशित करने से पहले जाँचें।',
+                ),
+                icon: Icons.add_road_outlined,
+              ),
+              OperationalStep(
+                '1',
+                operationalCopy(
+                  context,
+                  'Route and delivery quantities',
+                  'मार्ग और डिलीवरी मात्रा',
+                ),
+                operationalCopy(
+                  context,
+                  'Enter the pickup city, each delivery stop and the cases / MT for that stop.',
+                  'पिकअप शहर, हर डिलीवरी पड़ाव और उसकी केस / MT मात्रा भरें।',
+                ),
+              ),
               _labeled(
-                'From',
+                AppLocalizations.of(context)!.opsFrom,
                 IndiaCityField(
                   controller: _from,
                   hint: 'Hoshiarpur',
                   onChanged: (_) => setState(() {}),
                 ),
               ),
-              // Stops
-              const SizedBox(height: 4),
-              const Text(
-                'Stops in between (optional)',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: Color(0xFF49454F),
+              OperationalOptional(
+                title: operationalCopy(
+                  context,
+                  'Add intermediate delivery stops',
+                  'बीच के डिलीवरी पड़ाव जोड़ें',
                 ),
-              ),
-              const SizedBox(height: 6),
-              if (_stops.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Column(
-                    children:
-                        _stops
-                            .asMap()
-                            .entries
-                            .map(
-                              (e) => Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFF6EDFB),
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        e.value.name,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
-                                    Text(
-                                      '${e.value.cases} Cases · ${e.value.weightKg.toStringAsFixed(0)} Ton',
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        color: Color(0xFF49454F),
-                                      ),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.close, size: 18),
-                                      onPressed:
-                                          () => setState(
-                                            () {
-                                              _stops.removeAt(e.key);
-                                              if (!_vehicleCapacityEdited) {
-                                                _vehicleCapacityCategory = null;
-                                              }
-                                            },
-                                          ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            )
-                            .toList(),
-                  ),
-                ),
-              Column(
+                initiallyExpanded: _stops.isNotEmpty,
                 children: [
-                  IndiaCityField(
-                    controller: _stopController,
-                    hint: 'Stop city',
+                  // Stops
+                  const SizedBox(height: 4),
+                  Text(
+                    AppLocalizations.of(context)!.opsStopsOptional,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF49454F),
+                    ),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
+                  const SizedBox(height: 6),
+                  if (_stops.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Column(
+                        children:
+                            _stops
+                                .asMap()
+                                .entries
+                                .map(
+                                  (e) => Container(
+                                    margin: const EdgeInsets.only(bottom: 8),
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF3F5FA),
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            e.value.name,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                        Text(
+                                          '${e.value.cases} Cases · ${formatMetricTons(e.value.weightKg)} MT',
+                                          style: const TextStyle(
+                                            fontSize: 14,
+                                            color: Color(0xFF49454F),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          icon: const Icon(
+                                            Icons.close,
+                                            size: 18,
+                                          ),
+                                          onPressed:
+                                              () => setState(() {
+                                                _stops.removeAt(e.key);
+                                                if (!_vehicleCapacityEdited) {
+                                                  _vehicleCapacityCategory =
+                                                      null;
+                                                }
+                                              }),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                      ),
+                    ),
+                  Column(
                     children: [
-                      Expanded(
-                        child: PillTextField(
-                          controller: _stopCases,
-                          hint: 'Stop cases',
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.start,
-                        ),
+                      IndiaCityField(
+                        controller: _stopController,
+                        hint: AppLocalizations.of(context)!.opsStopCity,
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: PillTextField(
-                          controller: _stopWeight,
-                          hint: 'Stop metric ton',
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.start,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filled(
-                        onPressed: _addStop,
-                        icon: const Icon(Icons.add),
+                      const SizedBox(height: 8),
+                      OperationalFields(
+                        children: [
+                          Expanded(
+                            child: PillTextField(
+                              controller: _stopCases,
+                              hint: AppLocalizations.of(context)!.opsStopCases,
+                              keyboardType: TextInputType.number,
+                              textAlign: TextAlign.start,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: PillTextField(
+                              controller: _stopWeight,
+                              hint:
+                                  AppLocalizations.of(
+                                    context,
+                                  )!.opsStopMetricTon,
+                              keyboardType: TextInputType.number,
+                              textAlign: TextAlign.start,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.filled(
+                            onPressed: _addStop,
+                            icon: const Icon(Icons.add),
+                          ),
+                        ],
                       ),
                     ],
                   ),
                 ],
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Final destination',
+              Text(
+                AppLocalizations.of(context)!.opsFinalDestination,
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -443,16 +550,16 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
               const SizedBox(height: 6),
               IndiaCityField(
                 controller: _to,
-                hint: 'Destination city',
+                hint: AppLocalizations.of(context)!.opsDestinationCity,
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 8),
-              Row(
+              OperationalFields(
                 children: [
                   Expanded(
                     child: PillTextField(
                       controller: _cases,
-                      hint: 'Destination cases',
+                      hint: AppLocalizations.of(context)!.opsDestinationCases,
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.start,
                     ),
@@ -461,7 +568,8 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                   Expanded(
                     child: PillTextField(
                       controller: _weight,
-                      hint: 'Destination metric ton',
+                      hint:
+                          AppLocalizations.of(context)!.opsDestinationMetricTon,
                       keyboardType: TextInputType.number,
                       textAlign: TextAlign.start,
                     ),
@@ -471,6 +579,15 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                 ],
               ),
               _TotalQuantityCard(cases: _totalCases, weight: _totalWeight),
+              OperationalStep(
+                '2',
+                operationalCopy(context, 'Vehicle and price', 'वाहन और कीमत'),
+                operationalCopy(
+                  context,
+                  'Check total load and expected capacity before setting the freight amount.',
+                  'किराया तय करने से पहले कुल माल और वाहन क्षमता जाँचें।',
+                ),
+              ),
               _VehicleCapacityPicker(
                 value: capacityValue,
                 onChanged:
@@ -482,7 +599,7 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
               RouteTimeline(points: _routePoints),
               const SizedBox(height: 14),
               _labeled(
-                'Base Freight',
+                AppLocalizations.of(context)!.opsBaseFreight,
                 PillTextField(
                   controller: _baseFreight,
                   hint: '6500',
@@ -491,23 +608,36 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                 ),
               ),
               const Divider(height: 28),
+              OperationalStep(
+                '3',
+                operationalCopy(
+                  context,
+                  'Choose the transporter',
+                  'ट्रांसपोर्टर चुनें',
+                ),
+                operationalCopy(
+                  context,
+                  'Invite quotes during a bidding window, or assign this request directly.',
+                  'बोली के लिए समय तय करें या यह अनुरोध सीधे सौंपें।',
+                ),
+              ),
               SwitchListTile(
                 value: _isBid,
                 onChanged: (v) => setState(() => _isBid = v),
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Open for bidding'),
+                title: Text(AppLocalizations.of(context)!.opsOpenForBidding),
                 subtitle: Text(
                   _isBid
-                      ? 'Transporters compete on price until the close time.'
-                      : 'Assign directly to one transporter, skip the bidding window.',
+                      ? AppLocalizations.of(context)!.opsCompeteUntilClose
+                      : AppLocalizations.of(context)!.opsAssignDirectlyHint,
                 ),
               ),
               if (_isBid) ...[
-                Row(
+                OperationalFields(
                   children: [
                     Expanded(
                       child: _DateTimeField(
-                        label: 'Opens at',
+                        label: AppLocalizations.of(context)!.opsOpensAt,
                         value: _fmtDateTime(_opensAt),
                         onTap: () => _pickDateTime(opens: true),
                       ),
@@ -515,7 +645,7 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: _DateTimeField(
-                        label: 'Closes at',
+                        label: AppLocalizations.of(context)!.opsClosesAt,
                         value: _fmtDateTime(_closesAt),
                         onTap: () => _pickDateTime(opens: false),
                       ),
@@ -524,7 +654,7 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                 ),
                 const SizedBox(height: 16),
                 _labeled(
-                  'Internal calling bid (optional)',
+                  AppLocalizations.of(context)!.opsInternalCallingBid,
                   PillTextField(
                     controller: _internalCallingBid,
                     hint: '15000',
@@ -532,44 +662,65 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                     textAlign: TextAlign.start,
                   ),
                 ),
-                SwitchListTile(
-                  value: _anonymous,
-                  onChanged: (v) => setState(() => _anonymous = v),
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Anonymous internal bid'),
-                  subtitle: const Text(
-                    'Hide your calling bid from transporters',
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 18),
+                  child: Text(
+                    AppLocalizations.of(context)!.opsReferencePriceHint,
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Transporter access',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                TransporterAudiencePicker(
+                  transporters: _transporters,
+                  selectedOnly: _selectedOnly,
+                  selectedIds: _preferred,
+                  excludedIds: _blocked,
+                  onModeChanged:
+                      (selectedOnly) => setState(() {
+                        _selectedOnly = selectedOnly;
+                        _preferred.clear();
+                        _blocked.clear();
+                      }),
+                  onTransporterChanged:
+                      (id, checked) => setState(() {
+                        final target = _selectedOnly ? _preferred : _blocked;
+                        if (checked) {
+                          target.add(id);
+                        } else {
+                          target.remove(id);
+                        }
+                      }),
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Green = preferred (notify first) · Red = blocked (can\'t see this bid) · unselected = open',
-                  style: TextStyle(fontSize: 14, color: Color(0xFF49454F)),
-                ),
-                const SizedBox(height: 8),
-                _preferBlockPicker(),
               ] else ...[
                 const SizedBox(height: 8),
-                const Text(
-                  'Assign to transporter',
+                Text(
+                  AppLocalizations.of(context)!.opsAssignToTransporter,
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 8),
-                _transporterPicker(multi: false),
+                _transporterPicker(),
               ],
               const SizedBox(height: 24),
+              if (_isBid) ...[_reviewCard(context), const SizedBox(height: 18)],
+              OperationalStep(
+                '4',
+                operationalCopy(
+                  context,
+                  'Review and publish',
+                  'जाँचें और प्रकाशित करें',
+                ),
+                operationalCopy(
+                  context,
+                  'Check the route, quantities, price and selected transporters above.',
+                  'ऊपर मार्ग, मात्रा, किराया और चुने हुए ट्रांसपोर्टर जाँचें।',
+                ),
+              ),
               PrimaryButton(
                 label:
                     _publishing
                         ? 'Publishing…'
                         : (_isBid
-                            ? 'Publish bid${_preferred.isEmpty ? ' (open to all)' : ' & notify ${_preferred.length} transporters'}'
-                            : 'Assign & dispatch'),
+                            ? AppLocalizations.of(context)!.opsPublishBid
+                            : AppLocalizations.of(context)!.opsAssignDispatch),
                 onPressed: _publishing ? null : _publish,
               ),
               const SizedBox(height: 24),
@@ -580,126 +731,44 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
     );
   }
 
-  Widget _preferBlockPicker() {
-    if (_transporters.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.only(bottom: 8),
-        child: Text(
-          'No approved transporters yet.',
-          style: TextStyle(fontSize: 14, color: Color(0xFF49454F)),
-        ),
-      );
-    }
-    return Column(
-      children:
-          _transporters.map((t) {
-            final id = t['id'] as String;
-            final label =
-                (t['business_name'] ??
-                        t['full_name'] ??
-                        t['email'] ??
-                        'Unnamed')
-                    .toString();
-            final preferred = _preferred.contains(id);
-            final blocked = _blocked.contains(id);
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: const TextStyle(fontSize: 16),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  _pill(
-                    label: 'Prefer',
-                    icon: Icons.star_rounded,
-                    selected: preferred,
-                    bg: const Color(0xFFE7F6EC),
-                    fg: const Color(0xFF14A33A),
-                    onTap:
-                        () => setState(() {
-                          if (preferred) {
-                            _preferred.remove(id);
-                          } else {
-                            _preferred.add(id);
-                            _blocked.remove(id);
-                          }
-                        }),
-                  ),
-                  const SizedBox(width: 6),
-                  _pill(
-                    label: 'Block',
-                    icon: Icons.block,
-                    selected: blocked,
-                    bg: const Color(0xFFFDEEEE),
-                    fg: const Color(0xFFB3261E),
-                    onTap:
-                        () => setState(() {
-                          if (blocked) {
-                            _blocked.remove(id);
-                          } else {
-                            _blocked.add(id);
-                            _preferred.remove(id);
-                          }
-                        }),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-    );
-  }
-
-  Widget _pill({
-    required String label,
-    required IconData icon,
-    required bool selected,
-    required Color bg,
-    required Color fg,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? bg : Colors.white,
-          border: Border.all(color: selected ? fg : const Color(0xFFCAC4D0)),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: selected ? fg : const Color(0xFF49454F),
-            ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                color: selected ? fg : const Color(0xFF49454F),
-              ),
-            ),
-          ],
-        ),
+  Widget _reviewCard(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final colors = Theme.of(context).colorScheme;
+    final audience =
+        _selectedOnly
+            ? l.opsSelectedCount(_preferred.length)
+            : '${l.opsAllApprovedTransporters} · '
+                '${l.opsExcludedCount(_blocked.length)}';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: colors.primaryContainer.withValues(alpha: .45),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l.opsReviewAndPublish,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Text('${l.opsVisibleTo}: $audience'),
+          Text('${l.opsBidCloses}: ${_fmtDateTime(_closesAt)}'),
+        ],
       ),
     );
   }
 
-  Widget _transporterPicker({required bool multi}) {
+  Widget _transporterPicker() {
     if (_transporters.isEmpty) {
-      return const Padding(
+      return Padding(
         padding: EdgeInsets.only(bottom: 8),
         child: Text(
-          'No approved transporters yet.',
+          AppLocalizations.of(context)!.opsNoApprovedTransporters,
           style: TextStyle(fontSize: 14, color: Color(0xFF49454F)),
         ),
       );
@@ -716,21 +785,13 @@ class _BidSetupScreenState extends State<BidSetupScreen> {
                         t['email'] ??
                         'Unnamed')
                     .toString();
-            final selected = multi ? _preferred.contains(id) : _assignTo == id;
+            final selected = _assignTo == id;
             return ChoiceChip(
               label: Text(label),
               selected: selected,
               onSelected:
                   (v) => setState(() {
-                    if (multi) {
-                      if (v) {
-                        _preferred.add(id);
-                      } else {
-                        _preferred.remove(id);
-                      }
-                    } else {
-                      _assignTo = v ? id : null;
-                    }
+                    _assignTo = v ? id : null;
                   }),
             );
           }).toList(),
@@ -833,7 +894,7 @@ class _VehicleCapacityPicker extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: DropdownButtonFormField<String>(
-        value: value,
+        initialValue: value,
         decoration: InputDecoration(
           labelText: 'Vehicle capacity',
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(28)),
@@ -845,10 +906,8 @@ class _VehicleCapacityPicker extends StatelessWidget {
         items:
             _vehicleCapacityCategories
                 .map(
-                  (category) => DropdownMenuItem(
-                    value: category,
-                    child: Text(category),
-                  ),
+                  (category) =>
+                      DropdownMenuItem(value: category, child: Text(category)),
                 )
                 .toList(),
         onChanged: onChanged,
@@ -877,14 +936,14 @@ class _TotalQuantityCard extends StatelessWidget {
         children: [
           const Icon(Icons.functions, size: 24, color: Color(0xFF146C2E)),
           const SizedBox(width: 12),
-          const Expanded(
+          Expanded(
             child: Text(
-              'Total requirement',
+              AppLocalizations.of(context)!.opsTotalRequirement,
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
             ),
           ),
           Text(
-            '$cases Cases · ${weight.toStringAsFixed(0)} Ton',
+            '$cases Cases · ${formatMetricTons(weight)} MT',
             style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,

@@ -1,0 +1,9 @@
+- document:
+  - group "खारिज करें":
+    - alertdialog:
+      - text: लेजर CSV अपलोड करें
+      - textbox "कंपनी / शीट का नाम *" [ref=e1]
+      - textbox "अपलोड टैग" [ref=e2]
+      - text: Excel से निकाली गई CSV का उपयोग करें। इस संस्करण में सीधे .xlsx अपलोड उपलब्ध नहीं है।
+      - button "रद्द करें" [ref=e3]
+      - button "CSV चुनें" [ref=e4]

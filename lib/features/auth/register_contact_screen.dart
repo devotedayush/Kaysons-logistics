@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import '../../l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase/auth_service.dart';
 import '../../core/supabase/supabase_bootstrap.dart';
+import '../../core/utils/workflow_formatters.dart';
 import '../../core/widgets/pill_text_field.dart';
 import 'registration_draft.dart';
 import 'registration_shell.dart';
@@ -22,7 +26,15 @@ class _RegisterContactScreenState extends State<RegisterContactScreen> {
   final _bizNum = TextEditingController();
   final _rcNumber = TextEditingController();
   final _insurance = TextEditingController();
+  final _phoneOtp = TextEditingController();
   bool _submitting = false;
+  bool _signupCompleted = false;
+  bool _phoneOtpPending = false;
+  bool _phoneVerified = false;
+  String? _registrationUserId;
+  String? _phoneE164;
+  int _resendSeconds = 0;
+  Timer? _resendTimer;
 
   @override
   void dispose() {
@@ -32,6 +44,8 @@ class _RegisterContactScreenState extends State<RegisterContactScreen> {
     _bizNum.dispose();
     _rcNumber.dispose();
     _insurance.dispose();
+    _phoneOtp.dispose();
+    _resendTimer?.cancel();
     super.dispose();
   }
 
@@ -40,61 +54,187 @@ class _RegisterContactScreenState extends State<RegisterContactScreen> {
     final draft = RegistrationDraft.instance;
     if ((draft.email ?? '').isEmpty || (draft.password ?? '').isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Restart registration: email/password missing'),
-        ),
+        SnackBar(content: Text(AppLocalizations.of(context)!.registerRestart)),
       );
       return;
     }
-    final normalizedMobile = _normalizeIndiaPhone(_mobile.text);
-    if (normalizedMobile == null) {
+    if (!_phoneOtpPending) {
+      final normalizedMobile = _normalizeIndiaPhone(_mobile.text);
+      if (normalizedMobile == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context)!.invalidMobile)),
+        );
+        return;
+      }
+      _phoneE164 = normalizedMobile;
+      draft.mobile = normalizedMobile;
+      draft.landline = _landline.text.trim();
+      draft.gst = _gst.text.trim();
+      draft.businessNumber = _bizNum.text.trim();
+      draft.rcNumber = _rcNumber.text.trim();
+      draft.insuranceNumber = _insurance.text.trim();
+    } else if (!_phoneVerified &&
+        !RegExp(r'^[0-9]{6}$').hasMatch(_phoneOtp.text.trim())) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Enter a valid 10 digit Indian mobile number.'),
-        ),
+        const SnackBar(content: Text('Enter the 6-digit code from the SMS.')),
       );
       return;
     }
-    draft.mobile = normalizedMobile;
-    draft.landline = _landline.text.trim();
-    draft.gst = _gst.text.trim();
-    draft.businessNumber = _bizNum.text.trim();
-    draft.rcNumber = _rcNumber.text.trim();
-    draft.insuranceNumber = _insurance.text.trim();
 
     setState(() => _submitting = true);
     try {
-      await AuthService.instance.signUpWithPassword(
-        email: draft.email!,
-        password: draft.password!,
-      );
-      await _finalizeRegistration();
-      draft.reset();
-      final role = await AuthService.instance.fetchRole();
-      if (!mounted) return;
-      context.go(routeForRole(role));
+      if (_phoneOtpPending) {
+        final phone = _phoneE164;
+        if (phone == null) {
+          throw AuthException('Request a phone verification code first.');
+        }
+        _ensureRegistrationSession(draft);
+        if (!_phoneVerified) {
+          await AuthService.instance.verifyPhoneChangeOtp(
+            phone: phone,
+            token: _phoneOtp.text.trim(),
+          );
+          _phoneVerified = true;
+        }
+        draft.mobile = phone;
+        await _finalizeRegistration();
+        draft.reset();
+        if (AuthService.instance.session != null) {
+          try {
+            await AuthService.instance.signOut();
+          } catch (_) {
+            // Registration is complete; continue to login if sign-out fails.
+          }
+        }
+        if (!mounted) return;
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Phone verified. Registration submitted; your transporter access is pending admin approval.',
+            ),
+          ),
+        );
+        context.go('/login');
+      } else {
+        if (!_signupCompleted) {
+          if (AuthService.instance.session != null) {
+            throw AuthException(
+              'Sign out before starting a new transporter registration.',
+            );
+          }
+          await AuthService.instance.signUpWithPassword(
+            email: draft.email!,
+            password: draft.password!,
+          );
+          _signupCompleted = true;
+          _registrationUserId = AuthService.instance.user?.id;
+        }
+        if (AuthService.instance.session == null) {
+          throw AuthException(
+            'Confirm your email, then sign in and finish phone verification before registration can be submitted.',
+          );
+        }
+        _ensureRegistrationSession(draft);
+        final phone = _phoneE164!;
+        await AuthService.instance.requestPhoneChange(phone);
+        if (!mounted) return;
+        setState(() {
+          _phoneOtpPending = true;
+          _phoneOtp.clear();
+        });
+        _startResendCooldown();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('A verification code was sent to $phone.')),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Registration failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${AppLocalizations.of(context)!.registrationFailed}: $e',
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
   }
 
-  String? _normalizeIndiaPhone(String raw) {
-    final digits = raw.replaceAll(RegExp(r'\D'), '');
-    final tenDigits =
-        digits.length > 10 ? digits.substring(digits.length - 10) : digits;
-    if (tenDigits.length != 10 || tenDigits.startsWith('0')) return null;
-    return '+91$tenDigits';
+  Future<void> _resendPhoneOtp() async {
+    if (_submitting || _resendSeconds > 0) return;
+    final phone = _phoneE164;
+    if (phone == null) return;
+    setState(() => _submitting = true);
+    try {
+      await AuthService.instance.resendPhoneChangeOtp(phone);
+      if (!mounted) return;
+      _startResendCooldown();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('A new code was sent to $phone.')));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${AppLocalizations.of(context)!.registrationFailed}: $e',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
+  void _startResendCooldown() {
+    _resendTimer?.cancel();
+    setState(() => _resendSeconds = 60);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_resendSeconds <= 1) {
+        timer.cancel();
+        setState(() => _resendSeconds = 0);
+      } else {
+        setState(() => _resendSeconds -= 1);
+      }
+    });
+  }
+
+  String? _normalizeIndiaPhone(String raw) => normalizeIndianPhone(raw);
+
+  void _ensureRegistrationSession(RegistrationDraft draft) {
+    final currentUser = AuthService.instance.user;
+    if (AuthService.instance.session == null || currentUser == null) {
+      throw AuthSessionMissingException();
+    }
+    if (_registrationUserId == null || currentUser.id != _registrationUserId) {
+      throw AuthException(
+        'This registration no longer matches the signed-in account. Restart registration to continue.',
+      );
+    }
+    final expectedEmail = draft.email?.trim().toLowerCase();
+    if (expectedEmail == null ||
+        currentUser.email?.trim().toLowerCase() != expectedEmail) {
+      throw AuthException(
+        'The signed-in account does not match this registration email.',
+      );
+    }
   }
 
   Future<void> _finalizeRegistration() async {
     final draft = RegistrationDraft.instance;
+    _ensureRegistrationSession(draft);
     final uid = AuthService.instance.user?.id;
-    if (uid == null) return;
+    if (uid == null) {
+      throw AuthException(
+        'Your sign-in session expired. Sign in again to finish registration.',
+      );
+    }
     await supabase
         .from('profiles')
         .update({
@@ -212,46 +352,95 @@ class _RegisterContactScreenState extends State<RegisterContactScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return RegistrationShell(
       step: 5,
-      title: 'How do we contact You?',
-      subtitle:
-          'Give us your number and business details. You will be signed in once you tap Submit.',
+      title: l.registerContactTitle,
+      subtitle: l.contactSubtitle,
       fields: [
-        LabeledField(
-          label: 'Mobile No.',
-          child: PillTextField(
-            controller: _mobile,
-            hint: '987-6543-214',
-            keyboardType: TextInputType.phone,
+        if (!_phoneOtpPending) ...[
+          LabeledField(
+            label: l.mobileNumber,
+            child: PillTextField(
+              controller: _mobile,
+              hint: '987-6543-214',
+              keyboardType: TextInputType.phone,
+            ),
           ),
-        ),
-        LabeledField(
-          label: 'Company Landline No.',
-          child: PillTextField(
-            controller: _landline,
-            hint: '987-654-321',
-            keyboardType: TextInputType.phone,
+          LabeledField(
+            label: l.landlineNumber,
+            child: PillTextField(
+              controller: _landline,
+              hint: '987-654-321',
+              keyboardType: TextInputType.phone,
+            ),
           ),
-        ),
-        LabeledField(
-          label: 'Business Registration No.',
-          child: PillTextField(controller: _bizNum, hint: 'BRN-1234'),
-        ),
-        LabeledField(
-          label: 'Lorry RC Number',
-          child: PillTextField(controller: _rcNumber, hint: 'PB10AB1234'),
-        ),
-        LabeledField(
-          label: 'Lorry Insurance Number',
-          child: PillTextField(controller: _insurance, hint: 'INS-2026-44321'),
-        ),
-        LabeledField(
-          label: 'GSTIN (optional)',
-          child: PillTextField(controller: _gst, hint: '27ABCDE1234F1Z5'),
-        ),
+          LabeledField(
+            label: l.businessRegistrationNumber,
+            child: PillTextField(controller: _bizNum, hint: 'BRN-1234'),
+          ),
+          LabeledField(
+            label: l.lorryRcNumber,
+            child: PillTextField(controller: _rcNumber, hint: 'PB10AB1234'),
+          ),
+          LabeledField(
+            label: l.lorryInsuranceNumber,
+            child: PillTextField(
+              controller: _insurance,
+              hint: 'INS-2026-44321',
+            ),
+          ),
+          LabeledField(
+            label: l.gstinOptional,
+            child: PillTextField(controller: _gst, hint: '27ABCDE1234F1Z5'),
+          ),
+        ] else ...[
+          LabeledField(
+            label:
+                _phoneVerified
+                    ? 'Phone number verified'
+                    : 'Verification code sent to ${_phoneE164 ?? ''}',
+            child:
+                _phoneVerified
+                    ? const Text(
+                      'Tap Complete registration to submit your details for admin approval.',
+                    )
+                    : Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        PillTextField(
+                          controller: _phoneOtp,
+                          hint: '6-digit code',
+                          keyboardType: TextInputType.number,
+                          maxLength: 6,
+                        ),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed:
+                                _submitting || _resendSeconds > 0
+                                    ? null
+                                    : _resendPhoneOtp,
+                            child: Text(
+                              _resendSeconds > 0
+                                  ? 'Resend in ${_resendSeconds}s'
+                                  : 'Resend code',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+          ),
+        ],
       ],
-      ctaLabel: _submitting ? 'Submitting…' : 'Submit',
+      ctaLabel:
+          _submitting
+              ? l.submitting
+              : _phoneOtpPending
+              ? _phoneVerified
+                  ? 'Complete registration'
+                  : 'Verify phone number'
+              : 'Create account and send code',
       onNext: _submit,
     );
   }

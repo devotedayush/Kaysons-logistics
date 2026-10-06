@@ -10,6 +10,6 @@ void main() {
 
     expect(theme.colorScheme.primary, AppColors.primary);
     expect(theme.colorScheme.error, AppColors.danger);
-    expect(theme.scaffoldBackgroundColor, AppColors.onPrimary);
+    expect(theme.scaffoldBackgroundColor, AppColors.surface);
   });
 }

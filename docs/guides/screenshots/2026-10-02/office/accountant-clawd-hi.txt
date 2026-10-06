@@ -1,0 +1,28 @@
+- document:
+  - img "Kaysons logo"
+  - text: लेखाकार KAYSONS खाता बही, रिपोर्ट और Clawd विश्लेषण देखें।
+  - group:
+    - button "खाता बही" [ref=e1]
+    - button "विश्लेषण" [ref=e2]
+    - button "Clawd" [ref=e3]
+  - button "प्रोफ़ाइल प्रोफ़ाइल" [ref=e4]
+  - group "Clawd भाड़ा, POD, ई-वे और खर्च की समीक्षा में आपका सहायक":
+    - button "जोखिम जाँचें" [ref=e5]
+    - button "दैनिक रिपोर्ट" [ref=e6]
+    - button "मासिक रिपोर्ट" [ref=e7]
+    - group:
+      - text: मौजूदा जोखिम सारांश · April 2026 519 डिस्पैच ₹20.51 L भाड़ा 164 POD लंबित ₹3.83 L समीक्षा राशि 2 डुप्लिकेट ई-वे 0 मार्ग लागत वृद्धि 61 अतिरिक्त शुल्क
+      - group "तुरंत प्रश्न":
+        - checkbox "अप्रैल 2026 के परिचालन का सारांश दें" [ref=e8]
+        - checkbox "ट्रांसपोर्टर के अनुसार लंबित POD दिखाएँ" [ref=e9]
+        - checkbox "प्रति MT सबसे महंगे मार्ग बताएँ" [ref=e10]
+        - checkbox "डुप्लिकेट इनवॉइस और ई-वे जोखिम जाँचें" [ref=e11]
+        - checkbox "Bunge और Cargill की तुलना करें" [ref=e12]
+      - textbox "Clawd से पूछें POD, मार्ग, ई-वे बिल या ट्रांसपोर्टर लागत के बारे में पूछें..." [ref=e13]
+      - button "बड़ा करें" [ref=e14]
+      - group:
+        - textbox [ref=e15] [disabled]
+      - button "भेजें" [ref=e16]
+      - group "खुली समीक्षा सूची अति गंभीर प्राथमिकता 100 डुप्लिकेट ई-वे बिल जोखिम Cargill · ludhiana>talwara अति गंभीर प्राथमिकता 100 डुप्लिकेट ई-वे बिल जोखिम Cargill · ludhiana>talwara अति गंभीर प्राथमिकता 95 मार्ग लागत में वृद्धि Cargill · ludhiana>rampura अति गंभीर प्राथमिकता 95 मार्ग लागत में वृद्धि Bunge · ludhiana>mohali अति गंभीर प्राथमिकता 95 मार्ग लागत में वृद्धि Cargill · ludhiana>dina nagar अति गंभीर प्राथमिकता 95 मार्ग लागत में वृद्धि Cargill · ludhiana>moga अति गंभीर प्राथमिकता 95 मार्ग लागत में वृद्धि Cargill · ludhiana>pathankot अति गंभीर प्राथमिकता 95 मार्ग लागत में वृद्धि Cargill · ludhiana>jalandhar":
+        - button "सुलझा" [ref=e17]
+        - button "गलत संकेत" [ref=e18]

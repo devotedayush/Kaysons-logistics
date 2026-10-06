@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../l10n/app_language.dart';
+import '../../l10n/app_localizations.dart';
 
 class ShellSettingsButton extends StatelessWidget {
   const ShellSettingsButton({
@@ -13,8 +15,10 @@ class ShellSettingsButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final currentLanguage = Localizations.localeOf(context).languageCode;
     return PopupMenuButton<String>(
-      tooltip: 'Profile and logout',
+      tooltip: l.profile,
       onSelected: (value) async {
         if (value == 'profile') {
           onProfile?.call();
@@ -25,37 +29,50 @@ class ShellSettingsButton extends StatelessWidget {
         if (value == 'logout') {
           await onLogout();
         }
+        if (value == 'en' || value == 'hi') {
+          await AppLanguage.instance.select(value);
+        }
       },
       itemBuilder:
           (context) => [
             if (onProfile != null)
-              const PopupMenuItem<String>(
+              PopupMenuItem<String>(
                 value: 'profile',
                 child: Row(
                   children: [
                     Icon(Icons.person_outline, size: 18),
                     SizedBox(width: 10),
-                    Text('Profile'),
+                    Text(l.profile),
                   ],
                 ),
               ),
-            const PopupMenuItem<String>(
+            PopupMenuItem<String>(
               value: 'privacy',
               child: Row(
                 children: [
                   Icon(Icons.privacy_tip_outlined, size: 18),
                   SizedBox(width: 10),
-                  Text('Account & privacy'),
+                  Text(l.accountPrivacy),
                 ],
               ),
             ),
-            const PopupMenuItem<String>(
+            CheckedPopupMenuItem<String>(
+              value: 'en',
+              checked: currentLanguage == 'en',
+              child: Text('${l.language}: ${l.english}'),
+            ),
+            CheckedPopupMenuItem<String>(
+              value: 'hi',
+              checked: currentLanguage == 'hi',
+              child: Text('${l.language}: ${l.hindi}'),
+            ),
+            PopupMenuItem<String>(
               value: 'logout',
               child: Row(
                 children: [
                   Icon(Icons.logout, size: 18),
                   SizedBox(width: 10),
-                  Text('Logout'),
+                  Text(l.logout),
                 ],
               ),
             ),
@@ -77,7 +94,7 @@ class ShellSettingsButton extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                onProfile == null ? 'Logout' : 'Profile',
+                onProfile == null ? l.logout : l.profile,
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,

@@ -1,0 +1,63 @@
+- document:
+  - group:
+    - img "Kaysons logo"
+    - text: Accountant KAYSONS Manage ledgers, reports, and Clawd analysis.
+    - group:
+      - button "Ledger" [ref=e1]
+      - button "Analytics" [ref=e2]
+      - button "Clawd" [ref=e3]
+    - button "Profile Profile" [ref=e4]
+    - group "Freight ledger Invoice rows 0 Trips 4 Vehicles 1 Cases 205 MT 243 Freight ₹25466 POD pending 3 Summary report Transporter-wise summary Trips, distinct vehicles, freight efficiency, and POD status by transporter.":
+      - button "Export reports" [ref=e5]
+      - button "Upload CSV" [ref=e6]
+      - button "Refresh" [ref=e7]
+      - button "Entry" [ref=e8]
+      - button "Month" [ref=e9]
+      - button "Company All" [ref=e10]
+      - button "Transporter All" [ref=e11]
+      - button "Destination / Place All" [ref=e12]
+      - textbox "Invoice Number" [ref=e13]
+      - button "Filters" [ref=e14]
+      - button "Clear filters" [ref=e15]
+      - button "Overview" [ref=e16]
+      - button "Rows" [ref=e17]
+      - button "Transporter" [ref=e18]
+      - button "Place" [ref=e19]
+      - button "Route" [ref=e20]
+      - button "Vehicle" [ref=e21]
+      - group:
+        - group:
+          - table:
+            - row "Transporter Trips Vehicles Cases MT Freight Freight/MT Freight/Case POD pending POD Received":
+              - columnheader "Transporter" [ref=e22]
+              - columnheader "Trips" [ref=e23]
+              - columnheader "Vehicles" [ref=e24]
+              - columnheader "Cases" [ref=e25]
+              - columnheader "MT" [ref=e26]
+              - columnheader "Freight" [ref=e27]
+              - columnheader "Freight/MT" [ref=e28]
+              - columnheader "Freight/Case" [ref=e29]
+              - columnheader "POD pending" [ref=e30]
+              - columnheader "POD Received" [ref=e31]
+            - row "Jagdamba Enterprises 2 1 147 119 ₹20000 ₹168 ₹136 1 1":
+              - cell "Jagdamba Enterprises" [ref=e32]
+              - cell "2" [ref=e33]
+              - cell "1" [ref=e34]
+              - cell "147" [ref=e35]
+              - cell "119" [ref=e36]
+              - cell "₹20000" [ref=e37]
+              - cell "₹168" [ref=e38]
+              - cell "₹136" [ref=e39]
+              - cell "1" [ref=e40] [nth=1]
+              - cell "1" [ref=e41] [nth=2]
+            - row "Unassigned 2 0 58 124 ₹5466 ₹44 ₹94 2 0":
+              - cell "Unassigned" [ref=e42]
+              - cell "2" [ref=e43] [nth=1]
+              - cell "0" [ref=e44]
+              - cell "58" [ref=e45]
+              - cell "124" [ref=e46]
+              - cell "₹5466" [ref=e47]
+              - cell "₹44" [ref=e48]
+              - cell "₹94" [ref=e49]
+              - cell "2" [ref=e50] [nth=2]
+              - cell "0" [ref=e51] [nth=1]

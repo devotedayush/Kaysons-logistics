@@ -1,9 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { responseLanguage } from "./language.ts";
 
 type Json = Record<string, unknown>;
 type Client = ReturnType<typeof createClient<any, "public", any>>;
 
-const MODEL = "gpt-5.2";
+const MODEL = "gpt-6-luna";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -74,6 +75,7 @@ Deno.serve(async (req) => {
           userId: auth.userId,
           templateId: String(body.template_id ?? ""),
           variables: asRecord(body.variables),
+          language: String(body.language ?? ""),
         }),
       );
     }
@@ -81,7 +83,13 @@ Deno.serve(async (req) => {
     const question = String(body.question ?? "").trim();
     if (!question) return json({ error: "Ask Clawd a question first." }, 400);
     return json(
-      await chat({ adminClient, openAiKey, userId: auth.userId, question }),
+      await chat({
+        adminClient,
+        openAiKey,
+        userId: auth.userId,
+        question,
+        language: String(body.language ?? ""),
+      }),
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -156,6 +164,7 @@ async function chat(args: {
   openAiKey: string;
   userId: string | null;
   question: string;
+  language: string;
 }) {
   const facts = await loadFacts(args.adminClient, 80);
   const ai = await askOpenAI(
@@ -167,6 +176,7 @@ async function chat(args: {
       `Question: ${args.question}`,
       `Computed facts:\n${JSON.stringify(facts)}`,
     ].join("\n\n"),
+    responseLanguage(args.question, args.language),
   );
   const run = await storeRun(args.adminClient, {
     run_type: "chat",
@@ -194,6 +204,7 @@ async function runTemplate(args: {
   userId: string | null;
   templateId: string;
   variables: Json;
+  language: string;
 }) {
   if (!args.templateId) return { error: "Select a prompt template first." };
   const { data: template, error } = await args.adminClient
@@ -217,6 +228,7 @@ async function runTemplate(args: {
       `Variables:\n${JSON.stringify(args.variables)}`,
       `Computed facts:\n${JSON.stringify(facts)}`,
     ].join("\n\n"),
+    responseLanguage(rendered, args.language),
   );
   const run = await storeRun(args.adminClient, {
     run_type: "prompt_template_run",
@@ -472,7 +484,11 @@ function summarizeFacts(facts: Json) {
   };
 }
 
-async function askOpenAI(apiKey: string, prompt: string) {
+async function askOpenAI(
+  apiKey: string,
+  prompt: string,
+  language: "English" | "Hindi" = "English",
+) {
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -481,7 +497,12 @@ async function askOpenAI(apiKey: string, prompt: string) {
     },
     body: JSON.stringify({
       model: MODEL,
-      instructions: systemInstructions,
+      instructions: [
+        systemInstructions,
+        language === "Hindi"
+          ? "Answer in natural Hindi using Devanagari script. Write every explanatory string in Hindi, including the final business explanation. Keep standard logistics abbreviations such as POD and GR when useful."
+          : "Answer in English.",
+      ].join("\n"),
       input: prompt,
       reasoning: { effort: "medium" },
       max_output_tokens: 2200,
@@ -505,7 +526,7 @@ async function askOpenAI(apiKey: string, prompt: string) {
               recommended_actions: { type: "array", items: { type: "string" } },
               follow_up_questions: { type: "array", items: { type: "string" } },
               confidence: { type: "number" },
-              plain_english_explanation: { type: "string" },
+              plain_language_explanation: { type: "string" },
             },
             required: [
               "summary",
@@ -516,7 +537,7 @@ async function askOpenAI(apiKey: string, prompt: string) {
               "recommended_actions",
               "follow_up_questions",
               "confidence",
-              "plain_english_explanation",
+              "plain_language_explanation",
             ],
           },
         },
@@ -529,10 +550,14 @@ async function askOpenAI(apiKey: string, prompt: string) {
   }
 
   const output = extractOutputText(raw);
+  if (!output.trim()) {
+    throw new Error("Clawd received no answer. Please try again.");
+  }
   const structured = safeParseJson(output);
   const text = cleanBusinessText(
     String(
-      structured.plain_english_explanation ||
+      structured.plain_language_explanation ||
+        structured.plain_english_explanation ||
         structured.summary ||
         output ||
         "",
@@ -603,7 +628,7 @@ function safeParseJson(text: string): Json {
       recommended_actions: [],
       follow_up_questions: [],
       confidence: 0,
-      plain_english_explanation: text,
+      plain_language_explanation: text,
     };
   }
 }

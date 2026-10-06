@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/app_localizations.dart';
 
 class DateWindowBar extends StatelessWidget {
   const DateWindowBar({
@@ -20,8 +21,10 @@ class DateWindowBar extends StatelessWidget {
   final Future<void> Function() onPickEnd;
   final VoidCallback onClearCustom;
 
-  String get _customLabel {
-    if (customStart == null || customEnd == null) return 'Custom dates';
+  String _customLabel(AppLocalizations l) {
+    if (customStart == null || customEnd == null) {
+      return l.dateWindowCustomDates;
+    }
     String fmt(DateTime d) =>
         '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}';
     return '${fmt(customStart!)} - ${fmt(customEnd!)}';
@@ -29,6 +32,7 @@ class DateWindowBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final hasCustom = customStart != null && customEnd != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -38,27 +42,27 @@ class DateWindowBar extends StatelessWidget {
           runSpacing: 8,
           children: [
             _RangeChip(
-              label: '7 days',
+              label: l.dateWindowDays(7),
               selected: !hasCustom && rangeDays == 7,
               onTap: () => onSelectRange(7),
             ),
             _RangeChip(
-              label: '15 days',
+              label: l.dateWindowDays(15),
               selected: !hasCustom && rangeDays == 15,
               onTap: () => onSelectRange(15),
             ),
             _RangeChip(
-              label: '30 days',
+              label: l.dateWindowDays(30),
               selected: !hasCustom && rangeDays == 30,
               onTap: () => onSelectRange(30),
             ),
             _RangeChip(
-              label: '90 days',
+              label: l.dateWindowDays(90),
               selected: !hasCustom && rangeDays == 90,
               onTap: () => onSelectRange(90),
             ),
             _RangeChip(
-              label: _customLabel,
+              label: _customLabel(l),
               selected: hasCustom,
               onTap: onPickStart,
               icon: Icons.calendar_month_outlined,
@@ -74,16 +78,16 @@ class DateWindowBar extends StatelessWidget {
               OutlinedButton.icon(
                 onPressed: onPickStart,
                 icon: const Icon(Icons.event_outlined, size: 16),
-                label: const Text('From'),
+                label: Text(l.dateWindowFrom),
               ),
               OutlinedButton.icon(
                 onPressed: onPickEnd,
                 icon: const Icon(Icons.event_available_outlined, size: 16),
-                label: const Text('To'),
+                label: Text(l.dateWindowTo),
               ),
               TextButton(
                 onPressed: onClearCustom,
-                child: const Text('Use preset'),
+                child: Text(l.dateWindowUsePreset),
               ),
             ],
           ),
@@ -112,7 +116,8 @@ class _RangeChip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        constraints: const BoxConstraints(minHeight: 48),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: selected ? const Color(0xFFE8DEF8) : Colors.white,
           border: Border.all(color: const Color(0xFFCAC4D0)),
@@ -128,7 +133,7 @@ class _RangeChip extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 14,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
               ),
             ),
@@ -148,12 +153,26 @@ bool withinDateWindow(
   if (value == null) return false;
   final local = value.toLocal();
   if (customStart != null && customEnd != null) {
-    final start = DateTime(customStart.year, customStart.month, customStart.day);
-    final end = DateTime(customEnd.year, customEnd.month, customEnd.day, 23, 59, 59);
+    final start = DateTime(
+      customStart.year,
+      customStart.month,
+      customStart.day,
+    );
+    final end = DateTime(
+      customEnd.year,
+      customEnd.month,
+      customEnd.day,
+      23,
+      59,
+      59,
+    );
     return !local.isBefore(start) && !local.isAfter(end);
   }
   final now = DateTime.now();
-  final start = DateTime(now.year, now.month, now.day)
-      .subtract(Duration(days: rangeDays - 1));
+  final start = DateTime(
+    now.year,
+    now.month,
+    now.day,
+  ).subtract(Duration(days: rangeDays - 1));
   return !local.isBefore(start);
 }

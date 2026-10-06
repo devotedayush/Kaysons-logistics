@@ -4,11 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../features/onboarding/splash_screen.dart';
 import '../../features/onboarding/onboarding_welcome_screen.dart';
 import '../../features/auth/login_screen.dart';
-import '../../features/auth/register_email_screen.dart';
-import '../../features/auth/register_password_screen.dart';
-import '../../features/auth/register_name_screen.dart';
-import '../../features/auth/register_bank_screen.dart';
-import '../../features/auth/register_contact_screen.dart';
+import '../../features/auth/phone_link_screen.dart';
+import '../../features/auth/phone_registration_screen.dart';
 import '../../features/transporter/bid_detail_screen.dart';
 import '../../features/transporter/afterbid_screen.dart';
 import '../../features/transporter/drivers_screen.dart';
@@ -46,6 +43,7 @@ class _AuthNotifier extends ChangeNotifier {
 }
 
 final _authNotifier = _AuthNotifier();
+AppRole? _approvedRouteRole;
 
 const _publicPaths = {
   '/',
@@ -62,7 +60,7 @@ Widget _desktopShell({
   required AppRole role,
   required Widget child,
   int? currentIndex,
-  double maxContentWidth = 1120,
+  double maxContentWidth = 1360,
 }) {
   return DesktopRoleShell(
     role: role,
@@ -77,6 +75,7 @@ final GoRouter appRouter = GoRouter(
   refreshListenable: _authNotifier,
   redirect: (context, state) async {
     final loggedIn = AuthService.instance.session != null;
+    if (!loggedIn) _approvedRouteRole = null;
     final path = state.matchedLocation;
     // Splash handles its own redirect based on role; leave it alone.
     if (path == '/') return null;
@@ -84,7 +83,15 @@ final GoRouter appRouter = GoRouter(
     if (!loggedIn && !isPublic) return '/login';
     if (!loggedIn || isPublic) return null;
     if (path.startsWith('/account/')) return null;
-    final role = await AuthService.instance.fetchRole();
+    late final AppRole role;
+    try {
+      role = await AuthService.instance.requireApprovedAccess();
+      _approvedRouteRole = role;
+    } catch (_) {
+      // A restored session can outlive its approval, or its profile may have
+      // been removed. Do not infer a transporter role from a missing profile.
+      return '/login';
+    }
     final allowed = switch (role) {
       AppRole.admin => path.startsWith('/admin'),
       AppRole.logisticsManager => path.startsWith('/lm'),
@@ -109,26 +116,25 @@ final GoRouter appRouter = GoRouter(
       builder: (_, __) => const OnboardingWelcomeScreen(),
     ),
     GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
-    GoRoute(path: '/register', builder: (_, __) => const RegisterEmailScreen()),
     GoRoute(
-      path: '/register/password',
-      builder: (_, __) => const RegisterPasswordScreen(),
+      path: '/register',
+      builder: (_, __) => const PhoneRegistrationScreen(),
     ),
-    GoRoute(
-      path: '/register/name',
-      builder: (_, __) => const RegisterNameScreen(),
-    ),
-    GoRoute(
-      path: '/register/bank',
-      builder: (_, __) => const RegisterBankScreen(),
-    ),
-    GoRoute(
-      path: '/register/contact',
-      builder: (_, __) => const RegisterContactScreen(),
-    ),
+    GoRoute(path: '/register/password', redirect: (_, __) => '/register'),
+    GoRoute(path: '/register/name', redirect: (_, __) => '/register'),
+    GoRoute(path: '/register/bank', redirect: (_, __) => '/register'),
+    GoRoute(path: '/register/contact', redirect: (_, __) => '/register'),
     GoRoute(
       path: '/account/privacy',
       builder: (_, __) => const AccountPrivacyScreen(),
+    ),
+    GoRoute(
+      path: '/account/phone',
+      builder: (_, __) => const PhoneLinkScreen(),
+    ),
+    GoRoute(
+      path: '/account/profile',
+      builder: (_, __) => const TransporterProfileScreen(),
     ),
     GoRoute(
       path: '/home',
@@ -171,7 +177,11 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/bid/:id',
       builder:
-          (_, state) => BidDetailScreen(bidId: state.pathParameters['id']!),
+          (_, state) => _desktopShell(
+            role: _approvedRouteRole ?? AppRole.transporter,
+            currentIndex: 1,
+            child: BidDetailScreen(bidId: state.pathParameters['id']!),
+          ),
     ),
     GoRoute(
       path: '/bid/:id/after',
@@ -208,6 +218,22 @@ final GoRouter appRouter = GoRouter(
           (_, __) => _desktopShell(
             role: AppRole.logisticsManager,
             child: const LmProfileScreen(),
+          ),
+    ),
+    GoRoute(
+      path: '/lm/transporters',
+      builder:
+          (_, __) => _desktopShell(
+            role: AppRole.logisticsManager,
+            child: const LmTransporterDirectoryScreen(),
+          ),
+    ),
+    GoRoute(
+      path: '/lm/vehicles',
+      builder:
+          (_, __) => _desktopShell(
+            role: AppRole.logisticsManager,
+            child: const LmVehicleDirectoryScreen(),
           ),
     ),
     GoRoute(
@@ -286,7 +312,10 @@ final GoRouter appRouter = GoRouter(
           (_, state) => _desktopShell(
             role: AppRole.dispatchManager,
             currentIndex: 1,
-            child: LmTrackScreen(freightId: state.pathParameters['id']!),
+            child: LmTrackScreen(
+              freightId: state.pathParameters['id']!,
+              dispatchManagerMode: true,
+            ),
           ),
     ),
     GoRoute(
@@ -307,6 +336,18 @@ final GoRouter appRouter = GoRouter(
           (_, __) => _desktopShell(
             role: AppRole.accountant,
             child: const AdminProfileScreen(),
+          ),
+    ),
+    GoRoute(
+      path: '/acct/track/:id',
+      builder:
+          (_, state) => _desktopShell(
+            role: AppRole.accountant,
+            currentIndex: 0,
+            child: LmTrackScreen(
+              freightId: state.pathParameters['id']!,
+              accountantMode: true,
+            ),
           ),
     ),
     GoRoute(
@@ -336,7 +377,40 @@ final GoRouter appRouter = GoRouter(
           (_, state) => _desktopShell(
             role: AppRole.admin,
             currentIndex: 2,
-            child: BidManagementScreen(bidId: state.pathParameters['id']!),
+            child: BidManagementScreen(
+              bidId: state.pathParameters['id']!,
+              adminMode: true,
+            ),
+          ),
+    ),
+    GoRoute(
+      path: '/admin/bid/:id/edit',
+      builder:
+          (_, state) => _desktopShell(
+            role: AppRole.admin,
+            currentIndex: 2,
+            child: BidEditScreen(bidId: state.pathParameters['id']!),
+          ),
+    ),
+    GoRoute(
+      path: '/admin/track/:id',
+      builder:
+          (_, state) => _desktopShell(
+            role: AppRole.admin,
+            currentIndex: 2,
+            child: LmTrackScreen(freightId: state.pathParameters['id']!),
+          ),
+    ),
+    GoRoute(
+      path: '/admin/bid/:id/invoice',
+      builder:
+          (_, state) => _desktopShell(
+            role: AppRole.admin,
+            currentIndex: 2,
+            child: InvoiceLinkScreen(
+              bidId: state.pathParameters['id']!,
+              adminMode: true,
+            ),
           ),
     ),
     GoRoute(

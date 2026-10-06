@@ -4,6 +4,11 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/config/legal_links.dart';
 import '../../core/supabase/account_deletion_service.dart';
+import '../../core/supabase/auth_service.dart';
+import '../../l10n/app_localizations.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/widgets/workspace_widgets.dart';
+import '../auth/enrollment_strings.dart';
 
 class AccountPrivacyScreen extends StatefulWidget {
   const AccountPrivacyScreen({super.key});
@@ -29,7 +34,9 @@ class _AccountPrivacyScreenState extends State<AccountPrivacyScreen> {
       final request = await AccountDeletionService.instance.activeRequest();
       if (mounted) setState(() => _activeRequest = request);
     } catch (error) {
-      if (mounted) _showError('Could not load deletion status: $error');
+      if (mounted) {
+        _showError('${AppLocalizations.of(context)!.privacyLoadError}: $error');
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -40,11 +47,12 @@ class _AccountPrivacyScreenState extends State<AccountPrivacyScreen> {
       Uri.parse(url),
       mode: LaunchMode.externalApplication,
     )) {
-      _showError('Could not open the webpage.');
+      if (mounted) _showError(AppLocalizations.of(context)!.privacyOpenError);
     }
   }
 
   Future<void> _requestDeletion() async {
+    final l = AppLocalizations.of(context)!;
     final reasonController = TextEditingController();
     var confirmed = false;
     final shouldSubmit = await showModalBottomSheet<bool>(
@@ -74,17 +82,17 @@ class _AccountPrivacyScreenState extends State<AccountPrivacyScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Request account deletion?',
-                            style: TextStyle(
+                          Text(
+                            l.privacyDeleteTitle,
+                            style: const TextStyle(
                               fontSize: 24,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
                           const SizedBox(height: 10),
-                          const Text(
-                            'We will verify the request using your registered email. Your account and associated personal data will be deleted or de-identified, except records we must retain for legal, accounting, fraud-prevention or active contractual reasons.',
-                            style: TextStyle(height: 1.45),
+                          Text(
+                            l.privacyDeleteWarning,
+                            style: const TextStyle(height: 1.45),
                           ),
                           const SizedBox(height: 18),
                           TextField(
@@ -92,47 +100,48 @@ class _AccountPrivacyScreenState extends State<AccountPrivacyScreen> {
                             maxLength: 1000,
                             maxLines: 3,
                             decoration: InputDecoration(
-                              labelText: 'Reason (optional)',
-                              hintText: 'Tell us anything we should know',
+                              labelText: l.privacyReason,
+                              hintText: l.privacyReasonHint,
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(16),
                               ),
                             ),
                           ),
-                          CheckboxListTile(
-                            contentPadding: EdgeInsets.zero,
-                            controlAffinity: ListTileControlAffinity.leading,
-                            value: confirmed,
-                            onChanged:
-                                (value) => setSheetState(
-                                  () => confirmed = value ?? false,
+                          Material(
+                            color: Colors.transparent,
+                            child: CheckboxListTile(
+                              contentPadding: EdgeInsets.zero,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              value: confirmed,
+                              onChanged:
+                                  (value) => setSheetState(
+                                    () => confirmed = value ?? false,
+                                  ),
+                              title: Text(
+                                l.privacyConfirm,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  height: 1.35,
                                 ),
-                            title: const Text(
-                              'I understand this requests permanent deletion of my account and associated data.',
-                              style: TextStyle(fontSize: 14, height: 1.35),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 12),
-                          Row(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () => context.pop(false),
-                                  child: const Text('Keep account'),
+                              FilledButton(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: AppColors.danger,
                                 ),
+                                onPressed:
+                                    confirmed ? () => context.pop(true) : null,
+                                child: Text(l.privacySubmit),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: FilledButton(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: const Color(0xFFB3261E),
-                                  ),
-                                  onPressed:
-                                      confirmed
-                                          ? () => context.pop(true)
-                                          : null,
-                                  child: const Text('Submit request'),
-                                ),
+                              const SizedBox(height: 12),
+                              OutlinedButton(
+                                onPressed: () => context.pop(false),
+                                child: Text(l.privacyKeepAccount),
                               ),
                             ],
                           ),
@@ -155,15 +164,11 @@ class _AccountPrivacyScreenState extends State<AccountPrivacyScreen> {
       );
       if (!mounted) return;
       setState(() => _activeRequest = request);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Deletion request received. We will verify it by email.',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l.privacyReceivedMessage)));
     } catch (error) {
-      if (mounted) _showError('Could not submit request: $error');
+      if (mounted) _showError('${l.privacySubmitError}: $error');
     } finally {
       reasonController.dispose();
       if (mounted) setState(() => _submitting = false);
@@ -179,10 +184,16 @@ class _AccountPrivacyScreenState extends State<AccountPrivacyScreen> {
       if (!mounted) return;
       setState(() => _activeRequest = null);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Deletion request cancelled.')),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.privacyCancelledMessage),
+        ),
       );
     } catch (error) {
-      if (mounted) _showError('Could not cancel request: $error');
+      if (mounted) {
+        _showError(
+          '${AppLocalizations.of(context)!.privacyCancelError}: $error',
+        );
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -196,50 +207,112 @@ class _AccountPrivacyScreenState extends State<AccountPrivacyScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    String t(String en, String hi) => enrollmentText(context, en, hi);
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F5FB),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFF8F5FB),
-        title: const Text('Account & privacy'),
-      ),
+      backgroundColor: AppColors.surface,
+      appBar: AppBar(title: Text(l.accountPrivacy)),
       body:
           _loading
               ? const Center(child: CircularProgressIndicator())
-              : Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 760),
-                  child: ListView(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
-                    children: [
-                      _InfoCard(
-                        icon: Icons.privacy_tip_outlined,
-                        title: 'Your privacy',
-                        body:
-                            'See what Kaysons Logistics collects, why it is used, how long it is kept, and how to contact us.',
-                        actionLabel: 'Read privacy policy',
-                        onAction: () => _open(privacyPolicyUrl),
-                      ),
-                      const SizedBox(height: 14),
-                      _deletionCard(),
-                      const SizedBox(height: 14),
-                      _InfoCard(
-                        icon: Icons.language_outlined,
-                        title: 'Request from the web',
-                        body:
-                            'You can also request deletion after uninstalling the app. The public form does not require a login.',
-                        actionLabel: 'Open deletion webpage',
-                        onAction: () => _open(accountDeletionUrl),
-                      ),
-                      const SizedBox(height: 14),
-                      _InfoCard(
-                        icon: Icons.support_agent_outlined,
-                        title: 'Need help?',
-                        body:
-                            'Contact $supportEmail for privacy, access, correction or account questions.',
-                        actionLabel: 'Email support',
-                        onAction: () => _open('mailto:$supportEmail'),
-                      ),
-                    ],
+              : SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1120),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        WorkspaceHeader(
+                          title: t(
+                            'Your account & privacy',
+                            'आपका खाता और गोपनीयता',
+                          ),
+                          description: t(
+                            'Manage your sign-in phone, understand how your information is used, or contact support.',
+                            'लॉगिन फोन देखें, अपनी जानकारी के इस्तेमाल को समझें या सहायता से संपर्क करें।',
+                          ),
+                          icon: Icons.privacy_tip_outlined,
+                        ),
+                        const SizedBox(height: 24),
+                        WorkspaceFormLayout(
+                          showAsideOnMobile: true,
+                          aside: Column(
+                            children: [
+                              _InfoCard(
+                                icon: Icons.privacy_tip_outlined,
+                                title: l.privacyYourPrivacy,
+                                body: l.privacySummary,
+                                actionLabel: l.privacyReadPolicy,
+                                onAction: () => _open(privacyPolicyUrl),
+                              ),
+                              const SizedBox(height: 18),
+                              _InfoCard(
+                                icon: Icons.support_agent_outlined,
+                                title: l.privacyHelp,
+                                body: l.privacyContact(supportEmail),
+                                actionLabel: l.privacyEmailSupport,
+                                onAction: () => _open('mailto:$supportEmail'),
+                              ),
+                            ],
+                          ),
+                          content: Column(
+                            children: [
+                              _InfoCard(
+                                icon: Icons.phone_android_outlined,
+                                title: t('Sign-in phone', 'लॉगिन फोन'),
+                                body: t(
+                                  'Link a verified mobile number to sign in with an SMS code.',
+                                  'SMS कोड से लॉगिन करने के लिए सत्यापित मोबाइल नंबर जोड़ें।',
+                                ),
+                                actionLabel: t(
+                                  'Manage phone number',
+                                  'फोन नंबर देखें',
+                                ),
+                                onAction: () => context.push('/account/phone'),
+                              ),
+                              const SizedBox(height: 18),
+                              Material(
+                                color: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                  side: const BorderSide(
+                                    color: AppColors.outline,
+                                  ),
+                                ),
+                                child: ExpansionTile(
+                                  initiallyExpanded: _activeRequest != null,
+                                  leading: const Icon(
+                                    Icons.person_remove_outlined,
+                                    color: AppColors.danger,
+                                  ),
+                                  title: Text(l.privacyDeleteTitle),
+                                  subtitle: Text(
+                                    t(
+                                      'Request removal of your account',
+                                      'अपना खाता हटाने का अनुरोध करें',
+                                    ),
+                                  ),
+                                  childrenPadding: const EdgeInsets.all(14),
+                                  children: [
+                                    _deletionCard(),
+                                    const SizedBox(height: 14),
+                                    _InfoCard(
+                                      icon: Icons.language_outlined,
+                                      title: l.privacyWebRequest,
+                                      body: l.privacyWebSummary,
+                                      actionLabel: l.privacyOpenWeb,
+                                      onAction: () => _open(accountDeletionUrl),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -247,7 +320,10 @@ class _AccountPrivacyScreenState extends State<AccountPrivacyScreen> {
   }
 
   Widget _deletionCard() {
+    final l = AppLocalizations.of(context)!;
     final request = _activeRequest;
+    final hasEmail = (AuthService.instance.user?.email ?? '').trim().isNotEmpty;
+    String t(String en, String hi) => enrollmentText(context, en, hi);
     if (request != null) {
       final requested =
           '${request.requestedAt.day.toString().padLeft(2, '0')}/'
@@ -257,26 +333,26 @@ class _AccountPrivacyScreenState extends State<AccountPrivacyScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const _CardHeader(
+            _CardHeader(
               icon: Icons.mark_email_read_outlined,
-              title: 'Deletion request received',
+              title: l.privacyReceivedTitle,
             ),
             const SizedBox(height: 12),
             Text(
-              'Status: ${_statusLabel(request.status)}\nRequested: $requested',
+              l.privacyStatusRequested(_statusLabel(request.status), requested),
               style: const TextStyle(height: 1.5),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'We normally complete a verified request within 30 days. We may contact your registered email to confirm identity or explain records that must be retained.',
-              style: TextStyle(color: Color(0xFF625B71), height: 1.45),
+            Text(
+              l.privacyThirtyDays,
+              style: const TextStyle(color: Color(0xFF625B71), height: 1.45),
             ),
             if (request.status == 'pending' ||
                 request.status == 'verifying') ...[
               const SizedBox(height: 16),
               TextButton(
                 onPressed: _submitting ? null : _cancelRequest,
-                child: const Text('Cancel deletion request'),
+                child: Text(l.privacyCancelRequest),
               ),
             ],
           ],
@@ -288,15 +364,20 @@ class _AccountPrivacyScreenState extends State<AccountPrivacyScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _CardHeader(
+          _CardHeader(
             icon: Icons.delete_forever_outlined,
-            title: 'Delete account and data',
+            title: l.privacyDeleteData,
             danger: true,
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Submit a permanent deletion request for your Kaysons Logistics account and associated personal data. Verification protects your account from unauthorized requests.',
-            style: TextStyle(height: 1.45),
+          Text(
+            hasEmail
+                ? l.privacyDeleteSummary
+                : t(
+                  'Your account uses a phone number. Contact support to request account removal.',
+                  'आपका खाता फोन नंबर से जुड़ा है। खाता हटाने के लिए सहायता से संपर्क करें।',
+                ),
+            style: const TextStyle(height: 1.45),
           ),
           const SizedBox(height: 16),
           OutlinedButton.icon(
@@ -304,7 +385,12 @@ class _AccountPrivacyScreenState extends State<AccountPrivacyScreen> {
               foregroundColor: const Color(0xFFB3261E),
               side: const BorderSide(color: Color(0xFFB3261E)),
             ),
-            onPressed: _submitting ? null : _requestDeletion,
+            onPressed:
+                _submitting
+                    ? null
+                    : hasEmail
+                    ? _requestDeletion
+                    : () => _open('mailto:$supportEmail'),
             icon:
                 _submitting
                     ? const SizedBox(
@@ -313,7 +399,14 @@ class _AccountPrivacyScreenState extends State<AccountPrivacyScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                     : const Icon(Icons.delete_outline),
-            label: const Text('Request account deletion'),
+            label: Text(
+              hasEmail
+                  ? l.privacyRequestDeletion
+                  : t(
+                    'Contact support to delete account',
+                    'खाता हटाने के लिए सहायता से संपर्क करें',
+                  ),
+            ),
           ),
         ],
       ),
@@ -321,10 +414,11 @@ class _AccountPrivacyScreenState extends State<AccountPrivacyScreen> {
   }
 
   String _statusLabel(String status) {
+    final l = AppLocalizations.of(context)!;
     return switch (status) {
-      'verifying' => 'Identity verification',
-      'approved' => 'Approved for deletion',
-      _ => 'Pending review',
+      'verifying' => l.privacyVerifying,
+      'approved' => l.privacyApproved,
+      _ => l.privacyPending,
     };
   }
 }
@@ -354,7 +448,11 @@ class _InfoCard extends StatelessWidget {
           const SizedBox(height: 12),
           Text(body, style: const TextStyle(height: 1.45)),
           const SizedBox(height: 12),
-          TextButton(onPressed: onAction, child: Text(actionLabel)),
+          OutlinedButton.icon(
+            onPressed: onAction,
+            icon: const Icon(Icons.arrow_forward, size: 18),
+            label: Text(actionLabel),
+          ),
         ],
       ),
     );
@@ -372,10 +470,10 @@ class _Card extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFFE9E1F1)),
       ),
-      child: child,
+      child: Material(color: Colors.transparent, child: child),
     );
   }
 }

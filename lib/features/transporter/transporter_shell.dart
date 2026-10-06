@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../l10n/app_localizations.dart';
 
 import '../../core/supabase/auth_service.dart';
 import '../../core/widgets/compact_mobile_navigation.dart';
 import '../../core/widgets/responsive_tabbed_shell.dart';
+import '../../core/widgets/role_nav_config.dart';
 import '../../core/widgets/shell_settings_button.dart';
 import 'bids_screen.dart';
 import 'fleet_screen.dart';
@@ -47,10 +49,11 @@ class _TransporterShellState extends State<TransporterShell> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return ResponsiveTabbedShell(
-      title: 'Transporter',
-      subtitle:
-          'Track live freight opportunities, manage bids, and review fleet progress from one workspace.',
+      role: AppRole.transporter,
+      title: l.transporter,
+      subtitle: l.transporterSubtitle,
       icon: Icons.local_shipping_outlined,
       currentIndex: _index,
       onDestinationSelected: _goto,
@@ -77,21 +80,21 @@ class _TransporterShellState extends State<TransporterShell> {
         currentIndex: _index,
         onSelect: _goto,
         primaryIndices: const [0, 1, 2],
-        destinations: const [
+        destinations: [
           CompactMobileDestination(
             icon: Icons.dashboard_outlined,
             selectedIcon: Icons.dashboard,
-            label: 'Home',
+            label: l.home,
           ),
           CompactMobileDestination(
             icon: Icons.gavel_outlined,
             selectedIcon: Icons.gavel,
-            label: 'Bids',
+            label: l.bids,
           ),
           CompactMobileDestination(
             icon: Icons.local_shipping_outlined,
             selectedIcon: Icons.local_shipping,
-            label: 'Fleet',
+            label: RoleNavConfig.forRole(AppRole.transporter, l).items[2].label,
           ),
         ],
         onProfile: () => context.push('/profile'),
@@ -100,21 +103,23 @@ class _TransporterShellState extends State<TransporterShell> {
           if (context.mounted) context.go('/welcome');
         },
       ),
-      destinations: const [
+      destinations: [
         NavigationRailDestination(
           icon: Icon(Icons.dashboard_outlined),
           selectedIcon: Icon(Icons.dashboard),
-          label: Text('Dashboard'),
+          label: Text(l.dashboard),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.gavel_outlined),
           selectedIcon: Icon(Icons.gavel),
-          label: Text('Bids'),
+          label: Text(l.bids),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.local_shipping_outlined),
           selectedIcon: Icon(Icons.local_shipping),
-          label: Text('Fleet'),
+          label: Text(
+            RoleNavConfig.forRole(AppRole.transporter, l).items[2].label,
+          ),
         ),
       ],
     );

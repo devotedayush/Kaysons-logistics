@@ -1,0 +1,9 @@
+- document:
+  - group "Dismiss":
+    - alertdialog:
+      - text: Upload ledger CSV
+      - textbox "Company / sheet name *" [ref=e1]
+      - textbox "Upload tag" [ref=e2]
+      - text: Use an Excel-exported CSV. Direct .xlsx upload is not enabled in this version.
+      - button "Cancel" [ref=e3]
+      - button "Choose CSV" [ref=e4]

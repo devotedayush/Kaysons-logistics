@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/widgets/pill_text_field.dart';
@@ -25,21 +26,25 @@ class _RegisterNameScreenState extends State<RegisterNameScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return RegistrationShell(
       step: 3,
-      title: 'What is your Name?',
-      subtitle: 'This is used to build your profile on our platform',
+      title: l.registerNameTitle,
+      subtitle: l.registerProfileSubtitle,
       fields: [
         LabeledField(
-          label: 'Full Name',
+          label: l.fullName,
           child: PillTextField(controller: _fullName, hint: 'Naveen Garg'),
         ),
         LabeledField(
-          label: 'Company Name',
-          child: PillTextField(controller: _company, hint: 'Jagdamba Enterprises'),
+          label: l.companyName,
+          child: PillTextField(
+            controller: _company,
+            hint: 'Jagdamba Enterprises',
+          ),
         ),
       ],
-      ctaLabel: 'Next',
+      ctaLabel: l.next,
       onNext: () {
         if (_fullName.text.trim().isEmpty) return;
         RegistrationDraft.instance.fullName = _fullName.text.trim();

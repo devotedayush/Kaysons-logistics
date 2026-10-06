@@ -8,15 +8,33 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/supabase/auth_service.dart';
 import '../../core/supabase/freights_repo.dart';
 import '../../core/supabase/supabase_bootstrap.dart';
+import '../../core/utils/workflow_formatters.dart';
 import '../../core/widgets/india_city_field.dart';
+import '../../core/widgets/workspace_widgets.dart';
+import 'widgets/transporter_workspace.dart';
 import '../../core/widgets/pill_text_field.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/storage_photo_viewer.dart';
+import '../../l10n/app_localizations.dart';
+import '../delivery/delivery_workflow_panel.dart';
 
-class AfterbidScreen extends StatelessWidget {
-  const AfterbidScreen({super.key, required this.bidId});
+class AfterbidScreen extends StatefulWidget {
+  const AfterbidScreen({super.key, required this.bidId, this.freightStream});
 
   final String bidId;
+  final Stream<Map<String, dynamic>?>? freightStream;
+
+  @override
+  State<AfterbidScreen> createState() => _AfterbidScreenState();
+}
+
+class _AfterbidScreenState extends State<AfterbidScreen> {
+  String get bidId => widget.bidId;
+  Stream<Map<String, dynamic>?>? get freightStream => widget.freightStream;
+  final _dispatchKey = GlobalKey();
+  final _pickupKey = GlobalKey();
+  final _transitKey = GlobalKey();
+  final _deliveryKey = GlobalKey();
 
   @override
   Widget build(BuildContext context) {
@@ -24,46 +42,309 @@ class AfterbidScreen extends StatelessWidget {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: StreamBuilder<Map<String, dynamic>?>(
-          stream: FreightsRepo.instance.streamFreight(bidId),
+          stream: freightStream ?? FreightsRepo.instance.streamFreight(bidId),
           builder: (context, snap) {
             final freight = snap.data;
+            if (snap.hasError) {
+              return WorkspaceEmptyState(
+                title: tpText(
+                  context,
+                  'Trip details could not be loaded',
+                  'यात्रा का विवरण लोड नहीं हुआ',
+                ),
+                message: tpText(
+                  context,
+                  'Check your connection and return to your trips.',
+                  'इंटरनेट जाँचकर अपनी यात्राओं पर लौटें।',
+                ),
+                icon: Icons.wifi_off,
+                action: FilledButton(
+                  onPressed: () => context.go('/fleet'),
+                  child: Text(tpText(context, 'My trips', 'मेरी यात्राएँ')),
+                ),
+              );
+            }
             if (freight == null) {
+              if (snap.connectionState == ConnectionState.active ||
+                  snap.connectionState == ConnectionState.done) {
+                return WorkspaceEmptyState(
+                  title: tpText(
+                    context,
+                    'This trip is unavailable',
+                    'यह यात्रा उपलब्ध नहीं',
+                  ),
+                  message: tpText(
+                    context,
+                    'Return to your trips and choose an available journey.',
+                    'अपनी यात्राओं पर लौटकर उपलब्ध यात्रा चुनें।',
+                  ),
+                  icon: Icons.route_outlined,
+                  action: FilledButton(
+                    onPressed: () => context.go('/fleet'),
+                    child: Text(tpText(context, 'My trips', 'मेरी यात्राएँ')),
+                  ),
+                );
+              }
               return const Center(child: CircularProgressIndicator());
             }
             final stages = Map<String, dynamic>.from(
               freight['delivery_stages'] as Map? ?? {},
             );
+            final destinations = _deliveryDestinations(freight);
+            final hasMultipleDestinations = destinations.length > 1;
+            final receivingWorkflow = freight['delivery_workflow_version'] == 1;
             final route =
                 '${freight['origin']} → ${freight['destination_town']}';
-            final progressLabel = _progressLabel(freight, stages);
-            return ListView(
-              padding: EdgeInsets.zero,
+            final progressLabel = _progressLabel(
+              context,
+              freight,
+              stages,
+              destinationCount: destinations.length,
+            );
+            final next =
+                !stages.containsKey('dispatched')
+                    ? 0
+                    : !stages.containsKey('pickup')
+                    ? 1
+                    : receivingWorkflow || !stages.containsKey('in_transit')
+                    ? 2
+                    : 3;
+            final l = AppLocalizations.of(context)!;
+            final titles = [
+              l.tpDispatched,
+              l.tpPickup,
+              receivingWorkflow
+                  ? tpText(
+                    context,
+                    'Journey & customer reports',
+                    'यात्रा और ग्राहक रिपोर्ट',
+                  )
+                  : l.tpInTransit,
+              l.tpDelivered,
+            ];
+            final descriptions = [
+              tpText(
+                context,
+                'Choose the vehicle and driver, then share their details with the office.',
+                'वाहन और ड्राइवर चुनकर कार्यालय को जानकारी दें।',
+              ),
+              tpText(
+                context,
+                'Confirm pickup once the driver has reached the loading point.',
+                'ड्राइवर के माल उठाने की जगह पहुँचने पर पुष्टि करें।',
+              ),
+              tpText(
+                context,
+                receivingWorkflow
+                    ? 'Record location updates, customer handovers and extra expenses separately.'
+                    : 'Share the journey update and any required transport references.',
+                receivingWorkflow
+                    ? 'स्थान, ग्राहक डिलीवरी और अतिरिक्त खर्च अलग-अलग दर्ज करें।'
+                    : 'यात्रा अपडेट और ज़रूरी दस्तावेज़ संख्या दें।',
+              ),
+              tpText(
+                context,
+                'Record the receiver and upload delivery proof. Office acceptance is a separate check.',
+                'प्राप्तकर्ता और डिलीवरी प्रमाण दर्ज करें। कार्यालय की स्वीकृति अलग जाँच है।',
+              ),
+            ];
+            final finished =
+                freight['ack_status'] == 'received' ||
+                freight['status'] == 'completed' ||
+                (!receivingWorkflow &&
+                    (hasMultipleDestinations
+                        ? (stages['delivered_stops'] as List? ?? [])
+                                .where(
+                                  (r) => r is Map && r['submitted_at'] != null,
+                                )
+                                .length >=
+                            destinations.length
+                        : stages.containsKey('delivered')));
+            final keys = [_dispatchKey, _pickupKey, _transitKey, _deliveryKey];
+            void jump() {
+              final target = keys[next].currentContext;
+              if (target != null) {
+                Scrollable.ensureVisible(
+                  target,
+                  duration: const Duration(milliseconds: 350),
+                  alignment: .05,
+                );
+              }
+            }
+
+            final stagesContent = Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _header(context, route: route),
-                const SizedBox(height: 12),
-                Center(
-                  child: Text(
-                    progressLabel,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      color: Color(0xFF1D1B20),
+                KeyedSubtree(
+                  key: _dispatchKey,
+                  child: _DispatchedPanel(
+                    bidId: bidId,
+                    saved: stages['dispatched'],
+                  ),
+                ),
+                _LmVehicleConfirmationBanner(stages: stages),
+                KeyedSubtree(
+                  key: _pickupKey,
+                  child: _PickupPanel(bidId: bidId, saved: stages['pickup']),
+                ),
+                if (receivingWorkflow)
+                  KeyedSubtree(
+                    key: _transitKey,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: DeliveryWorkflowPanel(
+                        key: ValueKey('workflow-$bidId'),
+                        freight: freight,
+                      ),
+                    ),
+                  ),
+                if (!receivingWorkflow)
+                  KeyedSubtree(
+                    key: _transitKey,
+                    child: _InTransitPanel(
+                      bidId: bidId,
+                      saved: stages['in_transit'],
+                      hasMultipleDestinations: hasMultipleDestinations,
+                    ),
+                  ),
+                if (!receivingWorkflow)
+                  KeyedSubtree(
+                    key: _deliveryKey,
+                    child: Column(
+                      children: [
+                        if (hasMultipleDestinations)
+                          for (final (index, destination)
+                              in destinations.indexed)
+                            _DeliveredPanel(
+                              key: ValueKey('delivery-stop-$index'),
+                              bidId: bidId,
+                              saved: _savedDeliveryStop(stages, index),
+                              stopIndex: index,
+                              destination: destination,
+                            )
+                        else
+                          _DeliveredPanel(
+                            bidId: bidId,
+                            saved: stages['delivered'],
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            );
+            return ListView(
+              padding: const EdgeInsets.all(20),
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => context.pop(),
+                    icon: const Icon(Icons.arrow_back),
+                    label: Text(
+                      tpText(context, 'Back to trips', 'यात्राओं पर वापस'),
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Text(
-                    'Delivery progress',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
+                WorkspaceHeader(
+                  title: route,
+                  description: tpText(
+                    context,
+                    'Follow the steps below as the trip progresses. Saved information stays available for review.',
+                    'यात्रा आगे बढ़ने पर नीचे दिए काम पूरे करें। सहेजी जानकारी बाद में भी देख सकते हैं।',
+                  ),
+                  icon: Icons.route_outlined,
+                  eyebrow: l.tpDeliveryProgress,
+                  summary: StatusBadge(
+                    label: progressLabel,
+                    tone:
+                        freight['ack_status'] == 'received' ||
+                                freight['status'] == 'completed'
+                            ? WorkspaceTone.success
+                            : WorkspaceTone.info,
                   ),
                 ),
-                const SizedBox(height: 8),
-                _DispatchedPanel(bidId: bidId, saved: stages['dispatched']),
-                _LmVehicleConfirmationBanner(stages: stages),
-                _PickupPanel(bidId: bidId, saved: stages['pickup']),
-                _InTransitPanel(bidId: bidId, saved: stages['in_transit']),
-                _DeliveredPanel(bidId: bidId, saved: stages['delivered']),
+                const SizedBox(height: 20),
+                GuidanceCard(
+                  title: tpText(
+                    context,
+                    finished ? 'Delivery recorded' : 'Next: ${titles[next]}',
+                    finished ? 'डिलीवरी दर्ज है' : 'अगला काम: ${titles[next]}',
+                  ),
+                  message:
+                      finished
+                          ? tpText(
+                            context,
+                            'Review the saved information below. Office POD acceptance and expense review remain separate.',
+                            'नीचे सहेजी जानकारी देखें। कार्यालय की POD स्वीकृति और खर्च की जाँच अलग हैं।',
+                          )
+                          : descriptions[next],
+                  icon: Icons.arrow_forward,
+                  tone: WorkspaceTone.info,
+                  action: FilledButton.icon(
+                    onPressed: jump,
+                    icon: const Icon(Icons.arrow_downward),
+                    label: Text(
+                      tpText(
+                        context,
+                        finished ? 'Review delivery record' : 'Go to this step',
+                        finished ? 'डिलीवरी विवरण देखें' : 'इस काम पर जाएँ',
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                WorkspaceFormLayout(
+                  content: stagesContent,
+                  aside: WorkspaceSection(
+                    title: tpText(context, 'Trip at a glance', 'यात्रा का सार'),
+                    children: [
+                      Text(
+                        '${tpText(context, 'Load', 'माल')}: ${freight['cases'] ?? '—'} ${tpText(context, 'cases', 'केस')} · ${freight['weight_kg'] ?? '—'} MT',
+                        style: const TextStyle(fontSize: 16, height: 1.5),
+                      ),
+                      const SizedBox(height: 16),
+                      for (final (index, title) in titles.indexed)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 14),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                index < next
+                                    ? Icons.check_circle_outline
+                                    : index == next
+                                    ? Icons.radio_button_checked
+                                    : Icons.radio_button_unchecked,
+                                color:
+                                    index < next
+                                        ? const Color(0xFF146C4B)
+                                        : null,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  '${index + 1}. $title',
+                                  style: const TextStyle(height: 1.5),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      GuidanceCard(
+                        title: tpText(
+                          context,
+                          'Saved details',
+                          'सहेजी जानकारी',
+                        ),
+                        message: tpText(
+                          context,
+                          'Open a finished step to review it. Uploading a POD and office approval are separate steps.',
+                          'पूरा काम खोलकर जानकारी देखें। POD जोड़ना और कार्यालय की स्वीकृति अलग काम हैं।',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 const SizedBox(height: 32),
               ],
             );
@@ -74,79 +355,72 @@ class AfterbidScreen extends StatelessWidget {
   }
 
   String _progressLabel(
+    BuildContext context,
     Map<String, dynamic> freight,
-    Map<String, dynamic> stages,
-  ) {
-    if (stages.containsKey('delivered')) return 'DELIVERED';
-    if (stages.containsKey('in_transit')) return 'IN TRANSIT';
-    if (stages.containsKey('pickup')) return 'PICKUP';
-    if (stages.containsKey('dispatched')) return 'DISPATCHED';
-    return (freight['status'] as String? ?? '').toUpperCase();
+    Map<String, dynamic> stages, {
+    required int destinationCount,
+  }) {
+    final l = AppLocalizations.of(context)!;
+    if (freight['delivery_workflow_version'] == 1) {
+      if (freight['ack_status'] == 'received') return l.tpCompleted;
+      if (freight['status'] == 'dispatched' || freight['status'] == 'locked') {
+        return l.tpInTransitCaps;
+      }
+    }
+    if (destinationCount > 1) {
+      final deliveredCount =
+          (stages['delivered_stops'] as List? ?? const [])
+              .where((item) => item is Map && item['submitted_at'] != null)
+              .length;
+      if (deliveredCount >= destinationCount) return l.tpDeliveredCaps;
+    } else if (stages.containsKey('delivered')) {
+      return l.tpDeliveredCaps;
+    }
+    if (stages.containsKey('in_transit')) return l.tpInTransitCaps;
+    if (stages.containsKey('pickup')) return l.tpPickupCaps;
+    if (stages.containsKey('dispatched')) return l.tpDispatchedCaps;
+    return switch (freight['status'] as String? ?? '') {
+      'bidding' => l.tpBiddingOpen,
+      'awarded' => l.tpAwarded,
+      'locked' => l.tpLocked,
+      'completed' => l.tpCompleted,
+      'dispatched' => l.tpDispatchedCaps,
+      final status => status.toUpperCase(),
+    };
   }
+}
 
-  Widget _header(BuildContext context, {required String route}) {
-    return Stack(
-      children: [
-        Container(
-          height: 200,
-          decoration: const BoxDecoration(
-            color: Color(0xFFECE6F0),
-            borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
-          ),
-          child: const Center(
-            child: Icon(
-              Icons.local_shipping_outlined,
-              size: 96,
-              color: Color(0xFFB39DC8),
-            ),
-          ),
-        ),
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(28),
-              ),
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black.withValues(alpha: 0.5),
-                ],
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          top: 8,
-          left: 8,
-          child: IconButton(
-            style: IconButton.styleFrom(
-              backgroundColor: const Color(0xFFE8DEF8),
-            ),
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.pop(),
-          ),
-        ),
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: 16,
-          child: Text(
-            route,
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
+List<String> _deliveryDestinations(Map<String, dynamic> freight) {
+  final details = freight['stop_details'];
+  if (details is List) {
+    final names =
+        details
+            .whereType<Map>()
+            .map((row) => (row['name'] ?? '').toString().trim())
+            .where((name) => name.isNotEmpty)
+            .toList();
+    if (names.isNotEmpty) return names;
   }
+  return [
+    ...(freight['stops'] as List? ?? const [])
+        .map((stop) => stop.toString().trim())
+        .where((name) => name.isNotEmpty),
+    (freight['destination_town'] ?? '').toString().trim(),
+  ].where((name) => name.isNotEmpty).toList();
+}
+
+Map<String, dynamic>? _savedDeliveryStop(
+  Map<String, dynamic> stages,
+  int index,
+) {
+  final saved = stages['delivered_stops'];
+  if (saved is! List) return null;
+  for (final item in saved) {
+    if (item is Map && item['stop_index'] == index) {
+      return Map<String, dynamic>.from(item);
+    }
+  }
+  return null;
 }
 
 class _LmVehicleConfirmationBanner extends StatelessWidget {
@@ -156,6 +430,7 @@ class _LmVehicleConfirmationBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     if (!stages.containsKey('dispatched')) return const SizedBox.shrink();
     final confirmation = Map<String, dynamic>.from(
       stages['vehicle_confirmation'] as Map? ?? const {},
@@ -208,10 +483,10 @@ class _LmVehicleConfirmationBanner extends StatelessWidget {
               children: [
                 Text(
                   confirmed
-                      ? 'LM confirmed vehicle'
+                      ? l.tpLmConfirmedVehicle
                       : issue
-                      ? 'LM raised an issue'
-                      : 'Waiting for LM vehicle confirmation',
+                      ? l.tpLmRaisedIssue
+                      : l.tpWaitingVehicleConfirmation,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -223,10 +498,10 @@ class _LmVehicleConfirmationBanner extends StatelessWidget {
                   note.isNotEmpty
                       ? note
                       : confirmed
-                      ? 'The logistics manager has confirmed the vehicle details.'
+                      ? l.tpVehicleConfirmedHint
                       : issue
-                      ? 'Update the dispatch details and submit again for confirmation.'
-                      : 'If you change dispatch details, LM will need to confirm again.',
+                      ? l.tpDispatchUpdateHint
+                      : l.tpDispatchChangeHint,
                   style: const TextStyle(
                     fontSize: 12,
                     color: Color(0xFF49454F),
@@ -295,13 +570,25 @@ class _StagePanelState extends State<_StagePanel> {
                   Expanded(
                     child: Text(
                       widget.title,
-                      textAlign: TextAlign.center,
+                      textAlign: TextAlign.start,
                       style: const TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  StatusBadge(
+                    label:
+                        widget.submitted
+                            ? tpText(context, 'Saved', 'सहेजा')
+                            : tpText(context, 'To do', 'बाकी'),
+                    tone:
+                        widget.submitted
+                            ? WorkspaceTone.success
+                            : WorkspaceTone.neutral,
+                  ),
+                  const SizedBox(width: 8),
                   Icon(_open ? Icons.expand_less : Icons.expand_more),
                 ],
               ),
@@ -347,6 +634,7 @@ class _LabelField extends StatelessWidget {
 
 class _UploadField extends StatefulWidget {
   const _UploadField({
+    super.key,
     required this.label,
     required this.bidId,
     required this.stage,
@@ -424,7 +712,9 @@ class _UploadFieldState extends State<_UploadField> {
       if (bytes == null || bytes.isEmpty) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not read selected image')),
+          SnackBar(
+            content: Text(AppLocalizations.of(context)!.tpCouldNotReadImage),
+          ),
         );
         return;
       }
@@ -458,14 +748,16 @@ class _UploadFieldState extends State<_UploadField> {
       if (!mounted) return;
       setState(() => _path = path);
       widget.onUploaded(path);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Photo uploaded')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.tpPhotoUploaded)),
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.tpUploadFailed('$e')),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -519,9 +811,9 @@ class _UploadFieldState extends State<_UploadField> {
               Flexible(
                 child: Text(
                   _uploading
-                      ? 'Uploading...'
+                      ? AppLocalizations.of(context)!.tpUploading
                       : uploaded
-                      ? 'Uploaded - tap to preview'
+                      ? AppLocalizations.of(context)!.tpUploadedPreview
                       : widget.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -550,20 +842,51 @@ Future<void> _save(
   Map<String, dynamic> data,
 ) async {
   try {
+    _normalizeStagePhones(data);
     await FreightsRepo.instance.saveDeliveryStage(
       freightId: bidId,
       stage: stage,
       data: data,
     );
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Saved')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(AppLocalizations.of(context)!.tpSaved)),
+    );
   } catch (e) {
     if (!context.mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          e is FormatException
+              ? AppLocalizations.of(context)!.tpEnterValidPhone
+              : AppLocalizations.of(context)!.tpSaveFailed('$e'),
+        ),
+      ),
+    );
+  }
+}
+
+// Validate supplied contact fields, including subcontractor rows, before saving.
+void _normalizeStagePhones(dynamic value) {
+  if (value is Map) {
+    for (final key in value.keys.toList()) {
+      final field = key.toString();
+      if (field == 'phone' || field.endsWith('_phone')) {
+        final raw = (value[key] ?? '').toString().trim();
+        if (raw.isEmpty) continue;
+        final normalized = normalizeIndianPhone(raw);
+        if (normalized == null) {
+          throw const FormatException('Enter a valid Indian mobile number');
+        }
+        value[key] = normalized;
+      } else {
+        _normalizeStagePhones(value[key]);
+      }
+    }
+  } else if (value is List) {
+    for (final item in value) {
+      _normalizeStagePhones(item);
+    }
   }
 }
 
@@ -615,7 +938,7 @@ class _DispatchedPanelState extends State<_DispatchedPanel> {
   @override
   Widget build(BuildContext context) {
     return _StagePanel(
-      title: 'Dispatched',
+      title: AppLocalizations.of(context)!.tpDispatched,
       submitted: widget.saved != null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -649,11 +972,11 @@ class _DispatchedPanelState extends State<_DispatchedPanel> {
               if (mounted) setState(() => _selectionVersion++);
             },
           ),
-          const _SectionHeader('Lorry proof'),
+          _SectionHeader(AppLocalizations.of(context)!.tpLorryProof),
           _LabelField(
-            label: 'Add Lorry Photograph',
+            label: AppLocalizations.of(context)!.tpAddLorryPhotograph,
             child: _UploadField(
-              label: 'Upload a photo of Lorry',
+              label: AppLocalizations.of(context)!.tpUploadLorryPhoto,
               bidId: widget.bidId,
               stage: 'dispatched',
               kind: 'lorry',
@@ -662,11 +985,11 @@ class _DispatchedPanelState extends State<_DispatchedPanel> {
             ),
           ),
           const SizedBox(height: 8),
-          const _SectionHeader('Driver proof'),
+          _SectionHeader(AppLocalizations.of(context)!.tpDriverProof),
           _LabelField(
-            label: 'Enter Driver Photograph',
+            label: AppLocalizations.of(context)!.tpEnterDriverPhotograph,
             child: _UploadField(
-              label: 'Upload a photo of Driver',
+              label: AppLocalizations.of(context)!.tpUploadDriverPhoto,
               bidId: widget.bidId,
               stage: 'dispatched',
               kind: 'driver',
@@ -675,9 +998,9 @@ class _DispatchedPanelState extends State<_DispatchedPanel> {
             ),
           ),
           _LabelField(
-            label: 'Enter Driver Aadhaar Card Photograph',
+            label: AppLocalizations.of(context)!.tpDriverAadhaarPhoto,
             child: _UploadField(
-              label: 'Upload a photo of Driver Aadhaar Card',
+              label: AppLocalizations.of(context)!.tpUploadDriverAadhaar,
               bidId: widget.bidId,
               stage: 'dispatched',
               kind: 'driver-aadhaar',
@@ -687,7 +1010,10 @@ class _DispatchedPanelState extends State<_DispatchedPanel> {
           ),
           const SizedBox(height: 8),
           PrimaryButton(
-            label: _saving ? 'Saving…' : 'Submit Lorry details',
+            label:
+                _saving
+                    ? AppLocalizations.of(context)!.tpSavingEllipsis
+                    : AppLocalizations.of(context)!.tpSubmitLorryDetails,
             onPressed:
                 _saving
                     ? null
@@ -741,19 +1067,24 @@ class _SavedVehiclePicker extends StatelessWidget {
         final vehicles = snap.data ?? const <Map<String, dynamic>>[];
         final selected = _selectedRow(vehicles, selectedId);
         return _SavedEntitySelector(
-          title: 'Select vehicle',
-          emptyText: 'No saved vehicles yet',
+          title: AppLocalizations.of(context)!.tpSelectVehicle,
+          emptyText: AppLocalizations.of(context)!.tpNoSavedVehicles,
           selectedTitle:
               selected == null
-                  ? 'Choose from your saved fleet'
-                  : (selected['registration_number'] ?? 'Vehicle').toString(),
+                  ? AppLocalizations.of(context)!.tpChooseSavedFleet
+                  : (selected['registration_number'] ??
+                          AppLocalizations.of(context)!.tpVehicles)
+                      .toString(),
           selectedSubtitle:
               selected == null
-                  ? 'Use a vehicle you already added, or add one first.'
-                  : _vehicleSummary(selected),
+                  ? AppLocalizations.of(context)!.tpUseSavedVehicle
+                  : _vehicleSummary(context, selected),
           icon: Icons.local_shipping_outlined,
-          addLabel: 'Add vehicle',
-          selectLabel: vehicles.isEmpty ? null : 'Select vehicle',
+          addLabel: AppLocalizations.of(context)!.tpAddVehicle,
+          selectLabel:
+              vehicles.isEmpty
+                  ? null
+                  : AppLocalizations.of(context)!.tpSelectVehicle,
           onAdd: onAdd,
           onSelect:
               vehicles.isEmpty
@@ -775,19 +1106,24 @@ class _SavedVehiclePicker extends StatelessWidget {
     return null;
   }
 
-  static String _vehicleSummary(Map<String, dynamic> vehicle) {
+  static String _vehicleSummary(
+    BuildContext context,
+    Map<String, dynamic> vehicle,
+  ) {
+    final l = AppLocalizations.of(context)!;
     final capacity = [
       if ((vehicle['capacity_qt'] ?? '').toString().trim().isNotEmpty)
-        '${vehicle['capacity_qt']} Cases',
+        l.tpCases('${vehicle['capacity_qt']}'),
       if ((vehicle['capacity_weight_kg'] ?? '').toString().trim().isNotEmpty)
-        '${vehicle['capacity_weight_kg']} Ton',
+        '${vehicle['capacity_weight_kg']} MT',
     ].join(' · ');
     return [
       (vehicle['vehicle_type'] ?? '').toString(),
       capacity,
-      if ((vehicle['rc_number'] ?? '').toString().trim().isNotEmpty) 'RC saved',
+      if ((vehicle['rc_number'] ?? '').toString().trim().isNotEmpty)
+        l.tpRcSaved,
       if ((vehicle['insurance_number'] ?? '').toString().trim().isNotEmpty)
-        'Insurance saved',
+        l.tpInsuranceSaved,
     ].where((value) => value.trim().isNotEmpty).join(' · ');
   }
 
@@ -804,12 +1140,15 @@ class _SavedVehiclePicker extends StatelessWidget {
       ),
       builder:
           (context) => _EntityPickerSheet(
-            title: 'Select vehicle',
+            title: AppLocalizations.of(context)!.tpSelectVehicle,
             rows: vehicles,
             icon: Icons.local_shipping_outlined,
             titleFor:
-                (row) => (row['registration_number'] ?? 'Vehicle').toString(),
-            subtitleFor: _vehicleSummary,
+                (row) =>
+                    (row['registration_number'] ??
+                            AppLocalizations.of(context)!.tpVehicles)
+                        .toString(),
+            subtitleFor: (row) => _vehicleSummary(context, row),
           ),
     );
     if (picked != null) onPick(picked);
@@ -843,26 +1182,31 @@ class _SavedDriverPicker extends StatelessWidget {
         final drivers = snap.data ?? const <Map<String, dynamic>>[];
         final selected = _selectedRow(drivers, selectedId);
         return _SavedEntitySelector(
-          title: 'Select driver',
-          emptyText: 'No saved drivers yet',
+          title: AppLocalizations.of(context)!.tpSelectDriver,
+          emptyText: AppLocalizations.of(context)!.tpNoSavedDrivers,
           selectedTitle:
               selected == null
-                  ? 'Choose from your saved drivers'
-                  : (selected['name'] ?? 'Driver').toString(),
+                  ? AppLocalizations.of(context)!.tpChooseSavedDrivers
+                  : (selected['name'] ??
+                          AppLocalizations.of(context)!.tpDrivers)
+                      .toString(),
           selectedSubtitle:
               selected == null
-                  ? 'Use a driver you already added, or add one first.'
+                  ? AppLocalizations.of(context)!.tpUseSavedDriver
                   : [
                     (selected['phone'] ?? '').toString(),
                     if ((selected['licence_number'] ?? '')
                         .toString()
                         .trim()
                         .isNotEmpty)
-                      'Licence saved',
+                      AppLocalizations.of(context)!.tpLicenceSaved,
                   ].where((value) => value.trim().isNotEmpty).join(' · '),
           icon: Icons.badge_outlined,
-          addLabel: 'Add driver',
-          selectLabel: drivers.isEmpty ? null : 'Select driver',
+          addLabel: AppLocalizations.of(context)!.tpAddDriver,
+          selectLabel:
+              drivers.isEmpty
+                  ? null
+                  : AppLocalizations.of(context)!.tpSelectDriver,
           onAdd: onAdd,
           onSelect:
               drivers.isEmpty
@@ -897,10 +1241,13 @@ class _SavedDriverPicker extends StatelessWidget {
       ),
       builder:
           (context) => _EntityPickerSheet(
-            title: 'Select driver',
+            title: AppLocalizations.of(context)!.tpSelectDriver,
             rows: drivers,
             icon: Icons.badge_outlined,
-            titleFor: (row) => (row['name'] ?? 'Driver').toString(),
+            titleFor:
+                (row) =>
+                    (row['name'] ?? AppLocalizations.of(context)!.tpDrivers)
+                        .toString(),
             subtitleFor:
                 (row) => [
                   (row['phone'] ?? '').toString(),
@@ -908,7 +1255,7 @@ class _SavedDriverPicker extends StatelessWidget {
                       .toString()
                       .trim()
                       .isNotEmpty)
-                    'Licence saved',
+                    AppLocalizations.of(context)!.tpLicenceSaved,
                 ].where((value) => value.trim().isNotEmpty).join(' · '),
           ),
     );
@@ -1106,8 +1453,6 @@ class _PickupPanel extends StatefulWidget {
 
 class _PickupPanelState extends State<_PickupPanel> {
   late final TextEditingController _phone;
-  String? _hiddenInvoiceNumber;
-  String? _hiddenInvoicePhotoPath;
   String? _sitePhotoPath;
   bool _saving = false;
 
@@ -1116,8 +1461,6 @@ class _PickupPanelState extends State<_PickupPanel> {
     super.initState();
     final s = widget.saved as Map<String, dynamic>? ?? {};
     _phone = TextEditingController(text: s['driver_phone'] ?? '');
-    _hiddenInvoiceNumber = s['invoice_number'] as String?;
-    _hiddenInvoicePhotoPath = s['invoice_photo_path'] as String?;
     _sitePhotoPath = s['site_photo_path'] as String?;
   }
 
@@ -1130,14 +1473,14 @@ class _PickupPanelState extends State<_PickupPanel> {
   @override
   Widget build(BuildContext context) {
     return _StagePanel(
-      title: 'Pickup',
+      title: AppLocalizations.of(context)!.tpPickup,
       submitted: widget.saved != null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _SectionHeader('Pickup details'),
+          _SectionHeader(AppLocalizations.of(context)!.tpPickupDetails),
           _LabelField(
-            label: 'Enter Driver Phone Number',
+            label: AppLocalizations.of(context)!.tpEnterDriverPhone,
             child: PillTextField(
               controller: _phone,
               hint: '987 - 6541 - 321',
@@ -1146,9 +1489,9 @@ class _PickupPanelState extends State<_PickupPanel> {
             ),
           ),
           _LabelField(
-            label: 'Enter on site photo',
+            label: AppLocalizations.of(context)!.tpEnterSitePhoto,
             child: _UploadField(
-              label: 'Upload a photo of your presence',
+              label: AppLocalizations.of(context)!.tpUploadPresence,
               bidId: widget.bidId,
               stage: 'pickup',
               kind: 'site',
@@ -1158,18 +1501,17 @@ class _PickupPanelState extends State<_PickupPanel> {
           ),
           const SizedBox(height: 8),
           PrimaryButton(
-            label: _saving ? 'Saving…' : 'Submit Pickup details',
+            label:
+                _saving
+                    ? AppLocalizations.of(context)!.tpSavingEllipsis
+                    : AppLocalizations.of(context)!.tpSubmitPickup,
             onPressed:
                 _saving
                     ? null
                     : () async {
                       setState(() => _saving = true);
                       await _save(context, widget.bidId, 'pickup', {
-                        if (_hiddenInvoiceNumber != null)
-                          'invoice_number': _hiddenInvoiceNumber,
                         'driver_phone': _phone.text.trim(),
-                        if (_hiddenInvoicePhotoPath != null)
-                          'invoice_photo_path': _hiddenInvoicePhotoPath,
                         'site_photo_path': _sitePhotoPath,
                       });
                       if (mounted) setState(() => _saving = false);
@@ -1206,9 +1548,14 @@ class _Contractor {
 }
 
 class _InTransitPanel extends StatefulWidget {
-  const _InTransitPanel({required this.bidId, required this.saved});
+  const _InTransitPanel({
+    required this.bidId,
+    required this.saved,
+    required this.hasMultipleDestinations,
+  });
   final String bidId;
   final dynamic saved;
+  final bool hasMultipleDestinations;
 
   @override
   State<_InTransitPanel> createState() => _InTransitPanelState();
@@ -1261,44 +1608,62 @@ class _InTransitPanelState extends State<_InTransitPanel> {
   @override
   Widget build(BuildContext context) {
     return _StagePanel(
-      title: 'In Transit',
+      title: AppLocalizations.of(context)!.tpInTransit,
       submitted: widget.saved != null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _SectionHeader('Sub-contractors'),
-          ..._contractors.asMap().entries.map(
-            (e) => _contractorCard(e.key, e.value),
-          ),
-          const SizedBox(height: 4),
-          OutlinedButton.icon(
-            onPressed: _addContractor,
-            icon: const Icon(Icons.person_add_alt_1),
-            label: const Text('Add contractor'),
+          Material(
+            color: Colors.transparent,
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              title: Text(AppLocalizations.of(context)!.tpSubcontractors),
+              subtitle: Text(
+                tpText(
+                  context,
+                  'Add only if someone else helps on the route.',
+                  'रास्ते में किसी और की मदद होने पर ही जोड़ें।',
+                ),
+              ),
+              children: [
+                _SectionHeader(AppLocalizations.of(context)!.tpSubcontractors),
+                ..._contractors.asMap().entries.map(
+                  (e) => _contractorCard(e.key, e.value),
+                ),
+                const SizedBox(height: 4),
+                OutlinedButton.icon(
+                  onPressed: _addContractor,
+                  icon: const Icon(Icons.person_add_alt_1),
+                  label: Text(AppLocalizations.of(context)!.tpAddContractor),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 16),
-          const _SectionHeader('Verification details'),
-          _LabelField(
-            label: 'GR / Bilty number',
-            child: PillTextField(
-              controller: _grBilty,
-              hint: 'GR-7821',
-              textAlign: TextAlign.start,
+          if (!widget.hasMultipleDestinations) ...[
+            _SectionHeader(AppLocalizations.of(context)!.tpVerificationDetails),
+            _LabelField(
+              label: AppLocalizations.of(context)!.tpGrBiltyNumber,
+              child: PillTextField(
+                controller: _grBilty,
+                hint: 'GR-7821',
+                textAlign: TextAlign.start,
+              ),
             ),
-          ),
-          _LabelField(
-            label: 'E-way bill number',
-            child: PillTextField(
-              controller: _eWayBill,
-              hint: 'EWB-1122334455',
-              textAlign: TextAlign.start,
+            _LabelField(
+              label: AppLocalizations.of(context)!.tpEwayBillNumber,
+              child: PillTextField(
+                controller: _eWayBill,
+                hint: 'EWB-1122334455',
+                textAlign: TextAlign.start,
+              ),
             ),
-          ),
+          ],
           _LabelField(
-            label: 'Current location',
+            label: AppLocalizations.of(context)!.tpCurrentLocation,
             child: PillTextField(
               controller: _lastLocation,
-              hint: 'e.g. Ambala bypass',
+              hint: AppLocalizations.of(context)!.tpLocationHint,
               textAlign: TextAlign.start,
             ),
           ),
@@ -1312,8 +1677,12 @@ class _InTransitPanelState extends State<_InTransitPanel> {
                         final location = _lastLocation.text.trim();
                         if (location.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Enter the current location'),
+                            SnackBar(
+                              content: Text(
+                                AppLocalizations.of(
+                                  context,
+                                )!.tpEnterCurrentLocation,
+                              ),
                             ),
                           );
                           return;
@@ -1326,13 +1695,21 @@ class _InTransitPanelState extends State<_InTransitPanel> {
                           );
                           if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Location updated')),
+                            SnackBar(
+                              content: Text(
+                                AppLocalizations.of(context)!.tpLocationUpdated,
+                              ),
+                            ),
                           );
                         } catch (e) {
                           if (!context.mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Location update failed: $e'),
+                              content: Text(
+                                AppLocalizations.of(
+                                  context,
+                                )!.tpLocationUpdateFailed('$e'),
+                              ),
                             ),
                           );
                         } finally {
@@ -1342,15 +1719,19 @@ class _InTransitPanelState extends State<_InTransitPanel> {
                         }
                       },
               icon: const Icon(Icons.edit_location_alt_outlined),
-              label: Text(_savingLocation ? 'Updating...' : 'Update location'),
+              label: Text(
+                _savingLocation
+                    ? AppLocalizations.of(context)!.tpUpdating
+                    : AppLocalizations.of(context)!.tpUpdateLocation,
+              ),
             ),
           ),
           const SizedBox(height: 10),
           if (_sitePhotoPath != null)
             _LabelField(
-              label: 'Transit site photo',
+              label: AppLocalizations.of(context)!.tpTransitSitePhoto,
               child: _UploadField(
-                label: 'Upload a photo of your presence',
+                label: AppLocalizations.of(context)!.tpUploadPresence,
                 bidId: widget.bidId,
                 stage: 'in-transit',
                 kind: 'site',
@@ -1360,7 +1741,10 @@ class _InTransitPanelState extends State<_InTransitPanel> {
             ),
           const SizedBox(height: 8),
           PrimaryButton(
-            label: _saving ? 'Saving…' : 'Share transit details',
+            label:
+                _saving
+                    ? AppLocalizations.of(context)!.tpSavingEllipsis
+                    : AppLocalizations.of(context)!.tpShareTransit,
             onPressed:
                 _saving
                     ? null
@@ -1379,8 +1763,10 @@ class _InTransitPanelState extends State<_InTransitPanel> {
                               .toList();
                       await _save(context, widget.bidId, 'in_transit', {
                         'contractors': cleaned,
-                        'gr_bilty_number': _grBilty.text.trim(),
-                        'e_way_bill_number': _eWayBill.text.trim(),
+                        if (!widget.hasMultipleDestinations) ...{
+                          'gr_bilty_number': _grBilty.text.trim(),
+                          'e_way_bill_number': _eWayBill.text.trim(),
+                        },
                         'last_location': _lastLocation.text.trim(),
                         'site_photo_path': _sitePhotoPath,
                       });
@@ -1407,7 +1793,7 @@ class _InTransitPanelState extends State<_InTransitPanel> {
             children: [
               Expanded(
                 child: Text(
-                  'Contractor ${i + 1}',
+                  AppLocalizations.of(context)!.tpContractorNumber(i + 1),
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
@@ -1425,9 +1811,14 @@ class _InTransitPanelState extends State<_InTransitPanel> {
                 ),
             ],
           ),
-          _fieldRow('Name', c.name, (v) => c.name = v, 'Vijaypratap Rajput'),
           _fieldRow(
-            'Phone',
+            AppLocalizations.of(context)!.tpName,
+            c.name,
+            (v) => c.name = v,
+            'Vijaypratap Rajput',
+          ),
+          _fieldRow(
+            AppLocalizations.of(context)!.tpPhone,
             c.phone,
             (v) => c.phone = v,
             '987-6543-654',
@@ -1437,20 +1828,20 @@ class _InTransitPanelState extends State<_InTransitPanel> {
             children: [
               Expanded(
                 child: _fieldRow(
-                  'From',
+                  AppLocalizations.of(context)!.tpFrom,
                   c.from,
                   (v) => c.from = v,
-                  'Select city',
+                  AppLocalizations.of(context)!.tpSelectCity,
                   useCityPicker: true,
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _fieldRow(
-                  'To',
+                  AppLocalizations.of(context)!.tpTo,
                   c.to,
                   (v) => c.to = v,
-                  'Select city',
+                  AppLocalizations.of(context)!.tpSelectCity,
                   useCityPicker: true,
                 ),
               ),
@@ -1597,9 +1988,17 @@ class _CityFieldRowState extends State<_CityFieldRow> {
 // ---------- Delivered ----------
 
 class _DeliveredPanel extends StatefulWidget {
-  const _DeliveredPanel({required this.bidId, required this.saved});
+  const _DeliveredPanel({
+    super.key,
+    required this.bidId,
+    required this.saved,
+    this.stopIndex,
+    this.destination,
+  });
   final String bidId;
   final dynamic saved;
+  final int? stopIndex;
+  final String? destination;
 
   @override
   State<_DeliveredPanel> createState() => _DeliveredPanelState();
@@ -1611,6 +2010,8 @@ class _DeliveredPanelState extends State<_DeliveredPanel> {
   late final TextEditingController _gr;
   late final TextEditingController _eWayBill;
   late final TextEditingController _billReason;
+  List<String> _grNumbers = const [];
+  List<String> _eWayBillNumbers = const [];
   String? _podPhotoPath;
   String? _billPhotoPath;
   String? _sitePhotoPath;
@@ -1625,9 +2026,46 @@ class _DeliveredPanelState extends State<_DeliveredPanel> {
     _gr = TextEditingController(text: s['gr_number'] ?? '');
     _eWayBill = TextEditingController(text: s['e_way_bill_number'] ?? '');
     _billReason = TextEditingController(text: s['bill_reason'] ?? '');
+    _grNumbers = _savedNumbers(s['gr_numbers']);
+    _eWayBillNumbers = _savedNumbers(s['e_way_bill_numbers']);
     _podPhotoPath = s['pod_photo_path'] as String?;
     _billPhotoPath = s['bill_photo_path'] as String?;
     _sitePhotoPath = s['site_photo_path'] as String?;
+  }
+
+  @override
+  void didUpdateWidget(covariant _DeliveredPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.saved != widget.saved && _matchesSaved(oldWidget.saved)) {
+      final saved = widget.saved as Map<String, dynamic>? ?? {};
+      _receiver.text = (saved['receiver_name'] ?? '').toString();
+      _receiverPhone.text = (saved['receiver_phone'] ?? '').toString();
+      _gr.text = (saved['gr_number'] ?? '').toString();
+      _eWayBill.text = (saved['e_way_bill_number'] ?? '').toString();
+      _billReason.text = (saved['bill_reason'] ?? '').toString();
+      _grNumbers = _savedNumbers(saved['gr_numbers']);
+      _eWayBillNumbers = _savedNumbers(saved['e_way_bill_numbers']);
+      _podPhotoPath = saved['pod_photo_path'] as String?;
+      _billPhotoPath = saved['bill_photo_path'] as String?;
+      _sitePhotoPath = saved['site_photo_path'] as String?;
+    }
+  }
+
+  bool _matchesSaved(dynamic value) {
+    final saved = value as Map<String, dynamic>? ?? {};
+    return _receiver.text == (saved['receiver_name'] ?? '').toString() &&
+        _receiverPhone.text == (saved['receiver_phone'] ?? '').toString() &&
+        _gr.text == (saved['gr_number'] ?? '').toString() &&
+        _eWayBill.text == (saved['e_way_bill_number'] ?? '').toString() &&
+        _billReason.text == (saved['bill_reason'] ?? '').toString() &&
+        _sameNumbers(_grNumbers, _savedNumbers(saved['gr_numbers'])) &&
+        _sameNumbers(
+          _eWayBillNumbers,
+          _savedNumbers(saved['e_way_bill_numbers']),
+        ) &&
+        _podPhotoPath == saved['pod_photo_path'] &&
+        _billPhotoPath == saved['bill_photo_path'] &&
+        _sitePhotoPath == saved['site_photo_path'];
   }
 
   @override
@@ -1643,14 +2081,17 @@ class _DeliveredPanelState extends State<_DeliveredPanel> {
   @override
   Widget build(BuildContext context) {
     return _StagePanel(
-      title: 'Delivered',
+      title:
+          widget.destination == null
+              ? AppLocalizations.of(context)!.tpDelivered
+              : '${AppLocalizations.of(context)!.tpDelivered} · ${widget.destination}',
       submitted: widget.saved != null,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const _SectionHeader('Enter Delivery site details'),
+          _SectionHeader(AppLocalizations.of(context)!.tpDeliverySiteDetails),
           _LabelField(
-            label: 'Enter receiver name',
+            label: AppLocalizations.of(context)!.tpEnterReceiverName,
             child: PillTextField(
               controller: _receiver,
               hint: 'Vijaypratap Rajput',
@@ -1658,7 +2099,7 @@ class _DeliveredPanelState extends State<_DeliveredPanel> {
             ),
           ),
           _LabelField(
-            label: 'Enter Receiver number',
+            label: AppLocalizations.of(context)!.tpEnterReceiverNumber,
             child: PillTextField(
               controller: _receiverPhone,
               hint: '987-6543-654',
@@ -1666,83 +2107,276 @@ class _DeliveredPanelState extends State<_DeliveredPanel> {
               textAlign: TextAlign.start,
             ),
           ),
-          _LabelField(
-            label: 'Enter GR Number',
-            child: PillTextField(
-              controller: _gr,
-              hint: 'GR-4521',
-              textAlign: TextAlign.start,
+          if (widget.stopIndex == null) ...[
+            _LabelField(
+              label: AppLocalizations.of(context)!.tpEnterGrNumber,
+              child: PillTextField(
+                controller: _gr,
+                hint: 'GR-4521',
+                textAlign: TextAlign.start,
+              ),
             ),
-          ),
-          _LabelField(
-            label: 'Enter E-way Bill Number',
-            child: PillTextField(
-              controller: _eWayBill,
-              hint: 'EWB-1122334455',
-              textAlign: TextAlign.start,
+            _LabelField(
+              label: AppLocalizations.of(context)!.tpEnterEwayBill,
+              child: PillTextField(
+                controller: _eWayBill,
+                hint: 'EWB-1122334455',
+                textAlign: TextAlign.start,
+              ),
             ),
-          ),
+          ] else ...[
+            _ReferenceListField(
+              label: AppLocalizations.of(context)!.tpGrBiltyNumber,
+              initialValues: _grNumbers,
+              onChanged: (values) => _grNumbers = values,
+            ),
+            _ReferenceListField(
+              label: AppLocalizations.of(context)!.tpEwayBillNumber,
+              initialValues: _eWayBillNumbers,
+              onChanged: (values) => _eWayBillNumbers = values,
+            ),
+          ],
           _LabelField(
-            label: 'Proof of Delivery (GR)',
+            label: AppLocalizations.of(context)!.tpProofOfDelivery,
             child: _UploadField(
-              label: 'Upload Proof of Delivery',
+              key: ValueKey('delivery-pod-${widget.stopIndex ?? 'single'}'),
+              label: AppLocalizations.of(context)!.tpUploadPod,
               bidId: widget.bidId,
-              stage: 'delivered',
-              kind: 'pod',
+              stage: widget.stopIndex == null ? 'delivered' : 'delivered-stop',
+              kind:
+                  widget.stopIndex == null ? 'pod' : '${widget.stopIndex}-pod',
               initialPath: _podPhotoPath,
               onUploaded: (path) => _podPhotoPath = path,
             ),
           ),
           _LabelField(
-            label: 'Additional Charges (if any) — bill reason',
+            label: AppLocalizations.of(context)!.tpAdditionalChargesReason,
             child: PillTextField(
               controller: _billReason,
-              hint: 'e.g. loading charges',
+              hint: AppLocalizations.of(context)!.tpLoadingChargesHint,
               textAlign: TextAlign.start,
             ),
           ),
           _LabelField(
-            label: 'Bill photo',
+            label: AppLocalizations.of(context)!.tpBillPhoto,
             child: _UploadField(
-              label: 'Upload a photo of the bill',
+              label: AppLocalizations.of(context)!.tpUploadBillPhoto,
               bidId: widget.bidId,
-              stage: 'delivered',
-              kind: 'bill',
+              stage: widget.stopIndex == null ? 'delivered' : 'delivered-stop',
+              kind:
+                  widget.stopIndex == null
+                      ? 'bill'
+                      : '${widget.stopIndex}-bill',
               initialPath: _billPhotoPath,
               onUploaded: (path) => _billPhotoPath = path,
             ),
           ),
           _LabelField(
-            label: 'On-site photo',
+            label: AppLocalizations.of(context)!.tpOnSitePhoto,
             child: _UploadField(
-              label: 'Upload a photo of your presence',
+              label: AppLocalizations.of(context)!.tpUploadPresence,
               bidId: widget.bidId,
-              stage: 'delivered',
-              kind: 'site',
+              stage: widget.stopIndex == null ? 'delivered' : 'delivered-stop',
+              kind:
+                  widget.stopIndex == null
+                      ? 'site'
+                      : '${widget.stopIndex}-site',
               initialPath: _sitePhotoPath,
               onUploaded: (path) => _sitePhotoPath = path,
             ),
           ),
           const SizedBox(height: 8),
           PrimaryButton(
-            label: _saving ? 'Saving…' : 'Share delivery details',
+            label:
+                _saving
+                    ? AppLocalizations.of(context)!.tpSavingEllipsis
+                    : AppLocalizations.of(context)!.tpShareDelivery,
             onPressed:
                 _saving
                     ? null
                     : () async {
+                      if (_receiver.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              AppLocalizations.of(context)!.tpEnterReceiverName,
+                            ),
+                          ),
+                        );
+                        return;
+                      }
                       setState(() => _saving = true);
-                      await _save(context, widget.bidId, 'delivered', {
-                        'receiver_name': _receiver.text.trim(),
-                        'receiver_phone': _receiverPhone.text.trim(),
-                        'gr_number': _gr.text.trim(),
-                        'e_way_bill_number': _eWayBill.text.trim(),
-                        'bill_reason': _billReason.text.trim(),
-                        'pod_photo_path': _podPhotoPath,
-                        'bill_photo_path': _billPhotoPath,
-                        'site_photo_path': _sitePhotoPath,
-                      });
+                      await _save(
+                        context,
+                        widget.bidId,
+                        widget.stopIndex == null
+                            ? 'delivered'
+                            : 'delivered_stop',
+                        {
+                          if (widget.stopIndex != null)
+                            'stop_index': widget.stopIndex,
+                          if (widget.destination != null)
+                            'destination': widget.destination,
+                          'receiver_name': _receiver.text.trim(),
+                          'receiver_phone': _receiverPhone.text.trim(),
+                          if (widget.stopIndex == null) ...{
+                            'gr_number': _gr.text.trim(),
+                            'e_way_bill_number': _eWayBill.text.trim(),
+                          } else ...{
+                            'gr_numbers': _grNumbers,
+                            'e_way_bill_numbers': _eWayBillNumbers,
+                          },
+                          'bill_reason': _billReason.text.trim(),
+                          'pod_photo_path': _podPhotoPath,
+                          'bill_photo_path': _billPhotoPath,
+                          'site_photo_path': _sitePhotoPath,
+                        },
+                      );
                       if (mounted) setState(() => _saving = false);
                     },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+List<String> _savedNumbers(dynamic value) {
+  if (value is! List) return const [];
+  return value
+      .map((item) => item.toString().trim())
+      .where((item) => item.isNotEmpty)
+      .toList();
+}
+
+bool _sameNumbers(List<String> first, List<String> second) {
+  if (first.length != second.length) return false;
+  for (var index = 0; index < first.length; index++) {
+    if (first[index] != second[index]) return false;
+  }
+  return true;
+}
+
+class _ReferenceListField extends StatefulWidget {
+  const _ReferenceListField({
+    required this.label,
+    required this.initialValues,
+    required this.onChanged,
+  });
+
+  final String label;
+  final List<String> initialValues;
+  final ValueChanged<List<String>> onChanged;
+
+  @override
+  State<_ReferenceListField> createState() => _ReferenceListFieldState();
+}
+
+class _ReferenceListFieldState extends State<_ReferenceListField> {
+  late List<TextEditingController> _controllers;
+
+  @override
+  void initState() {
+    super.initState();
+    _controllers =
+        (widget.initialValues.isEmpty ? <String>[''] : widget.initialValues)
+            .map(_controllerFor)
+            .toList();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ReferenceListField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final current =
+        _controllers
+            .map((controller) => controller.text.trim())
+            .where((value) => value.isNotEmpty)
+            .toList();
+    if (_sameNumbers(current, oldWidget.initialValues) &&
+        !_sameNumbers(oldWidget.initialValues, widget.initialValues)) {
+      for (final controller in _controllers) {
+        controller.removeListener(_notify);
+        controller.dispose();
+      }
+      _controllers =
+          (widget.initialValues.isEmpty ? <String>[''] : widget.initialValues)
+              .map(_controllerFor)
+              .toList();
+    }
+  }
+
+  TextEditingController _controllerFor(String value) {
+    final controller = TextEditingController(text: value);
+    controller.addListener(_notify);
+    return controller;
+  }
+
+  void _notify() {
+    widget.onChanged(
+      _controllers
+          .map((controller) => controller.text.trim())
+          .where((value) => value.isNotEmpty)
+          .toList(),
+    );
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _controllers) {
+      controller.removeListener(_notify);
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _LabelField(
+      label: widget.label,
+      child: Column(
+        children: [
+          for (final (index, controller) in _controllers.indexed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: PillTextField(
+                      controller: controller,
+                      hint: '${widget.label} ${index + 1}',
+                      textAlign: TextAlign.start,
+                    ),
+                  ),
+                  if (_controllers.length > 1)
+                    IconButton(
+                      tooltip: AppLocalizations.of(
+                        context,
+                      )!.tpRemoveReference(widget.label),
+                      icon: const Icon(Icons.remove_circle_outline),
+                      onPressed: () {
+                        setState(() {
+                          final removed = _controllers.removeAt(index);
+                          removed.removeListener(_notify);
+                          removed.dispose();
+                        });
+                        _notify();
+                      },
+                    ),
+                ],
+              ),
+            ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed:
+                  () => setState(() {
+                    _controllers.add(_controllerFor(''));
+                  }),
+              icon: const Icon(Icons.add),
+              label: Text(
+                AppLocalizations.of(context)!.tpAddReference(widget.label),
+              ),
+            ),
           ),
         ],
       ),

@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import '../../core/widgets/workspace_widgets.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import 'admin_ai_service.dart';
@@ -6,6 +8,11 @@ import 'admin_ai_service.dart';
 const _onSurface = Color(0xFF1D1B20);
 const _onSurfaceVariant = Color(0xFF49454F);
 const _border = Color(0xFFE4E0E8);
+
+String _copy(BuildContext context, String english, String hindi) =>
+    context.mounted && Localizations.localeOf(context).languageCode == 'hi'
+        ? hindi
+        : english;
 
 class AdminAiBody extends StatefulWidget {
   const AdminAiBody({super.key});
@@ -17,13 +24,8 @@ class AdminAiBody extends StatefulWidget {
 class _AdminAiBodyState extends State<AdminAiBody> {
   final _question = TextEditingController();
   final _variables = TextEditingController(text: '{}');
-  final List<_ClawdMessage> _messages = [
-    const _ClawdMessage(
-      fromClawd: true,
-      text:
-          'I am Clawd. I use the current ledger snapshot, risk queue, and reports to answer operations questions.',
-    ),
-  ];
+  final List<_ClawdMessage> _messages = [];
+  String? _welcomeLanguage;
 
   bool _loading = true;
   bool _asking = false;
@@ -40,6 +42,27 @@ class _AdminAiBodyState extends State<AdminAiBody> {
   void initState() {
     super.initState();
     _refresh();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final language = Localizations.localeOf(context).languageCode;
+    if (_welcomeLanguage == language) return;
+    final welcome = _ClawdMessage(
+      fromClawd: true,
+      text: _copy(
+        context,
+        'I am Clawd. I use the current ledger snapshot, risk queue, and reports to answer operations questions.',
+        'मैं Clawd हूँ। आपके परिचालन सवालों का जवाब देने के लिए मौजूदा लेजर, जोखिम सूची और रिपोर्ट देखता हूँ।',
+      ),
+    );
+    if (_messages.isEmpty) {
+      _messages.add(welcome);
+    } else {
+      _messages[0] = welcome;
+    }
+    _welcomeLanguage = language;
   }
 
   @override
@@ -69,7 +92,10 @@ class _AdminAiBodyState extends State<AdminAiBody> {
         _selectedTemplate ??= templates.isEmpty ? null : templates.first;
       });
     } catch (e) {
-      _addError('Clawd data could not load: $e');
+      if (!mounted) return;
+      _addError(
+        '${_copy(context, 'Clawd data could not load', 'Clawd का डेटा लोड नहीं हुआ')}: $e',
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -84,13 +110,19 @@ class _AdminAiBodyState extends State<AdminAiBody> {
       _messages.add(_ClawdMessage(fromClawd: false, text: question));
     });
     try {
-      final result = await AdminAiService.instance.ask(question);
+      final result = await AdminAiService.instance.ask(
+        question,
+        language: Localizations.localeOf(context).languageCode,
+      );
       if (!mounted) return;
       setState(() {
         _messages.add(_ClawdMessage(fromClawd: true, text: result.answer));
       });
     } catch (e) {
-      _addError('Clawd is not ready: $e');
+      if (!mounted) return;
+      _addError(
+        '${_copy(context, 'Clawd is not ready', 'Clawd अभी उपलब्ध नहीं है')}: $e',
+      );
     } finally {
       if (mounted) setState(() => _asking = false);
     }
@@ -110,15 +142,23 @@ class _AdminAiBodyState extends State<AdminAiBody> {
         _messages.add(
           _ClawdMessage(
             fromClawd: true,
-            text:
-                '${monthly ? 'Monthly' : 'Daily'} report ${report.reportDate.isEmpty ? '' : 'for ${report.reportDate}'} is ready.\n\n${report.summary}',
+            text: _copy(
+              context,
+              '${monthly ? 'Monthly' : 'Daily'} report ${report.reportDate.isEmpty ? '' : 'for ${report.reportDate}'} is ready.\n\n${report.summary}',
+              '${monthly ? 'मासिक' : 'दैनिक'} रिपोर्ट ${report.reportDate.isEmpty ? '' : '${report.reportDate} के लिए'} तैयार है।\n\n${report.summary}',
+            ),
           ),
         );
       });
       await _refresh();
     } catch (e) {
+      if (!mounted) return;
       _addError(
-        '${monthly ? 'Monthly' : 'Daily'} analysis could not run: $e\n\nOpenAI and service-role keys must be set as Supabase Edge Function secrets.',
+        _copy(
+          context,
+          '${monthly ? 'Monthly' : 'Daily'} analysis could not run: $e\n\nOpenAI and service-role keys must be set as Supabase Edge Function secrets.',
+          '${monthly ? 'मासिक' : 'दैनिक'} विश्लेषण नहीं चल सका: $e',
+        ),
       );
     } finally {
       if (mounted) setState(() => _reporting = false);
@@ -135,14 +175,20 @@ class _AdminAiBodyState extends State<AdminAiBody> {
         _messages.add(
           _ClawdMessage(
             fromClawd: true,
-            text:
-                'Risk scan complete. Checked ${result.scanned} ranked signal(s) and stored ${result.stored} review item(s).',
+            text: _copy(
+              context,
+              'Risk scan complete. Checked ${result.scanned} ranked signal(s) and stored ${result.stored} review item(s).',
+              'जोखिम जाँच पूरी हुई। ${result.scanned} संकेत देखे और ${result.stored} समीक्षा आइटम सहेजे।',
+            ),
           ),
         );
       });
       await _refresh();
     } catch (e) {
-      _addError('Risk scan could not run: $e');
+      if (!mounted) return;
+      _addError(
+        '${_copy(context, 'Risk scan could not run', 'जोखिम जाँच नहीं चल सकी')}: $e',
+      );
     } finally {
       if (mounted) setState(() => _detecting = false);
     }
@@ -160,6 +206,7 @@ class _AdminAiBodyState extends State<AdminAiBody> {
       final result = await AdminAiService.instance.runTemplate(
         templateId: template.id,
         variables: variables,
+        language: Localizations.localeOf(context).languageCode,
       );
       if (!mounted) return;
       setState(() {
@@ -167,7 +214,10 @@ class _AdminAiBodyState extends State<AdminAiBody> {
       });
       await _refresh();
     } catch (e) {
-      _addError('Saved prompt could not run: $e');
+      if (!mounted) return;
+      _addError(
+        '${_copy(context, 'Saved prompt could not run', 'सहेजा गया प्रश्न नहीं चल सका')}: $e',
+      );
     } finally {
       if (mounted) setState(() => _asking = false);
     }
@@ -181,29 +231,58 @@ class _AdminAiBodyState extends State<AdminAiBody> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text('Add Clawd prompt'),
+            scrollable: true,
+            title: Text(
+              _copy(
+                context,
+                'Save a reusable question',
+                'दोबारा उपयोग करने वाला सवाल सहेजें',
+              ),
+            ),
             content: SizedBox(
               width: 560,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  GuidanceCard(
+                    title: _copy(
+                      context,
+                      'Give the question a clear name',
+                      'सवाल को आसान नाम दें',
+                    ),
+                    message: _copy(
+                      context,
+                      'For example: Monthly freight review. Write the question as you would ask a colleague. Use {{route}} only when the route should be filled in each time.',
+                      'जैसे: मासिक भाड़े की समीक्षा। सवाल ऐसे लिखें जैसे किसी सहकर्मी से पूछते हैं। हर बार मार्ग भरने के लिए ही {{route}} का उपयोग करें।',
+                    ),
+                    icon: Icons.bookmark_add_outlined,
+                  ),
+                  const SizedBox(height: 16),
+
                   TextField(
                     controller: name,
-                    decoration: const InputDecoration(labelText: 'Name'),
+                    decoration: InputDecoration(
+                      labelText: _copy(context, 'Name', 'नाम'),
+                    ),
                   ),
                   TextField(
                     controller: category,
-                    decoration: const InputDecoration(labelText: 'Category'),
+                    decoration: InputDecoration(
+                      labelText: _copy(context, 'Category', 'श्रेणी'),
+                    ),
                   ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: prompt,
                     minLines: 5,
                     maxLines: 8,
-                    decoration: const InputDecoration(
-                      labelText: 'Prompt',
-                      hintText:
-                          'Review {{route}} for freight increase and POD risk.',
+                    decoration: InputDecoration(
+                      labelText: _copy(context, 'Prompt', 'प्रश्न'),
+                      hintText: _copy(
+                        context,
+                        'Review {{route}} for freight increase and POD risk.',
+                        '{{route}} पर भाड़ा वृद्धि और POD जोखिम की समीक्षा करें।',
+                      ),
                     ),
                   ),
                 ],
@@ -212,16 +291,16 @@ class _AdminAiBodyState extends State<AdminAiBody> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
+                child: Text(_copy(context, 'Cancel', 'रद्द करें')),
               ),
               FilledButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Save'),
+                child: Text(_copy(context, 'Save', 'सहेजें')),
               ),
             ],
           ),
     );
-    if (created != true) return;
+    if (created != true || !mounted) return;
     try {
       await AdminAiService.instance.createPromptTemplate(
         name: name.text,
@@ -230,7 +309,10 @@ class _AdminAiBodyState extends State<AdminAiBody> {
       );
       await _refresh();
     } catch (e) {
-      _addError('Prompt could not be saved: $e');
+      if (!mounted) return;
+      _addError(
+        '${_copy(context, 'Prompt could not be saved', 'प्रश्न सहेजा नहीं जा सका')}: $e',
+      );
     }
   }
 
@@ -239,7 +321,10 @@ class _AdminAiBodyState extends State<AdminAiBody> {
       await AdminAiService.instance.updateAnomalyStatus(anomaly.id, status);
       await _refresh();
     } catch (e) {
-      _addError('Risk status could not be updated: $e');
+      if (!mounted) return;
+      _addError(
+        '${_copy(context, 'Risk status could not be updated', 'जोखिम की स्थिति नहीं बदली जा सकी')}: $e',
+      );
     }
   }
 
@@ -266,20 +351,24 @@ class _AdminAiBodyState extends State<AdminAiBody> {
                           children: [
                             const Icon(Icons.psychology_alt_outlined, size: 30),
                             const SizedBox(width: 10),
-                            const Expanded(
+                            Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Clawd chat',
-                                    style: TextStyle(
+                                    _copy(context, 'Clawd chat', 'Clawd चैट'),
+                                    style: const TextStyle(
                                       fontSize: 22,
                                       fontWeight: FontWeight.w800,
                                     ),
                                   ),
                                   Text(
-                                    'Choose a quick prompt or ask an operations question.',
-                                    style: TextStyle(
+                                    _copy(
+                                      context,
+                                      'Choose a quick prompt or ask an operations question.',
+                                      'तुरंत प्रश्न चुनें या परिचालन के बारे में पूछें।',
+                                    ),
+                                    style: const TextStyle(
                                       fontSize: 12,
                                       color: _onSurfaceVariant,
                                     ),
@@ -288,7 +377,11 @@ class _AdminAiBodyState extends State<AdminAiBody> {
                               ),
                             ),
                             IconButton(
-                              tooltip: 'Close expanded chat',
+                              tooltip: _copy(
+                                context,
+                                'Close expanded chat',
+                                'बड़ी चैट बंद करें',
+                              ),
                               onPressed:
                                   () => Navigator.of(dialogContext).pop(),
                               icon: const Icon(Icons.close),
@@ -443,14 +536,26 @@ class _Workspace extends StatelessWidget {
               const SizedBox(height: 12),
               _ReviewQueue(anomalies: anomalies, onUpdate: onUpdateAnomaly),
               const SizedBox(height: 12),
-              _ToolsPanel(
-                templates: templates,
-                selectedTemplate: selectedTemplate,
-                variables: variables,
-                reports: reports,
-                onTemplateChanged: onTemplateChanged,
-                onRunTemplate: onRunTemplate,
-                onAddPrompt: onAddPrompt,
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: Text(
+                  _copy(
+                    context,
+                    'Saved reports and advanced tools',
+                    'सहेजी रिपोर्ट और अतिरिक्त उपकरण',
+                  ),
+                ),
+                children: [
+                  _ToolsPanel(
+                    templates: templates,
+                    selectedTemplate: selectedTemplate,
+                    variables: variables,
+                    reports: reports,
+                    onTemplateChanged: onTemplateChanged,
+                    onRunTemplate: onRunTemplate,
+                    onAddPrompt: onAddPrompt,
+                  ),
+                ],
               ),
             ],
           );
@@ -531,26 +636,18 @@ class _Header extends StatelessWidget {
         runSpacing: 10,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          const Icon(Icons.psychology_alt_outlined, size: 38),
-          const SizedBox(
-            width: 360,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Clawd',
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    color: _onSurface,
-                  ),
-                ),
-                Text(
-                  'Operations analyst for freight, POD, e-way, and cost review',
-                  style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
-                ),
-              ],
+          WorkspaceHeader(
+            title: _copy(
+              context,
+              'Ask your operations assistant',
+              'अपने परिचालन सहायक से पूछें',
             ),
+            description: _copy(
+              context,
+              'Ask a question in everyday language. Clawd checks your ledger and explains delivery proof, freight costs and records that need review.',
+              'आसान भाषा में सवाल पूछें। Clawd लेजर देखकर डिलीवरी प्रमाण, भाड़े और समीक्षा वाले रिकॉर्ड समझाता है।',
+            ),
+            icon: Icons.auto_awesome_outlined,
           ),
           OutlinedButton.icon(
             onPressed: detecting ? null : onDetect,
@@ -562,17 +659,21 @@ class _Header extends StatelessWidget {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                     : const Icon(Icons.warning_amber_outlined),
-            label: Text(detecting ? 'Scanning' : 'Scan risks'),
+            label: Text(
+              detecting
+                  ? _copy(context, 'Scanning', 'जाँच जारी है')
+                  : _copy(context, 'Scan risks', 'जोखिम जाँचें'),
+            ),
           ),
           FilledButton.icon(
             onPressed: reporting ? null : onDaily,
             icon: const Icon(Icons.today_outlined),
-            label: const Text('Daily report'),
+            label: Text(_copy(context, 'Daily report', 'दैनिक रिपोर्ट')),
           ),
           FilledButton.tonalIcon(
             onPressed: reporting ? null : onMonthly,
             icon: const Icon(Icons.calendar_month_outlined),
-            label: const Text('Monthly report'),
+            label: Text(_copy(context, 'Monthly report', 'मासिक रिपोर्ट')),
           ),
         ],
       ),
@@ -591,42 +692,48 @@ class _RiskSummary extends StatelessWidget {
     return _Panel(
       title:
           s == null
-              ? 'Current Risk Summary'
-              : 'Current Risk Summary · ${s.periodLabel}',
+              ? _copy(context, 'Current Risk Summary', 'मौजूदा जोखिम सारांश')
+              : '${_copy(context, 'Current Risk Summary', 'मौजूदा जोखिम सारांश')} · ${s.periodLabel}',
       child:
           s == null
-              ? const Text(
-                'No snapshot loaded.',
-                style: TextStyle(color: _onSurfaceVariant),
+              ? Text(
+                _copy(context, 'No snapshot loaded.', 'सारांश लोड नहीं हुआ।'),
+                style: const TextStyle(color: _onSurfaceVariant),
               )
               : Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _MetricPill('Dispatches', s.dispatches.toString()),
-                  _MetricPill('Freight', _fmtMoney(s.freight)),
                   _MetricPill(
-                    'POD pending',
+                    _copy(context, 'Dispatches', 'डिस्पैच'),
+                    s.dispatches.toString(),
+                  ),
+                  _MetricPill(
+                    _copy(context, 'Freight', 'भाड़ा'),
+                    _fmtMoney(s.freight),
+                  ),
+                  _MetricPill(
+                    _copy(context, 'POD pending', 'POD लंबित'),
                     s.podPending.toString(),
                     warning: s.podPending > 0,
                   ),
                   _MetricPill(
-                    'Review value',
+                    _copy(context, 'Review value', 'समीक्षा राशि'),
                     _fmtMoney(s.reviewValue),
                     warning: s.reviewValue > 0,
                   ),
                   _MetricPill(
-                    'Duplicate e-way',
+                    _copy(context, 'Duplicate e-way', 'डुप्लिकेट ई-वे'),
                     s.duplicateEwayRisks.toString(),
                     warning: s.duplicateEwayRisks > 0,
                   ),
                   _MetricPill(
-                    'Route spikes',
+                    _copy(context, 'Route spikes', 'मार्ग लागत वृद्धि'),
                     s.routeCostSpikeRisks.toString(),
                     warning: s.routeCostSpikeRisks > 0,
                   ),
                   _MetricPill(
-                    'Extra charges',
+                    _copy(context, 'Extra charges', 'अतिरिक्त शुल्क'),
                     s.highExtraChargeRisks.toString(),
                     warning: s.highExtraChargeRisks > 0,
                   ),
@@ -644,14 +751,38 @@ class _QuickPrompts extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final prompts = [
-      'Summarize April 2026 logistics',
-      'Show POD pending by transporter',
-      'Find highest freight per MT routes',
-      'Check duplicate invoice and e-way risk',
-      'Compare Bunge vs Cargill',
+      _copy(
+        context,
+        'What needs my attention today?',
+        'आज किन कामों पर ध्यान देना है?',
+      ),
+      _copy(
+        context,
+        'Show POD pending by transporter',
+        'ट्रांसपोर्टर के अनुसार लंबित POD दिखाएँ',
+      ),
+      _copy(
+        context,
+        'Find highest freight per MT routes',
+        'प्रति MT सबसे महंगे मार्ग बताएँ',
+      ),
+      _copy(
+        context,
+        'Check duplicate invoice and e-way risk',
+        'डुप्लिकेट इनवॉइस और ई-वे जोखिम जाँचें',
+      ),
+      _copy(
+        context,
+        'Explain this month’s freight costs',
+        'इस महीने के भाड़े का खर्च समझाएँ',
+      ),
     ];
     return _Panel(
-      title: 'Quick Prompts',
+      title: _copy(
+        context,
+        'Choose a question to get started',
+        'शुरुआत के लिए सवाल चुनें',
+      ),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
@@ -660,7 +791,7 @@ class _QuickPrompts extends StatelessWidget {
                 .map(
                   (prompt) => ActionChip(
                     avatar: const Icon(Icons.bolt_outlined, size: 16),
-                    label: Text(prompt),
+                    label: Text(prompt, softWrap: true),
                     onPressed: () => onPrompt(prompt),
                   ),
                 )
@@ -690,22 +821,19 @@ class _ChatPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Panel(
-      title: 'Ask Clawd',
-      fill: expanded,
+      title: _copy(context, 'Ask Clawd', 'Clawd से पूछें'),
+      fill: true,
       trailing:
           onExpand == null
               ? null
               : TextButton.icon(
                 onPressed: onExpand,
                 icon: const Icon(Icons.open_in_full, size: 18),
-                label: const Text('Expand'),
+                label: Text(_copy(context, 'Expand', 'बड़ा करें')),
               ),
       child: Column(
         children: [
-          if (expanded)
-            Expanded(child: _MessageList(messages: messages))
-          else
-            SizedBox(height: 380, child: _MessageList(messages: messages)),
+          Expanded(child: _MessageList(messages: messages)),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -714,16 +842,19 @@ class _ChatPane extends StatelessWidget {
                   controller: question,
                   minLines: 1,
                   maxLines: 3,
-                  decoration: const InputDecoration(
-                    hintText:
-                        'Ask about POD, routes, e-way bills, or transporter costs...',
+                  decoration: InputDecoration(
+                    hintText: _copy(
+                      context,
+                      'Ask about POD, routes, e-way bills, or transporter costs...',
+                      'POD, मार्ग, ई-वे बिल या ट्रांसपोर्टर लागत के बारे में पूछें...',
+                    ),
                   ),
                   onSubmitted: (_) => onAsk(),
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton.filled(
-                tooltip: 'Send',
+              FilledButton.icon(
+                label: Text(_copy(context, 'Ask', 'पूछें')),
                 onPressed: asking ? null : () => onAsk(),
                 icon:
                     asking
@@ -766,12 +897,16 @@ class _ReviewQueue extends StatelessWidget {
   Widget build(BuildContext context) {
     final open = anomalies.where((a) => a.status == 'open').take(8).toList();
     return _Panel(
-      title: 'Open Review Queue',
+      title: _copy(context, 'Open Review Queue', 'खुली समीक्षा सूची'),
       child:
           open.isEmpty
-              ? const Text(
-                'No stored review items yet. Run Scan risks.',
-                style: TextStyle(color: _onSurfaceVariant),
+              ? Text(
+                _copy(
+                  context,
+                  'No stored review items yet. Run Scan risks.',
+                  'अभी कोई समीक्षा आइटम नहीं है। जोखिम जाँच चलाएँ।',
+                ),
+                style: const TextStyle(color: _onSurfaceVariant),
               )
               : Column(
                 children:
@@ -810,9 +945,13 @@ class _ToolsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Panel(
-      title: 'Reports & Saved Prompts',
+      title: _copy(
+        context,
+        'Reports & Saved Prompts',
+        'रिपोर्ट और सहेजे गए प्रश्न',
+      ),
       trailing: IconButton(
-        tooltip: 'Add prompt',
+        tooltip: _copy(context, 'Add prompt', 'प्रश्न जोड़ें'),
         onPressed: onAddPrompt,
         icon: const Icon(Icons.add),
       ),
@@ -820,7 +959,7 @@ class _ToolsPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           DropdownButtonFormField<ClawdPromptTemplate>(
-            value: selectedTemplate,
+            initialValue: selectedTemplate,
             items:
                 templates
                     .map(
@@ -831,29 +970,57 @@ class _ToolsPanel extends StatelessWidget {
                     )
                     .toList(),
             onChanged: onTemplateChanged,
-            decoration: const InputDecoration(labelText: 'Saved prompt'),
+            decoration: InputDecoration(
+              labelText: _copy(context, 'Saved prompt', 'सहेजा गया प्रश्न'),
+            ),
           ),
           const SizedBox(height: 8),
-          TextField(
-            controller: variables,
-            minLines: 2,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Variables JSON',
-              hintText: '{"route":"Ludhiana to Amritsar"}',
+          if (selectedTemplate != null)
+            SavedQuestionInputs(
+              key: ValueKey(selectedTemplate!.id),
+              template: selectedTemplate!,
+              variables: variables,
             ),
+          ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            title: Text(
+              _copy(
+                context,
+                'Advanced question settings',
+                'सवाल की अतिरिक्त सेटिंग',
+              ),
+            ),
+            children: [
+              TextField(
+                controller: variables,
+                minLines: 2,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  labelText: _copy(
+                    context,
+                    'Saved question inputs (JSON)',
+                    'सहेजे सवाल की जानकारी (JSON)',
+                  ),
+                  hintText: '{"route":"Ludhiana to Amritsar"}',
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           FilledButton.icon(
             onPressed: selectedTemplate == null ? null : onRunTemplate,
             icon: const Icon(Icons.play_arrow),
-            label: const Text('Run prompt'),
+            label: Text(_copy(context, 'Run prompt', 'प्रश्न चलाएँ')),
           ),
           const Divider(height: 24),
           if (reports.isEmpty)
-            const Text(
-              'Reports will appear after Clawd runs.',
-              style: TextStyle(color: _onSurfaceVariant),
+            Text(
+              _copy(
+                context,
+                'Reports will appear after Clawd runs.',
+                'Clawd चलने के बाद रिपोर्ट यहाँ दिखेंगी।',
+              ),
+              style: const TextStyle(color: _onSurfaceVariant),
             )
           else
             ...reports.take(5).map(_ReportTile.new),
@@ -861,6 +1028,74 @@ class _ToolsPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Ordinary named fields feed the existing template-variable contract.
+class SavedQuestionInputs extends StatefulWidget {
+  const SavedQuestionInputs({
+    super.key,
+    required this.template,
+    required this.variables,
+  });
+  final ClawdPromptTemplate template;
+  final TextEditingController variables;
+  @override
+  State<SavedQuestionInputs> createState() => _SavedQuestionInputsState();
+}
+
+class _SavedQuestionInputsState extends State<SavedQuestionInputs> {
+  late final Map<String, dynamic> _values;
+  late final List<String> _fields;
+  @override
+  void initState() {
+    super.initState();
+    try {
+      _values = parseTemplateVariables(widget.variables.text);
+    } catch (_) {
+      _values = {};
+    }
+    _fields =
+        RegExp(r'\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}')
+            .allMatches(widget.template.templateText)
+            .map((match) => match.group(1)!)
+            .toSet()
+            .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      if (_fields.isNotEmpty)
+        Text(
+          _copy(
+            context,
+            'Details for this saved question',
+            'इस सहेजे सवाल की जानकारी',
+          ),
+        ),
+      for (final field in _fields)
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: TextFormField(
+            initialValue: (_values[field] ?? '').toString(),
+            decoration: InputDecoration(
+              labelText: switch (field) {
+                'route' => _copy(context, 'Route', 'मार्ग'),
+                'month' => _copy(context, 'Month', 'महीना'),
+                'company' => _copy(context, 'Company', 'कंपनी'),
+                'transporter' => _copy(context, 'Transporter', 'ट्रांसपोर्टर'),
+                _ => field.replaceAll('_', ' '),
+              },
+            ),
+            onChanged: (value) {
+              _values[field] = value;
+              widget.variables.text = jsonEncode(_values);
+            },
+          ),
+        ),
+    ],
+  );
 }
 
 class _Panel extends StatelessWidget {
@@ -960,7 +1195,17 @@ class _AnomalyTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = anomaly.signalType.replaceAll('_', ' ');
+    final label =
+        Localizations.localeOf(context).languageCode == 'hi'
+            ? switch (anomaly.signalType) {
+              'eway_mismatch' => 'ई-वे विवरण में अंतर',
+              'duplicate_eway' => 'डुप्लिकेट ई-वे बिल जोखिम',
+              'route_cost_spike' => 'मार्ग लागत में वृद्धि',
+              'high_extra_charge' => 'अधिक अतिरिक्त शुल्क',
+              'proof_or_ack_delay' => 'प्रमाण या पावती में देरी',
+              _ => anomaly.signalType.replaceAll('_', ' '),
+            }
+            : anomaly.signalType.replaceAll('_', ' ');
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Column(
@@ -972,12 +1217,20 @@ class _AnomalyTile extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _Badge(
-                text: anomaly.severity,
+                text:
+                    Localizations.localeOf(context).languageCode == 'hi'
+                        ? switch (anomaly.severity) {
+                          'critical' => 'अति गंभीर',
+                          'high' => 'उच्च',
+                          'medium' => 'मध्यम',
+                          _ => 'निम्न',
+                        }
+                        : anomaly.severity,
                 color: _severityColor(anomaly.severity),
               ),
               _Badge(
                 text:
-                    'priority ${anomaly.businessPriorityScore.toStringAsFixed(0)}',
+                    '${_copy(context, 'priority', 'प्राथमिकता')} ${anomaly.businessPriorityScore.toStringAsFixed(0)}',
                 color: const Color(0xFFEFF4FF),
               ),
             ],
@@ -1003,11 +1256,11 @@ class _AnomalyTile extends StatelessWidget {
             children: [
               TextButton(
                 onPressed: () => onUpdate(anomaly, 'resolved'),
-                child: const Text('Resolved'),
+                child: Text(_copy(context, 'Resolved', 'सुलझा')),
               ),
               TextButton(
                 onPressed: () => onUpdate(anomaly, 'false_positive'),
-                child: const Text('False positive'),
+                child: Text(_copy(context, 'False positive', 'गलत संकेत')),
               ),
             ],
           ),
@@ -1034,7 +1287,11 @@ class _ReportNotice extends StatelessWidget {
         border: Border.all(color: const Color(0xFFD3DEF6)),
       ),
       child: Text(
-        '${report.reportType.toUpperCase()} analysis saved for ${report.reportDate}',
+        _copy(
+          context,
+          '${report.reportType.toUpperCase()} analysis saved for ${report.reportDate}',
+          '${report.reportType == 'monthly' ? 'मासिक' : 'दैनिक'} विश्लेषण ${report.reportDate} के लिए सहेजा गया',
+        ),
         style: const TextStyle(
           fontSize: 13,
           fontWeight: FontWeight.w800,
@@ -1058,14 +1315,18 @@ class _ReportTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${report.reportType} · ${report.periodStart} to ${report.periodEnd}',
+            _copy(
+              context,
+              '${report.reportType} · ${report.periodStart} to ${report.periodEnd}',
+              '${report.reportType == 'monthly' ? 'मासिक' : 'दैनिक'} · ${report.periodStart} से ${report.periodEnd}',
+            ),
             style: const TextStyle(
               fontWeight: FontWeight.w800,
               color: _onSurface,
             ),
           ),
           Text(
-            'Risk score ${report.riskScore.toStringAsFixed(0)}',
+            '${_copy(context, 'Risk score', 'जोखिम स्कोर')} ${report.riskScore.toStringAsFixed(0)}',
             style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
           ),
           const Divider(height: 14),

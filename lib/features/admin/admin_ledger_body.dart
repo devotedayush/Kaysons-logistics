@@ -4,11 +4,17 @@ import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import '../../core/widgets/workspace_widgets.dart';
+import 'widgets/office_widgets.dart';
+import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/supabase/supabase_bootstrap.dart';
+import '../../core/supabase/auth_service.dart';
 import '../../core/utils/csv_downloader.dart';
 import '../../core/widgets/date_window_bar.dart';
+import 'widgets/ledger_records.dart';
+import '../../l10n/app_localizations.dart';
 
 const _onSurfaceVariant = Color(0xFF49454F);
 
@@ -43,9 +49,7 @@ enum _ReportExportType {
   routeWise,
 }
 
-enum _ReportExportFormat { csv, excel }
-
-enum _LedgerPresentation { overview, rows }
+enum LedgerPresentation { overview, rows }
 
 enum _OverviewSummary { transporter, destination, route, vehicle }
 
@@ -66,13 +70,16 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
   DateTime? _month;
   String? _status;
   String? _podAck;
+  String? _tonnageCategory;
   bool _delayedOnly = false;
   bool _latePodOnly = false;
   bool _showAdvancedFilters = false;
-  _LedgerPresentation _presentation = _LedgerPresentation.overview;
+  bool _fullColumns = false;
+  bool _pendingProofOnly = false;
+  LedgerPresentation _presentation = LedgerPresentation.rows;
   _OverviewSummary _overviewSummary = _OverviewSummary.transporter;
   int _ledgerPage = 0;
-  int _ledgerPageSize = 75;
+  final int _ledgerPageSize = 75;
   bool _loading = true;
   bool _uploading = false;
   String? _error;
@@ -105,14 +112,27 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
       _error = null;
     });
     try {
-      final rows = await supabase
-          .from('admin_freight_ledger_view')
-          .select()
-          .order('bill_date', ascending: false, nullsFirst: false)
-          .order('created_at', ascending: false);
+      final rows = await _loadAllLedgerRows();
+      final ewayBillsFuture = _loadInvoiceEwayBills(rows);
+      final proofContextsFuture = _loadProofContexts(rows);
+      final ewayBillsByInvoice = await ewayBillsFuture;
+      final proofContexts = await proofContextsFuture;
+      final rowsWithDocuments = [
+        for (final source in rows)
+          {
+            ...source,
+            ...?proofContexts[source['freight_id']?.toString()],
+            '_invoice_eway_bill_numbers':
+                {
+                  ..._documentNumbers(source['e_way_bill_number']),
+                  ...(ewayBillsByInvoice[source['invoice_id']?.toString()] ??
+                      const <String>{}),
+                }.toList(),
+          },
+      ];
       if (!mounted) return;
       setState(() {
-        _rows = (rows as List).cast<Map<String, dynamic>>();
+        _rows = rowsWithDocuments;
         _loading = false;
       });
     } catch (e) {
@@ -124,57 +144,185 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
     }
   }
 
-  List<Map<String, dynamic>> get _filtered {
-    return _rows.where((row) {
-      final date = _reportDate(row);
-      if (_month == null) {
-        if (!withinDateWindow(
-          date,
-          rangeDays: _rangeDays,
-          customStart: _customStart,
-          customEnd: _customEnd,
-        )) {
-          return false;
+  Future<List<Map<String, dynamic>>> _loadAllLedgerRows() async {
+    const pageSize = 500;
+    final result = <Map<String, dynamic>>[];
+    for (var offset = 0; ; offset += pageSize) {
+      final page = await supabase
+          .from('admin_freight_ledger_view')
+          .select()
+          .order('bill_date', ascending: false, nullsFirst: false)
+          .order('created_at', ascending: false)
+          .order('invoice_id', ascending: true, nullsFirst: false)
+          .range(offset, offset + pageSize - 1);
+      final rows = (page as List).cast<Map<String, dynamic>>();
+      result.addAll(rows);
+      if (rows.length < pageSize) return result;
+    }
+  }
+
+  /// Existing RLS remains the authority for these read-only trip records.
+  /// Optional receiving data can be unavailable on older installations; that
+  /// leaves review unverified instead of asserting acceptance or missing POD.
+  Future<Map<String, Map<String, dynamic>>> _loadProofContexts(
+    List<Map<String, dynamic>> rows,
+  ) async {
+    final ids =
+        rows
+            .map((row) => row['freight_id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet()
+            .toList();
+    final contexts = <String, Map<String, dynamic>>{};
+    for (var start = 0; start < ids.length; start += 50) {
+      final chunk = ids.skip(start).take(50).toList();
+      List<Map<String, dynamic>> freights;
+      try {
+        // select() tolerates installations without the new workflow-version
+        // column while still allowing its presence to identify receiver trips.
+        freights = List<Map<String, dynamic>>.from(
+          await supabase.from('freights').select().inFilter('id', chunk),
+        );
+      } catch (_) {
+        continue;
+      }
+      final receiverIds = <String>[];
+      for (final freight in freights) {
+        final id = freight['id'].toString();
+        contexts[id] = {
+          '_proof_freight': freight,
+          if (freight['record_origin'] != null)
+            'record_origin': freight['record_origin'],
+        };
+        if (freight['delivery_workflow_version'] == 1) receiverIds.add(id);
+      }
+      if (receiverIds.isEmpty) continue;
+      try {
+        final receivers = <Map<String, dynamic>>[];
+        for (var offset = 0; ; offset += 500) {
+          final page = List<Map<String, dynamic>>.from(
+            await supabase
+                .from('freight_delivery_receivers')
+                .select(
+                  'id,freight_id,town,party_name,report,pod_review_status,pod_review_note,reviewed_by,reviewed_at',
+                )
+                .inFilter('freight_id', receiverIds)
+                .order('id')
+                .range(offset, offset + 499),
+          );
+          receivers.addAll(page);
+          if (page.length < 500) break;
         }
+        for (final id in receiverIds) {
+          contexts[id]!['_proof_receivers_loaded'] = true;
+          contexts[id]!['_proof_receivers'] =
+              receivers
+                  .where((receiver) => receiver['freight_id'] == id)
+                  .toList();
+        }
+      } catch (_) {
+        // Retain usable ledger records; the badge explicitly says unverified.
       }
-      if (_company != null && row['company_name'] != _company) return false;
-      if (_transporter != null && row['transporter_name'] != _transporter) {
-        return false;
+    }
+    return contexts;
+  }
+
+  Future<Map<String, Set<String>>> _loadInvoiceEwayBills(
+    List<Map<String, dynamic>> rows,
+  ) async {
+    const invoiceChunkSize = 50;
+    const pageSize = 500;
+    final invoiceIds =
+        rows
+            .map((row) => row['invoice_id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toSet()
+            .toList();
+    final result = <String, Set<String>>{};
+    for (var start = 0; start < invoiceIds.length; start += invoiceChunkSize) {
+      final ids = invoiceIds.skip(start).take(invoiceChunkSize).toList();
+      for (var offset = 0; ; offset += pageSize) {
+        final page = await supabase
+            .from('invoice_documents')
+            .select('invoice_id, document_number')
+            .eq('document_kind', 'e_way_bill')
+            .inFilter('invoice_id', ids)
+            .order('invoice_id')
+            .order('document_number')
+            .range(offset, offset + pageSize - 1);
+        final documents = (page as List).cast<Map<String, dynamic>>();
+        for (final document in documents) {
+          final invoiceId = document['invoice_id']?.toString() ?? '';
+          final number = document['document_number']?.toString() ?? '';
+          if (invoiceId.isEmpty || number.trim().isEmpty) continue;
+          result.putIfAbsent(invoiceId, () => <String>{}).add(number.trim());
+        }
+        if (documents.length < pageSize) break;
       }
-      if (_destination != null && row['town'] != _destination) return false;
-      if (_month != null && !_sameMonth(_reportDate(row), _month!)) {
-        return false;
-      }
-      if (_status != null && _dispatchStatusLabel(row) != _status) {
-        return false;
-      }
-      if (_podAck != null && _podAckLabel(row) != _podAck) return false;
-      if (!_containsAny(
-        _placeSearch.text,
-        [row['origin'], row['town'], row['party_name']],
-      )) {
-        return false;
-      }
-      if (!_containsAny(_invoiceSearch.text, [
-        row['invoice_number'],
-        row['invoice_numbers'],
-      ])) {
-        return false;
-      }
-      if (!_containsAny(_ewaySearch.text, [
-        row['e_way_bill_number'],
-        row['e_way_bill_numbers'],
-      ])) {
-        return false;
-      }
-      if (_delayedOnly && ((_num(row['delay_days']) ?? 0) <= 0)) return false;
-      if (_latePodOnly &&
-          !_flag(row['pod_late_flag']) &&
-          !_flag(row['pod_missing_overdue_flag'])) {
-        return false;
-      }
-      return true;
-    }).toList();
+    }
+    return result;
+  }
+
+  List<Map<String, dynamic>> get _filtered {
+    final filtered =
+        _rows.where((row) {
+          final date = _reportDate(row);
+          if (_month == null) {
+            if (!withinDateWindow(
+              date,
+              rangeDays: _rangeDays,
+              customStart: _customStart,
+              customEnd: _customEnd,
+            )) {
+              return false;
+            }
+          }
+          if (_company != null && row['company_name'] != _company) return false;
+          if (_transporter != null && row['transporter_name'] != _transporter) {
+            return false;
+          }
+          if (_destination != null && row['town'] != _destination) return false;
+          if (_month != null && !_sameMonth(_reportDate(row), _month!)) {
+            return false;
+          }
+          if (_status != null && _dispatchStatusLabel(row) != _status) {
+            return false;
+          }
+          if (_podAck != null && _podAckLabel(row) != _podAck) return false;
+          if (_tonnageCategory != null &&
+              _rowTonnageCategory(row) != _tonnageCategory) {
+            return false;
+          }
+          if (!_containsAny(_placeSearch.text, [
+            row['origin'],
+            row['town'],
+            row['party_name'],
+          ])) {
+            return false;
+          }
+          if (!ledgerMatchesSearch(row, _invoiceSearch.text)) return false;
+          if (_pendingProofOnly && !ledgerProofNeedsReview(row)) return false;
+          if (!ledgerRowMatchesInvoiceDocumentSearch(
+            row,
+            invoiceQuery: '',
+            ewayQuery: _ewaySearch.text,
+          )) {
+            return false;
+          }
+          if (_delayedOnly && ((_num(row['delay_days']) ?? 0) <= 0)) {
+            return false;
+          }
+          if (_latePodOnly &&
+              !_flag(row['pod_late_flag']) &&
+              !_flag(row['pod_missing_overdue_flag'])) {
+            return false;
+          }
+          return true;
+        }).toList();
+    return normalizeLedgerSettlementFields(
+      displayedRows: filtered,
+      allRows: _rows,
+    );
   }
 
   Future<void> _pickStart() async {
@@ -186,9 +334,16 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
           _customStart ?? DateTime.now().subtract(const Duration(days: 30)),
     );
     if (picked == null || !mounted) return;
+    final selection = selectLedgerCustomDateRange(
+      currentStart: _customStart,
+      currentEnd: _customEnd,
+      pickedStart: picked,
+    );
     setState(() {
-      _customStart = picked;
-      _customEnd ??= picked;
+      _ledgerPage = 0;
+      _month = selection.month;
+      _customStart = selection.start;
+      _customEnd = selection.end;
     });
   }
 
@@ -201,7 +356,17 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
       initialDate: _customEnd ?? _customStart ?? DateTime.now(),
     );
     if (picked == null || !mounted) return;
-    setState(() => _customEnd = picked);
+    final selection = selectLedgerCustomDateRange(
+      currentStart: _customStart,
+      currentEnd: _customEnd,
+      pickedEnd: picked,
+    );
+    setState(() {
+      _ledgerPage = 0;
+      _month = selection.month;
+      _customStart = selection.start;
+      _customEnd = selection.end;
+    });
   }
 
   Future<void> _pickMonth() async {
@@ -223,7 +388,14 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
           ),
     );
     if (picked == null || !mounted) return;
-    setState(() => _month = DateTime(picked.year, picked.month));
+    final selection = selectLedgerMonth(picked);
+    setState(() {
+      _rangeDays = 90;
+      _ledgerPage = 0;
+      _month = selection.month;
+      _customStart = selection.start;
+      _customEnd = selection.end;
+    });
   }
 
   Future<void> _openEntryForm([Map<String, dynamic>? row]) async {
@@ -266,9 +438,13 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('CSV upload failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${AppLocalizations.of(context)!.adminCsvUploadFailed}: $e',
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _uploading = false);
     }
@@ -307,6 +483,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
     final invoices = <Map<String, dynamic>>[];
     final charges = <Map<String, dynamic>>[];
     final missingTransporters = <String>{};
+    final explicitVehicleCapacityByFreight = <String, String>{};
 
     for (final row in parsed) {
       final transporterId = transporterIds[_normalizeLookup(row.transporter)];
@@ -339,7 +516,8 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
           'vehicle_number':
               row.vehicleNumber.isEmpty ? null : row.vehicleNumber,
           'gr_bilty_number': row.lrNumber.isEmpty ? null : row.lrNumber,
-          'vehicle_capacity_category': row.vehicleCapacityCategory,
+          'vehicle_capacity_category':
+              row.vehicleCapacityExplicit ? row.vehicleCapacityCategory : null,
           'dispatched_at':
               reportDate == null ? null : '${reportDate}T09:00:00+00:00',
           'locked_at':
@@ -371,8 +549,15 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
           ((freight['weight_kg'] as double?) ?? 0) + row.weight;
       freight['internal_calling_bid'] =
           ((freight['internal_calling_bid'] as double?) ?? 0) + row.freight;
-      freight['vehicle_capacity_category'] = _suggestVehicleCapacityCategory(
-        (freight['weight_kg'] as double?) ?? row.weight,
+      if (row.vehicleCapacityExplicit) {
+        explicitVehicleCapacityByFreight.putIfAbsent(
+          row.freightId,
+          () => row.vehicleCapacityCategory,
+        );
+      }
+      freight['vehicle_capacity_category'] = ledgerVehicleCapacityForImport(
+        explicitCategory: explicitVehicleCapacityByFreight[row.freightId],
+        combinedMetricTons: (freight['weight_kg'] as double?) ?? row.weight,
       );
       if (freight['gr_bilty_number'] == null && row.lrNumber.isNotEmpty) {
         freight['gr_bilty_number'] = row.lrNumber;
@@ -426,9 +611,19 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
       }
     }
 
-    await _insertChunks('freights', freightsById.values.toList());
-    await _insertChunks('invoices', invoices);
-    await _insertChunks('freight_charges', charges);
+    final result = await supabase.rpc(
+      'import_historical_ledger_csv',
+      params: {
+        'p_source_csv': csvText,
+        'p_source_name': '$companyName / $sourceBranch',
+        'p_freights': freightsById.values.toList(),
+        'p_invoices': invoices,
+        'p_charges': charges,
+      },
+    );
+    if (result is Map && result['already_imported'] == true) {
+      throw Exception('This CSV was already imported. No records were added.');
+    }
     return _CsvUploadResult(
       rowsImported: parsed.length,
       chargesImported: charges.length,
@@ -437,39 +632,22 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
     );
   }
 
-  Future<void> _insertChunks(
-    String table,
-    List<Map<String, dynamic>> rows,
-  ) async {
-    for (var i = 0; i < rows.length; i += 100) {
-      final end = (i + 100) > rows.length ? rows.length : i + 100;
-      await supabase.from(table).insert(rows.sublist(i, end));
-    }
-  }
-
-  void _exportReport(_ReportExportType type, _ReportExportFormat format) {
+  Future<void> _exportReport(_ReportExportType type) async {
     final report = _buildExportReport(type);
     final stamp = DateTime.now().toIso8601String().substring(0, 10);
-    final extension = format == _ReportExportFormat.csv ? 'csv' : 'xls';
-    final fileName = '${report.slug}-$stamp.$extension';
-    final content =
-        format == _ReportExportFormat.csv
-            ? _tableCsv(report.headers, report.rows)
-            : _excelTable(report.title, report.headers, report.rows);
+    final fileName = '${report.slug}-$stamp.csv';
+    final content = _tableCsv(report.headers, report.rows);
     try {
-      if (format == _ReportExportFormat.csv) {
-        downloadCsv(fileName, content);
-      } else {
-        downloadFile(
-          fileName,
-          content,
-          'application/vnd.ms-excel;charset=utf-8',
-        );
-      }
+      await downloadCsv(fileName, content);
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${AppLocalizations.of(context)!.adminExportFailed}: $e',
+          ),
+        ),
+      );
     }
   }
 
@@ -482,6 +660,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
           slug: 'kaysons-transporter-wise-monthly-report',
           headers: const [
             'Transporter',
+            'Trips',
             'Vehicles',
             'Cases',
             'MT',
@@ -496,6 +675,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
                   .map(
                     (summary) => [
                       summary.transporter,
+                      summary.totalTrips,
                       summary.totalVehicles,
                       summary.totalCases,
                       summary.totalMetricTons,
@@ -529,13 +709,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
           slug: 'kaysons-vehicle-tonnage-report',
           firstColumn: 'Vehicle Capacity',
           summaries: _movementSummaries(rows, (row) {
-            final category =
-                (row['vehicle_capacity_category'] ?? '').toString().trim();
-            return category.isEmpty
-                ? _suggestVehicleCapacityCategory(
-                  _num(row['weight_kg'])?.toDouble() ?? 0,
-                )
-                : category;
+            return _rowTonnageCategory(row);
           }),
           includeBreakup: false,
         );
@@ -567,6 +741,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
       slug: slug,
       headers: [
         firstColumn,
+        'Trips',
         'Vehicles',
         'Cases',
         'MT',
@@ -579,6 +754,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
               .map(
                 (summary) => [
                   summary.label,
+                  summary.totalTrips,
                   summary.totalVehicles,
                   summary.totalCases,
                   summary.totalMetricTons,
@@ -626,10 +802,11 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
       'Out Route',
       'Deduction',
       'Total Freight',
-      'Last Month Balance',
-      'Payment',
-      'Settlement Deduction',
-      'Balance',
+      'Settlement Month',
+      'Monthly Opening Balance',
+      'Monthly Payment',
+      'Monthly Deduction',
+      'Monthly Closing Balance',
       'Ack Status',
       'POD Received Date',
       'POD File',
@@ -637,6 +814,8 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
       'POD Received By',
       'POD Risk',
       'Remarks',
+      'Other Charges',
+      'Trip Proof Review',
     ];
     return _ExportReport(
       title: 'Invoice-wise freight report',
@@ -647,8 +826,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
   }
 
   _ExportReport _podPendingExportReport(List<Map<String, dynamic>> rows) {
-    final pendingRows =
-        rows.where((row) => _podAckLabel(row) != 'Received').toList();
+    final pendingRows = rows.where(ledgerProofNeedsReview).toList();
     return _ExportReport(
       title: 'POD pending report',
       slug: 'kaysons-pod-pending-report',
@@ -666,6 +844,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
         'POD Risk',
         'POD Remark',
         'Freight',
+        'Trip Proof Review',
       ],
       rows:
           pendingRows
@@ -673,7 +852,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
                 (row) => [
                   row['company_name'],
                   row['invoice_number'],
-                  row['e_way_bill_number'],
+                  ledgerInvoiceEwayBillDisplay(row),
                   row['party_name'],
                   row['origin'],
                   row['town'],
@@ -684,6 +863,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
                   _podRiskLabel(row),
                   row['pod_remark'],
                   row['total_freight'],
+                  ledgerProofExportLabel(row),
                 ],
               )
               .toList(),
@@ -698,7 +878,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
     row['invoice_number'],
     row['invoice_count'],
     row['invoice_numbers'],
-    row['e_way_bill_number'],
+    ledgerInvoiceEwayBillDisplay(row),
     row['e_way_bill_count'],
     row['e_way_bill_numbers'],
     row['delivery_reference'],
@@ -724,12 +904,13 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
     row['out_route'],
     row['deduction'],
     row['total_freight'],
+    row['period_month'],
     row['last_month_balance'],
     row['payment_amount'],
     row['settlement_deduction'],
     row['balance'],
     _podAckLabel(row),
-    row['pod_received_date'],
+    _podReceivedDate(row),
     (row['pod_file_path'] ?? '').toString().trim().isEmpty
         ? ''
         : row['pod_file_path'],
@@ -737,615 +918,999 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
     row['pod_received_by_name'],
     _podRiskLabel(row),
     row['remarks'],
+    row['other'],
+    ledgerProofExportLabel(row),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final rows = _filtered;
-    final transporterSummaries = _transporterSummaries(rows);
-    final vehicleCapacitySummaries = _movementSummaries(
-      rows,
-      (row) {
-        final category = (row['vehicle_capacity_category'] ?? '').toString().trim();
-        return category.isEmpty
-            ? _suggestVehicleCapacityCategory(_num(row['weight_kg'])?.toDouble() ?? 0)
-            : category;
-      },
+    final compact =
+        MediaQuery.sizeOf(context).width < 1050 ||
+        MediaQuery.textScalerOf(context).scale(14) > 19;
+    final filterCount =
+        [
+          _company != null,
+          _transporter != null,
+          _destination != null,
+          _status != null,
+          _podAck != null,
+          _tonnageCategory != null,
+          _placeSearch.text.trim().isNotEmpty,
+          _ewaySearch.text.trim().isNotEmpty,
+          _delayedOnly,
+          _latePodOnly,
+        ].where((active) => active).length;
+    final pageCount = math.max(1, (rows.length / _ledgerPageSize).ceil());
+    final page = _ledgerPage.clamp(0, pageCount - 1);
+    final start = page * _ledgerPageSize;
+    final end = math.min(start + _ledgerPageSize, rows.length);
+    final visible = rows.sublist(start, end);
+    final period =
+        _month != null
+            ? '${_month!.month}/${_month!.year}'
+            : _customStart != null
+            ? '${_shortDate(_customStart)} – ${_shortDate(_customEnd)}'
+            : l.dateWindowDays(_rangeDays);
+    final toolbar = Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        SizedBox(
+          width: compact ? double.infinity : 350,
+          child: TextField(
+            controller: _invoiceSearch,
+            decoration: InputDecoration(
+              labelText: officeCopy(context, 'Search ledger', 'लेजर खोजें'),
+              hintText: officeCopy(
+                context,
+                'Invoice, customer, vehicle or transporter',
+                'इनवॉइस, ग्राहक, वाहन या ट्रांसपोर्टर',
+              ),
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon:
+                  _invoiceSearch.text.isEmpty
+                      ? null
+                      : IconButton(
+                        tooltip: l.adminClearFilters,
+                        onPressed:
+                            () => setState(() {
+                              _invoiceSearch.clear();
+                              _ledgerPage = 0;
+                            }),
+                        icon: const Icon(Icons.close),
+                      ),
+            ),
+            onChanged: (_) => setState(() => _ledgerPage = 0),
+          ),
+        ),
+        PopupMenuButton<String>(
+          tooltip: officeCopy(context, 'Period', 'अवधि'),
+          onSelected: (value) async {
+            if (value == 'month') {
+              await _pickMonth();
+            } else if (value == 'custom') {
+              await _pickStart();
+              if (mounted) await _pickEnd();
+            } else {
+              setState(() {
+                _rangeDays = int.parse(value);
+                _month = null;
+                _customStart = null;
+                _customEnd = null;
+                _ledgerPage = 0;
+              });
+            }
+          },
+          itemBuilder:
+              (_) => [
+                for (final days in [7, 15, 30, 90])
+                  PopupMenuItem(
+                    value: '$days',
+                    child: Text(l.dateWindowDays(days)),
+                  ),
+                PopupMenuItem(
+                  value: 'month',
+                  child: Text(
+                    officeCopy(context, 'Choose month', 'महीना चुनें'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'custom',
+                  child: Text(l.dateWindowCustomDates),
+                ),
+              ],
+          child: _toolbarLabel(Icons.calendar_month_outlined, period),
+        ),
+        OutlinedButton.icon(
+          onPressed:
+              () =>
+                  setState(() => _showAdvancedFilters = !_showAdvancedFilters),
+          icon: Icon(
+            _showAdvancedFilters ? Icons.expand_less : Icons.tune_outlined,
+            size: 18,
+          ),
+          label: Text(
+            filterCount == 0
+                ? l.adminFilters
+                : '${l.adminFilters} ($filterCount)',
+          ),
+        ),
+        PopupMenuButton<String>(
+          tooltip: officeCopy(context, 'More', 'अधिक'),
+          onSelected: (action) {
+            if (action == 'import') {
+              _uploadLedgerCsv();
+            }
+            if (action == 'columns') {
+              setState(() {
+                _fullColumns = !_fullColumns;
+                _presentation = LedgerPresentation.rows;
+              });
+            }
+            if (action == 'refresh') {
+              _load();
+            }
+            if (action == 'clear') {
+              _clearFilters();
+            }
+          },
+          itemBuilder:
+              (_) => [
+                PopupMenuItem(
+                  value: 'import',
+                  enabled: !_uploading,
+                  child: Text(l.adminUploadCsv),
+                ),
+                PopupMenuItem(
+                  value: 'columns',
+                  child: Text(
+                    _fullColumns
+                        ? officeCopy(
+                          context,
+                          'Essential columns',
+                          'ज़रूरी कॉलम',
+                        )
+                        : officeCopy(context, 'All columns', 'सभी कॉलम'),
+                  ),
+                ),
+                PopupMenuItem(
+                  value: 'refresh',
+                  enabled: !_loading,
+                  child: Text(l.adminRefresh),
+                ),
+                PopupMenuItem(value: 'clear', child: Text(l.adminClearFilters)),
+              ],
+          child: _toolbarLabel(
+            Icons.more_horiz,
+            officeCopy(context, 'More', 'अधिक'),
+          ),
+        ),
+      ],
     );
-    final destinationSummaries = _movementSummaries(
-      rows,
-      (row) {
-        final town = (row['town'] ?? '').toString().trim();
-        return town.isEmpty ? 'Unknown' : town;
-      },
+    return ChipTheme(
+      data: Theme.of(context).chipTheme.copyWith(
+        labelStyle: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
+      ),
+      child: CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            sliver: SliverToBoxAdapter(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          l.adminFreightLedger,
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton.icon(
+                        onPressed: _openEntryForm,
+                        icon: const Icon(Icons.add),
+                        label: Text(
+                          officeCopy(context, 'Add entry', 'एंट्री जोड़ें'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    officeCopy(
+                      context,
+                      'Find an invoice and see what needs attention.',
+                      'इनवॉइस खोजें और बाकी काम देखें.',
+                    ),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                  const SizedBox(height: 16),
+                  SegmentedButton<LedgerPresentation>(
+                    showSelectedIcon: false,
+                    segments: [
+                      ButtonSegment(
+                        value: LedgerPresentation.rows,
+                        icon: const Icon(Icons.receipt_long_outlined),
+                        label: Text(officeCopy(context, 'Records', 'रिकॉर्ड')),
+                      ),
+                      ButtonSegment(
+                        value: LedgerPresentation.overview,
+                        icon: const Icon(Icons.bar_chart_outlined),
+                        label: Text(officeCopy(context, 'Reports', 'रिपोर्ट')),
+                      ),
+                    ],
+                    selected: {_presentation},
+                    onSelectionChanged:
+                        (values) => setState(() {
+                          _presentation = values.first;
+                          _fullColumns = false;
+                        }),
+                  ),
+                  const SizedBox(height: 16),
+                  toolbar,
+                  if (_showAdvancedFilters) ...[
+                    const SizedBox(height: 12),
+                    _advancedFilters(),
+                  ],
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      ChoiceChip(
+                        label: Text(
+                          officeCopy(context, 'All records', 'सभी रिकॉर्ड'),
+                        ),
+                        selected: !_pendingProofOnly,
+                        onSelected:
+                            (_) => setState(() {
+                              _pendingProofOnly = false;
+                              _ledgerPage = 0;
+                            }),
+                      ),
+                      ChoiceChip(
+                        label: Text(
+                          officeCopy(context, 'Pending proof', 'लंबित प्रमाण'),
+                        ),
+                        selected: _pendingProofOnly,
+                        onSelected:
+                            (_) => setState(() {
+                              _pendingProofOnly = true;
+                              _ledgerPage = 0;
+                            }),
+                      ),
+                      if (filterCount > 0 ||
+                          _month != null ||
+                          _invoiceSearch.text.isNotEmpty ||
+                          _rangeDays != 90 ||
+                          _customStart != null ||
+                          _pendingProofOnly)
+                        TextButton(
+                          onPressed: _clearFilters,
+                          child: Text(l.adminClearFilters),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  if (!_loading && _error == null)
+                    Text(
+                      officeCopy(
+                        context,
+                        '${rows.length} records · ${_money(rows.fold<num>(0, (sum, row) => sum + (_num(row['total_freight']) ?? 0)))} freight · ${countDistinctFreightRows(rows, where: ledgerProofNeedsReview)} trips need proof',
+                        '${rows.length} रिकॉर्ड · ${_money(rows.fold<num>(0, (sum, row) => sum + (_num(row['total_freight']) ?? 0)))} भाड़ा · ${countDistinctFreightRows(rows, where: ledgerProofNeedsReview)} चक्करों का प्रमाण बाकी',
+                      ),
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                ],
+              ),
+            ),
+          ),
+          if (_loading)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_error != null || rows.isEmpty)
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: WorkspaceEmptyState(
+                title:
+                    _error != null
+                        ? officeCopy(
+                          context,
+                          'Ledger could not be loaded',
+                          'लेजर लोड नहीं हुआ',
+                        )
+                        : l.adminNoLedgerRows,
+                message:
+                    _error != null
+                        ? officeCopy(
+                          context,
+                          'Retry to fetch the latest records.',
+                          'नई जानकारी पाने के लिए फिर प्रयास करें।',
+                        )
+                        : officeCopy(
+                          context,
+                          'Try a wider period or clear the filters.',
+                          'बड़ी अवधि चुनें या फ़िल्टर हटाएँ।',
+                        ),
+                icon:
+                    _error != null
+                        ? Icons.cloud_off_outlined
+                        : Icons.receipt_long_outlined,
+                action: OutlinedButton(
+                  onPressed: _error != null ? _load : _clearFilters,
+                  child: Text(
+                    _error != null ? l.adminRetry : l.adminClearFilters,
+                  ),
+                ),
+              ),
+            )
+          else if (_presentation == LedgerPresentation.overview)
+            SliverFillRemaining(hasScrollBody: true, child: _reports(rows))
+          else if (_fullColumns)
+            SliverFillRemaining(
+              hasScrollBody: true,
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => setState(() => _fullColumns = false),
+                        icon: const Icon(Icons.arrow_back),
+                        label: Text(
+                          officeCopy(
+                            context,
+                            'Back to records',
+                            'रिकॉर्ड पर वापस',
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: LedgerTableScroll(
+                      child: DataTable(
+                        columns: [
+                          for (final label in _detailLabels())
+                            DataColumn(label: Text(label)),
+                        ],
+                        rows: visible.map(_dataRow).toList(),
+                      ),
+                    ),
+                  ),
+                  _pagination(start, end, rows.length, page, pageCount),
+                ],
+              ),
+            )
+          else ...[
+            if (!compact)
+              SliverToBoxAdapter(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer.withValues(alpha: .35),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(12),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          officeCopy(
+                            context,
+                            'Invoice / customer',
+                            'इनवॉइस / ग्राहक',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          officeCopy(
+                            context,
+                            'Route / vehicle',
+                            'मार्ग / वाहन',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 20),
+                      Expanded(flex: 2, child: Text(l.adminFreight)),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          officeCopy(
+                            context,
+                            'Delivery proof',
+                            'डिलीवरी प्रमाण',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      SizedBox(
+                        width: 144,
+                        child: Text(officeCopy(context, 'Action', 'काम')),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              sliver: SliverList.builder(
+                itemCount: visible.length,
+                itemBuilder:
+                    (_, index) => LedgerRecordTile(
+                      row: visible[index],
+                      freightLabel: _money(visible[index]['total_freight']),
+                      compact: compact,
+                      onOpen: () => _openDetails(visible[index]),
+                    ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: _pagination(start, end, rows.length, page, pageCount),
+            ),
+          ],
+        ],
+      ),
     );
-    final routeSummaries = _movementSummaries(
-      rows,
-      (row) {
-        final origin = (row['origin'] ?? '').toString().trim();
-        final town = (row['town'] ?? '').toString().trim();
-        return '${origin.isEmpty ? 'Unknown' : origin} -> ${town.isEmpty ? 'Unknown' : town}';
-      },
+  }
+
+  Widget _toolbarLabel(IconData icon, String label) => Container(
+    constraints: const BoxConstraints(minHeight: 48),
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    decoration: BoxDecoration(
+      border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
+      borderRadius: BorderRadius.circular(12),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 20),
+        const SizedBox(width: 8),
+        Flexible(child: Text(label)),
+      ],
+    ),
+  );
+
+  void _applyFilter(VoidCallback change) => setState(() {
+    _ledgerPage = 0;
+    change();
+  });
+
+  Widget _advancedFilters() {
+    final l = AppLocalizations.of(context)!;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _FilterMenu(
+              label: l.adminCompany,
+              value: _company,
+              options: _options('company_name'),
+              onChanged: (v) => _applyFilter(() => _company = v),
+            ),
+            _FilterMenu(
+              label: l.transporter,
+              value: _transporter,
+              options: _options('transporter_name'),
+              onChanged: (v) => _applyFilter(() => _transporter = v),
+            ),
+            _FilterMenu(
+              label: l.adminDestinationPlace,
+              value: _destination,
+              options: _options('town'),
+              onChanged: (v) => _applyFilter(() => _destination = v),
+            ),
+            _FilterMenu(
+              label: l.adminStatus,
+              value: _status,
+              options: const ['Open', 'Closed', 'Completed'],
+              onChanged: (v) => _applyFilter(() => _status = v),
+            ),
+            _FilterMenu(
+              label: officeCopy(
+                context,
+                'Original POD receipt',
+                'मूल POD प्राप्ति',
+              ),
+              value: _podAck,
+              options: const ['Received', 'Pending'],
+              onChanged: (v) => _applyFilter(() => _podAck = v),
+            ),
+            _FilterMenu(
+              label: l.adminVehicleTonnage,
+              value: _tonnageCategory,
+              options: _vehicleCapacityCategories,
+              onChanged: (v) => _applyFilter(() => _tonnageCategory = v),
+            ),
+            _SearchFilter(
+              label: l.adminPlaceSearch,
+              hint: l.adminOriginDestinationParty,
+              controller: _placeSearch,
+              onChanged: () => _applyFilter(() => _ledgerPage = 0),
+            ),
+            _SearchFilter(
+              label: l.adminEwayNumber,
+              hint: l.adminSearchEway,
+              controller: _ewaySearch,
+              onChanged: () => _applyFilter(() => _ledgerPage = 0),
+            ),
+            FilterChip(
+              label: Text(l.adminDelayedOnly),
+              selected: _delayedOnly,
+              onSelected: (v) => _applyFilter(() => _delayedOnly = v),
+            ),
+            FilterChip(
+              label: Text(l.adminLatePod),
+              selected: _latePodOnly,
+              onSelected: (v) => _applyFilter(() => _latePodOnly = v),
+            ),
+          ],
+        ),
+      ),
     );
-    final companies = _options('company_name');
-    final transporters = _options('transporter_name');
-    final destinations = _options('town');
-    final advancedFilterCount = [
-      _customStart != null || _customEnd != null || _rangeDays != 90,
-      _status != null,
-      _podAck != null,
-      _placeSearch.text.trim().isNotEmpty,
-      _ewaySearch.text.trim().isNotEmpty,
-      _delayedOnly,
-      _latePodOnly,
-    ].where((active) => active).length;
-    final pageCount =
-        rows.isEmpty ? 1 : ((rows.length - 1) ~/ _ledgerPageSize) + 1;
-    final page = _ledgerPage.clamp(0, pageCount - 1).toInt();
-    final pageStart = rows.isEmpty ? 0 : page * _ledgerPageSize;
-    final pageEnd =
-        rows.isEmpty
-            ? 0
-            : math.min(pageStart + _ledgerPageSize, rows.length);
-    final visibleRows = rows.sublist(pageStart, pageEnd);
+  }
+
+  Widget _pagination(int start, int end, int total, int page, int pageCount) {
+    final l = AppLocalizations.of(context)!;
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text('${l.adminShowing} ${start + 1}–$end ${l.adminOf} $total'),
+          IconButton.outlined(
+            tooltip: l.adminPreviousPage,
+            onPressed:
+                page == 0 ? null : () => setState(() => _ledgerPage = page - 1),
+            icon: const Icon(Icons.chevron_left),
+          ),
+          IconButton.outlined(
+            tooltip: l.adminNextPage,
+            onPressed:
+                page >= pageCount - 1
+                    ? null
+                    : () => setState(() => _ledgerPage = page + 1),
+            icon: const Icon(Icons.chevron_right),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _reports(List<Map<String, dynamic>> rows) {
+    final l = AppLocalizations.of(context)!;
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Freight ledger',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
-                ),
-              ),
-              PopupMenuButton<(_ReportExportType, _ReportExportFormat)>(
-                tooltip: 'Export reports',
-                enabled: rows.isNotEmpty,
-                icon: const Icon(Icons.download_outlined),
-                onSelected:
-                    (choice) => _exportReport(choice.$1, choice.$2),
-                itemBuilder:
-                    (context) => [
-                      _exportMenuItem(
-                        _ReportExportType.transporterMonthly,
-                        _ReportExportFormat.excel,
-                        'Transporter monthly Excel',
-                      ),
-                      _exportMenuItem(
-                        _ReportExportType.transporterMonthly,
-                        _ReportExportFormat.csv,
-                        'Transporter monthly CSV',
-                      ),
-                      _exportMenuItem(
-                        _ReportExportType.placeWise,
-                        _ReportExportFormat.excel,
-                        'Place-wise Excel',
-                      ),
-                      _exportMenuItem(
-                        _ReportExportType.placeWise,
-                        _ReportExportFormat.csv,
-                        'Place-wise CSV',
-                      ),
-                      _exportMenuItem(
-                        _ReportExportType.invoiceWise,
-                        _ReportExportFormat.excel,
-                        'Invoice-wise Excel',
-                      ),
-                      _exportMenuItem(
-                        _ReportExportType.invoiceWise,
-                        _ReportExportFormat.csv,
-                        'Invoice-wise CSV',
-                      ),
-                      _exportMenuItem(
-                        _ReportExportType.podPending,
-                        _ReportExportFormat.excel,
-                        'POD pending Excel',
-                      ),
-                      _exportMenuItem(
-                        _ReportExportType.podPending,
-                        _ReportExportFormat.csv,
-                        'POD pending CSV',
-                      ),
-                      _exportMenuItem(
-                        _ReportExportType.vehicleTonnage,
-                        _ReportExportFormat.excel,
-                        'Vehicle tonnage Excel',
-                      ),
-                      _exportMenuItem(
-                        _ReportExportType.vehicleTonnage,
-                        _ReportExportFormat.csv,
-                        'Vehicle tonnage CSV',
-                      ),
-                      _exportMenuItem(
-                        _ReportExportType.routeWise,
-                        _ReportExportFormat.excel,
-                        'Route-wise Excel',
-                      ),
-                      _exportMenuItem(
-                        _ReportExportType.routeWise,
-                        _ReportExportFormat.csv,
-                        'Route-wise CSV',
-                      ),
-                    ],
-              ),
-              IconButton(
-                tooltip: 'Upload CSV',
-                onPressed: _uploading ? null : _uploadLedgerCsv,
-                icon:
-                    _uploading
-                        ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                        : const Icon(Icons.upload_file_outlined),
-              ),
-              IconButton(
-                tooltip: 'Refresh',
-                onPressed: _loading ? null : _load,
-                icon: const Icon(Icons.refresh),
-              ),
-              FilledButton.icon(
-                onPressed: _openEntryForm,
-                icon: const Icon(Icons.add),
-                label: const Text('Entry'),
-              ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _MonthFilter(
-                month: _month,
-                onPick: _pickMonth,
-                onClear: () => setState(() => _month = null),
-              ),
-              _FilterMenu(
-                label: 'Company',
-                value: _company,
-                options: companies,
-                onChanged: (v) => setState(() => _company = v),
-              ),
-              _FilterMenu(
-                label: 'Transporter',
-                value: _transporter,
-                options: transporters,
-                onChanged: (v) => setState(() => _transporter = v),
-              ),
-              _FilterMenu(
-                label: 'Destination / Place',
-                value: _destination,
-                options: destinations,
-                onChanged: (v) => setState(() => _destination = v),
-              ),
-              _SearchFilter(
-                label: 'Invoice Number',
-                hint: 'Search invoice',
-                controller: _invoiceSearch,
-                onChanged: () => setState(() {}),
-              ),
-              OutlinedButton.icon(
-                onPressed:
-                    () => setState(
-                      () => _showAdvancedFilters = !_showAdvancedFilters,
-                    ),
-                icon: Icon(
-                  _showAdvancedFilters
-                      ? Icons.expand_less
-                      : Icons.tune_outlined,
-                  size: 18,
-                ),
-                label: Text(
-                  advancedFilterCount == 0
-                      ? 'Filters'
-                      : 'Filters ($advancedFilterCount)',
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: _clearFilters,
-                icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
-                label: const Text('Clear filters'),
-              ),
-            ],
-          ),
-        ),
-        if (_showAdvancedFilters)
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFAF8FF),
-              border: Border.all(color: const Color(0xFFCAC4D0)),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                DateWindowBar(
-                  rangeDays: _rangeDays,
-                  customStart: _customStart,
-                  customEnd: _customEnd,
-                  onSelectRange:
-                      (days) => setState(() {
-                        _rangeDays = days;
-                        _customStart = null;
-                        _customEnd = null;
-                      }),
-                  onPickStart: _pickStart,
-                  onPickEnd: _pickEnd,
-                  onClearCustom:
-                      () => setState(() {
-                        _customStart = null;
-                        _customEnd = null;
-                      }),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _FilterMenu(
-                      label: 'Status',
-                      value: _status,
-                      options: const ['Open', 'Closed', 'Completed'],
-                      onChanged: (v) => setState(() => _status = v),
-                    ),
-                    _FilterMenu(
-                      label: 'POD / Acknowledgement',
-                      value: _podAck,
-                      options: const ['Received', 'Pending'],
-                      onChanged: (v) => setState(() => _podAck = v),
-                    ),
-                    _SearchFilter(
-                      label: 'Place search',
-                      hint: 'Origin, destination, party',
-                      controller: _placeSearch,
-                      onChanged: () => setState(() {}),
-                    ),
-                    _SearchFilter(
-                      label: 'E-way Bill Number',
-                      hint: 'Search e-way bill',
-                      controller: _ewaySearch,
-                      onChanged: () => setState(() {}),
-                    ),
-                    FilterChip(
-                      label: const Text('Delayed only'),
-                      selected: _delayedOnly,
-                      onSelected: (v) => setState(() => _delayedOnly = v),
-                    ),
-                    FilterChip(
-                      label: const Text('Late POD'),
-                      selected: _latePodOnly,
-                      onSelected: (v) => setState(() => _latePodOnly = v),
-                    ),
-                  ],
+                for (final summary in _OverviewSummary.values)
+                  ChoiceChip(
+                    label: Text(switch (summary) {
+                      _OverviewSummary.transporter => l.transporter,
+                      _OverviewSummary.destination => l.adminPlace,
+                      _OverviewSummary.route => l.adminRoute,
+                      _OverviewSummary.vehicle => l.adminVehicle,
+                    }),
+                    selected: summary == _overviewSummary,
+                    onSelected:
+                        (_) => setState(() => _overviewSummary = summary),
+                  ),
+                PopupMenuButton<_ReportExportType>(
+                  tooltip: l.adminExportReports,
+                  onSelected: _exportReport,
+                  itemBuilder:
+                      (_) => [
+                        _exportMenuItem(
+                          _ReportExportType.transporterMonthly,
+                          l.adminTransporterMonthlyCsv,
+                        ),
+                        _exportMenuItem(
+                          _ReportExportType.placeWise,
+                          l.adminPlaceWiseCsv,
+                        ),
+                        _exportMenuItem(
+                          _ReportExportType.invoiceWise,
+                          l.adminInvoiceWiseCsv,
+                        ),
+                        _exportMenuItem(
+                          _ReportExportType.podPending,
+                          l.adminPodPendingCsv,
+                        ),
+                        _exportMenuItem(
+                          _ReportExportType.vehicleTonnage,
+                          l.adminVehicleTonnageCsv,
+                        ),
+                        _exportMenuItem(
+                          _ReportExportType.routeWise,
+                          l.adminRouteWiseCsv,
+                        ),
+                      ],
+                  child: _toolbarLabel(
+                    Icons.download_outlined,
+                    l.adminExportReports,
+                  ),
                 ),
               ],
             ),
           ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _LedgerStatChip(
-                      label: 'Rows',
-                      value: _number(rows.length),
-                    ),
-                    _LedgerStatChip(
-                      label: 'Cases',
-                      value: _number(
-                        rows.fold<num>(
-                          0,
-                          (sum, row) => sum + (_num(row['cases']) ?? 0),
-                        ),
-                      ),
-                    ),
-                    _LedgerStatChip(
-                      label: 'MT',
-                      value: _number(
-                        rows.fold<num>(
-                          0,
-                          (sum, row) => sum + (_num(row['weight_kg']) ?? 0),
-                        ),
-                      ),
-                    ),
-                    _LedgerStatChip(
-                      label: 'Freight',
-                      value: _money(
-                        rows.fold<num>(
-                          0,
-                          (sum, row) => sum + (_num(row['total_freight']) ?? 0),
-                        ),
-                      ),
-                    ),
-                    _LedgerStatChip(
-                      label: 'POD pending',
-                      value:
-                          rows
-                              .where((row) => _podAckLabel(row) != 'Received')
-                              .length
-                              .toString(),
-                    ),
-                  ],
-                ),
-              ),
-              SegmentedButton<_LedgerPresentation>(
-                segments: const [
-                  ButtonSegment(
-                    value: _LedgerPresentation.overview,
-                    icon: Icon(Icons.dashboard_outlined),
-                    label: Text('Overview'),
-                  ),
-                  ButtonSegment(
-                    value: _LedgerPresentation.rows,
-                    icon: Icon(Icons.table_rows_outlined),
-                    label: Text('Rows'),
-                  ),
-                ],
-                selected: {_presentation},
-                onSelectionChanged:
-                    (selection) => setState(
-                      () => _presentation = selection.first,
-                    ),
-              ),
-            ],
-          ),
         ),
         Expanded(
-          child:
-              _loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _error != null
-                  ? Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(
-                        'Error: $_error',
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  )
-                  : rows.isEmpty
-                  ? const Center(
-                    child: Text(
-                      'No ledger rows match this filter.',
-                      style: TextStyle(color: _onSurfaceVariant),
-                    ),
-                  )
-                  : _presentation == _LedgerPresentation.overview
-                  ? Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-                        child: Row(
-                          children: [
-                            const Expanded(
-                              child: Text(
-                                'Summary report',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            SegmentedButton<_OverviewSummary>(
-                              showSelectedIcon: false,
-                              segments: const [
-                                ButtonSegment(
-                                  value: _OverviewSummary.transporter,
-                                  label: Text('Transporter'),
-                                ),
-                                ButtonSegment(
-                                  value: _OverviewSummary.destination,
-                                  label: Text('Place'),
-                                ),
-                                ButtonSegment(
-                                  value: _OverviewSummary.route,
-                                  label: Text('Route'),
-                                ),
-                                ButtonSegment(
-                                  value: _OverviewSummary.vehicle,
-                                  label: Text('Vehicle'),
-                                ),
-                              ],
-                              selected: {_overviewSummary},
-                              onSelectionChanged:
-                                  (selection) => setState(
-                                    () => _overviewSummary = selection.first,
-                                  ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: _OverviewSummaryBody(
-                          summary: _overviewSummary,
-                          transporterSummaries: transporterSummaries,
-                          vehicleCapacitySummaries: vehicleCapacitySummaries,
-                          destinationSummaries: destinationSummaries,
-                          routeSummaries: routeSummaries,
-                        ),
-                      ),
-                    ],
-                  )
-                  : Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Showing ${pageStart + 1}-$pageEnd of ${rows.length}',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: _onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                            SizedBox(
-                              width: 112,
-                              child: DropdownButtonHideUnderline(
-                                child: DropdownButton<int>(
-                                  value: _ledgerPageSize,
-                                  isExpanded: true,
-                                  items:
-                                      const [50, 75, 100, 150]
-                                          .map(
-                                            (size) => DropdownMenuItem(
-                                              value: size,
-                                              child: Text('$size rows'),
-                                            ),
-                                          )
-                                          .toList(),
-                                  onChanged:
-                                      (value) => setState(() {
-                                        _ledgerPageSize =
-                                            value ?? _ledgerPageSize;
-                                        _ledgerPage = 0;
-                                      }),
-                                ),
-                              ),
-                            ),
-                            IconButton.outlined(
-                              tooltip: 'Previous page',
-                              onPressed:
-                                  page <= 0
-                                      ? null
-                                      : () => setState(() => _ledgerPage--),
-                              icon: const Icon(Icons.chevron_left),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton.outlined(
-                              tooltip: 'Next page',
-                              onPressed:
-                                  page >= pageCount - 1
-                                      ? null
-                                      : () => setState(() => _ledgerPage++),
-                              icon: const Icon(Icons.chevron_right),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton.outlined(
-                              tooltip: 'Scroll table left',
-                              onPressed: () => _scrollLedgerTable(-1),
-                              icon: const Icon(Icons.keyboard_double_arrow_left),
-                            ),
-                            const SizedBox(width: 8),
-                            IconButton.outlined(
-                              tooltip: 'Scroll table right',
-                              onPressed: () => _scrollLedgerTable(1),
-                              icon:
-                                  const Icon(Icons.keyboard_double_arrow_right),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        child: Scrollbar(
-                          controller: _ledgerHorizontalScroll,
-                          thumbVisibility: true,
-                          interactive: true,
-                          scrollbarOrientation: ScrollbarOrientation.bottom,
-                          child: SingleChildScrollView(
-                            controller: _ledgerHorizontalScroll,
-                            primary: false,
-                            scrollDirection: Axis.horizontal,
-                            child: Scrollbar(
-                              controller: _ledgerVerticalScroll,
-                              thumbVisibility: true,
-                              interactive: true,
-                              child: SingleChildScrollView(
-                                controller: _ledgerVerticalScroll,
-                                primary: false,
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  4,
-                                  16,
-                                  24,
-                                ),
-                                child: DataTable(
-                                  dataRowMinHeight: 44,
-                                  dataRowMaxHeight: 56,
-                                  headingRowColor: WidgetStateProperty.all(
-                                    const Color(0xFFF6EDFB),
-                                  ),
-                                  columns: const [
-                                    DataColumn(label: Text('Company')),
-                                    DataColumn(label: Text('Edit')),
-                                    DataColumn(label: Text('Bill')),
-                                    DataColumn(label: Text('Dispatch')),
-                                    DataColumn(label: Text('Delay')),
-                                    DataColumn(label: Text('Invoice')),
-                                    DataColumn(label: Text('Inv Count')),
-                                    DataColumn(label: Text('E-way')),
-                                    DataColumn(label: Text('E-way Count')),
-                                    DataColumn(label: Text('DEL')),
-                                    DataColumn(label: Text('Party')),
-                                    DataColumn(label: Text('Party Count')),
-                                    DataColumn(label: Text('Origin')),
-                                    DataColumn(label: Text('Town')),
-                                    DataColumn(label: Text('Cases')),
-                                    DataColumn(label: Text('Ton')),
-                                    DataColumn(label: Text('Vehicle')),
-                                    DataColumn(label: Text('Capacity')),
-                                    DataColumn(label: Text('Dispatch GR')),
-                                    DataColumn(label: Text('Transporter')),
-                                    DataColumn(label: Text('Status')),
-                                    DataColumn(label: Text('Total')),
-                                    DataColumn(label: Text('Balance')),
-                                    DataColumn(label: Text('POD Status')),
-                                    DataColumn(label: Text('POD Date')),
-                                    DataColumn(label: Text('POD File')),
-                                    DataColumn(label: Text('POD Remark')),
-                                    DataColumn(label: Text('Received By')),
-                                    DataColumn(label: Text('POD')),
-                                  ],
-                                  rows: visibleRows.map(_dataRow).toList(),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+          child: _OverviewSummaryBody(
+            summary: _overviewSummary,
+            transporterSummaries: _transporterSummaries(rows),
+            vehicleCapacitySummaries: _movementSummaries(
+              rows,
+              _rowTonnageCategory,
+            ),
+            destinationSummaries: _movementSummaries(
+              rows,
+              (row) => _text(row['town']),
+            ),
+            routeSummaries: _movementSummaries(
+              rows,
+              (row) => '${_text(row['origin'])} -> ${_text(row['town'])}',
+            ),
+          ),
         ),
       ],
     );
   }
 
-  void _scrollLedgerTable(int direction) {
-    if (!_ledgerHorizontalScroll.hasClients) return;
-    final position = _ledgerHorizontalScroll.position;
-    final viewport = position.viewportDimension;
-    final step = viewport < 650 ? viewport * 0.8 : 520.0;
-    final target = (position.pixels + (step * direction)).clamp(
-      position.minScrollExtent,
-      position.maxScrollExtent,
-    );
-    _ledgerHorizontalScroll.animateTo(
-      target.toDouble(),
-      duration: const Duration(milliseconds: 220),
-      curve: Curves.easeOutCubic,
-    );
+  List<String> _detailLabels() {
+    final l = AppLocalizations.of(context)!;
+    return [
+      l.adminCompany,
+      officeCopy(context, 'Action', 'काम'),
+      l.adminBill,
+      l.adminDispatch,
+      l.adminDelay,
+      l.adminInvoiceShort,
+      l.adminInvoiceCount,
+      l.adminEway,
+      l.adminEwayCount,
+      l.adminDel,
+      l.adminParty,
+      l.adminPartyCount,
+      l.adminOrigin,
+      l.adminTown,
+      l.adminCases,
+      l.adminTon,
+      l.adminVehicle,
+      l.adminCapacity,
+      l.adminDispatchGr,
+      l.transporter,
+      l.adminStatus,
+      l.adminTotal,
+      officeCopy(
+        context,
+        '${l.adminBalance} (monthly closing)',
+        '${l.adminBalance} (महीने के अंत में)',
+      ),
+      l.adminPodStatus,
+      l.adminPodDate,
+      l.adminPodFile,
+      l.adminPodRemark,
+      l.adminReceivedBy,
+      'POD',
+    ];
   }
+
+  Future<void> _openDetails(Map<String, dynamic> row) async {
+    final l = AppLocalizations.of(context)!;
+    Widget detail(BuildContext detailContext) {
+      final cells = _dataRow(row).cells;
+      final labels = _detailLabels();
+      Widget section(String title, List<int> indices) => Padding(
+        padding: const EdgeInsets.only(bottom: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            for (final index in indices)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        labels[index],
+                        style: Theme.of(context).textTheme.labelMedium,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: cells[index].child),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      );
+      return Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: Text(
+            officeCopy(context, 'Record details', 'रिकॉर्ड का विवरण'),
+          ),
+          actions: [
+            IconButton(
+              tooltip: officeCopy(context, 'Close details', 'विवरण बंद करें'),
+              onPressed: () => Navigator.pop(detailContext),
+              icon: const Icon(Icons.close),
+            ),
+          ],
+        ),
+        body: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Text(
+              _text(row['invoice_number']),
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 8),
+            Text('${_text(row['origin'])} → ${_text(row['town'])}'),
+            const SizedBox(height: 16),
+            LedgerProofBadge(row: row),
+            const SizedBox(height: 8),
+            Text(
+              officeCopy(
+                context,
+                'This proof status covers the whole trip. Delivery completion and office acceptance are tracked separately. Historical receipt is taken from the original ledger.',
+                'यह प्रमाण स्थिति पूरे चक्कर की है। डिलीवरी पूरी होना और कार्यालय की स्वीकृति अलग हैं। पुराने रिकॉर्ड की प्राप्ति मूल लेजर से है।',
+              ),
+            ),
+            const SizedBox(height: 24),
+            if ((row['_proof_receivers'] as List? ?? const []).isNotEmpty)
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: Text(
+                  officeCopy(
+                    context,
+                    'Customer proof reviews',
+                    'ग्राहकों के प्रमाण की जाँच',
+                  ),
+                ),
+                children: [
+                  for (final receiver in row['_proof_receivers'] as List)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        '${_text(receiver['party_name'])} · ${_text(receiver['town'])}',
+                      ),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          LedgerProofBadge(
+                            row: {
+                              ...row,
+                              '_proof_receivers': [receiver],
+                            },
+                          ),
+                          if ((receiver['pod_review_note'] ?? '')
+                              .toString()
+                              .trim()
+                              .isNotEmpty)
+                            Text(receiver['pod_review_note'].toString()),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            section(
+              officeCopy(context, 'Invoice & customer', 'इनवॉइस और ग्राहक'),
+              [0, 5, 10, 2, 7, 8, 9, 6, 11],
+            ),
+            section(
+              officeCopy(context, 'Trip & delivery', 'चक्कर और डिलीवरी'),
+              [12, 13, 16, 19, 17, 18, 3, 4, 14, 15, 20],
+            ),
+            section(
+              officeCopy(context, 'Freight & settlement', 'भाड़ा और भुगतान'),
+              [21, 22],
+            ),
+            for (final key in [
+              'freight',
+              'extra_freight',
+              'labour',
+              'detention',
+              'toll_tax',
+              'point_charge',
+              'out_route',
+              'other',
+              'deduction',
+              'last_month_balance',
+              'payment_amount',
+              'settlement_deduction',
+              'period_month',
+            ])
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: Text(_chargeFieldLabel(key))),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        key == 'period_month'
+                            ? _text(row[key])
+                            : _money(row[key]),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            Text(
+              officeCopy(
+                context,
+                'Settlement values belong to a transporter’s month and appear once in filtered records. They are not per-invoice outstanding amounts.',
+                'भुगतान के आंकड़े ट्रांसपोर्टर के पूरे महीने के हैं और चुने रिकॉर्ड में एक बार दिखते हैं। ये प्रति इनवॉइस बकाया नहीं हैं।',
+              ),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 24),
+            section(
+              officeCopy(context, 'Original POD record', 'मूल POD रिकॉर्ड'),
+              [23, 24, 25, 26, 27, 28],
+            ),
+            Text(
+              officeCopy(context, 'Notes', 'टिप्पणी'),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(_text(row['remarks'])),
+            const SizedBox(height: 16),
+            SelectableText(
+              '${officeCopy(context, 'Trip ID', 'चक्कर ID')}: ${_text(row['freight_id'])}',
+            ),
+            SelectableText(
+              '${officeCopy(context, 'Invoice ID', 'इनवॉइस ID')}: ${_text(row['invoice_id'])}',
+            ),
+          ],
+        ),
+        bottomNavigationBar: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.pop(detailContext, 'edit'),
+                  icon: const Icon(Icons.edit_outlined),
+                  label: Text(l.adminEditLedgerEntry),
+                ),
+                if (row['freight_id'] != null &&
+                    row['record_origin'] != 'historical_import')
+                  FilledButton.icon(
+                    onPressed: () => Navigator.pop(detailContext, 'delivery'),
+                    icon: const Icon(Icons.fact_check_outlined),
+                    label: Text(
+                      officeCopy(context, 'Review delivery', 'डिलीवरी देखें'),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final phone = MediaQuery.sizeOf(context).width < 700;
+    final action =
+        phone
+            ? await Navigator.of(context).push<String>(
+              MaterialPageRoute(fullscreenDialog: true, builder: detail),
+            )
+            : await showDialog<String>(
+              context: context,
+              builder:
+                  (c) => Dialog(
+                    alignment: Alignment.centerRight,
+                    insetPadding: const EdgeInsets.all(16),
+                    clipBehavior: Clip.antiAlias,
+                    child: SizedBox(
+                      width: 600,
+                      height: MediaQuery.sizeOf(c).height - 32,
+                      child: detail(c),
+                    ),
+                  ),
+            );
+    if (!mounted) return;
+    if (action == 'edit') await _openEntryForm(row);
+    if (action == 'delivery') {
+      final role = await AuthService.instance.fetchRole();
+      if (!mounted) return;
+      final prefix =
+          role == AppRole.admin
+              ? '/admin'
+              : role == AppRole.accountant
+              ? '/acct'
+              : '/lm';
+      await context.push('$prefix/track/${row['freight_id']}');
+      if (mounted) await _load();
+    }
+  }
+
+  String _chargeFieldLabel(String key) => officeCopy(
+    context,
+    const {
+          'freight': 'Base freight',
+          'extra_freight': 'Extra freight',
+          'labour': 'Labour',
+          'detention': 'Detention',
+          'toll_tax': 'Toll tax',
+          'point_charge': 'Point charge',
+          'out_route': 'Out route',
+          'other': 'Other charges',
+          'deduction': 'Freight deduction',
+          'last_month_balance': 'Opening balance',
+          'payment_amount': 'Monthly payments',
+          'settlement_deduction': 'Monthly deduction',
+          'period_month': 'Settlement month',
+        }[key] ??
+        key,
+    const {
+          'freight': 'मूल भाड़ा',
+          'extra_freight': 'अतिरिक्त भाड़ा',
+          'labour': 'मज़दूरी',
+          'detention': 'रोक शुल्क',
+          'toll_tax': 'टोल टैक्स',
+          'point_charge': 'पॉइंट शुल्क',
+          'out_route': 'अतिरिक्त मार्ग',
+          'other': 'अन्य शुल्क',
+          'deduction': 'भाड़ा कटौती',
+          'last_month_balance': 'शुरू का बकाया',
+          'payment_amount': 'मासिक भुगतान',
+          'settlement_deduction': 'मासिक कटौती',
+          'period_month': 'भुगतान का महीना',
+        }[key] ??
+        key,
+  );
 
   void _clearFilters() {
     setState(() {
       _rangeDays = 90;
+      _pendingProofOnly = false;
+      _ledgerPage = 0;
       _customStart = null;
       _customEnd = null;
       _company = null;
@@ -1354,6 +1919,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
       _month = null;
       _status = null;
       _podAck = null;
+      _tonnageCategory = null;
       _delayedOnly = false;
       _latePodOnly = false;
       _showAdvancedFilters = false;
@@ -1379,7 +1945,10 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
     for (final row in rows) {
       final transporter = (row['transporter_name'] ?? '').toString().trim();
       final key = transporter.isEmpty ? 'Unassigned' : transporter;
-      final summary = summaries.putIfAbsent(key, () => _TransporterSummary(key));
+      final summary = summaries.putIfAbsent(
+        key,
+        () => _TransporterSummary(key),
+      );
       summary.add(row);
     }
     return summaries.values.toList()
@@ -1405,10 +1974,13 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
       cells: [
         DataCell(Text(_text(row['company_name']))),
         DataCell(
-          IconButton(
-            tooltip: 'Edit ledger entry',
-            onPressed: () => _openEntryForm(row),
-            icon: const Icon(Icons.edit_outlined),
+          OutlinedButton(
+            onPressed: () => _openDetails(row),
+            child: Text(
+              ledgerProofNeedsReview(row)
+                  ? officeCopy(context, 'Review', 'जाँचें')
+                  : officeCopy(context, 'Details', 'विवरण'),
+            ),
           ),
         ),
         DataCell(Text(_shortDate(row['bill_date']))),
@@ -1416,7 +1988,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
         DataCell(Text(_num(row['delay_days'])?.toStringAsFixed(0) ?? '-')),
         DataCell(Text(_text(row['invoice_number']))),
         DataCell(Text(_number(row['invoice_count']))),
-        DataCell(Text(_text(row['e_way_bill_number']))),
+        DataCell(Text(ledgerInvoiceEwayBillDisplay(row))),
         DataCell(Text(_number(row['e_way_bill_count']))),
         DataCell(Text(_text(row['delivery_reference']))),
         DataCell(Text(_text(row['party_name']))),
@@ -1433,14 +2005,169 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
         DataCell(Text(_money(row['total_freight']))),
         DataCell(Text(_money(row['balance']))),
         DataCell(Text(_podAckLabel(row))),
-        DataCell(Text(_shortDate(row['pod_received_date']))),
-        DataCell(Text(_text(row['pod_file_path']).trim() == '-' ? '-' : 'Uploaded')),
+        DataCell(Text(_shortDate(_podReceivedDate(row)))),
+        DataCell(
+          Text(_text(row['pod_file_path']).trim() == '-' ? '-' : 'Uploaded'),
+        ),
         DataCell(Text(_text(row['pod_remark']))),
         DataCell(Text(_text(row['pod_received_by_name']))),
         DataCell(Text(_podRiskLabel(row))),
       ],
     );
   }
+}
+
+typedef LedgerDateSelection =
+    ({DateTime? month, DateTime? start, DateTime? end});
+
+@visibleForTesting
+LedgerDateSelection selectLedgerCustomDateRange({
+  required DateTime? currentStart,
+  required DateTime? currentEnd,
+  DateTime? pickedStart,
+  DateTime? pickedEnd,
+}) {
+  var start = pickedStart ?? currentStart;
+  var end = pickedEnd ?? currentEnd;
+  if (pickedStart != null && (end == null || end.isBefore(pickedStart))) {
+    end = pickedStart;
+  }
+  if (pickedEnd != null && (start == null || start.isAfter(pickedEnd))) {
+    start = pickedEnd;
+  }
+  start ??= end;
+  end ??= start;
+  return (month: null, start: start, end: end);
+}
+
+@visibleForTesting
+LedgerDateSelection selectLedgerMonth(DateTime picked) => (
+  month: DateTime(picked.year, picked.month),
+  start: null,
+  end: null,
+);
+
+@visibleForTesting
+bool ledgerRowMatchesInvoiceDocumentSearch(
+  Map<String, dynamic> row, {
+  required String invoiceQuery,
+  required String ewayQuery,
+}) {
+  final invoice = (row['invoice_number'] ?? '').toString();
+  if (!_containsAny(invoiceQuery, [invoice])) return false;
+  final ewayNumbers = <String>{
+    ..._documentNumbers(row['_invoice_eway_bill_numbers']),
+    ..._documentNumbers(row['e_way_bill_number']),
+  };
+  return _containsAny(ewayQuery, ewayNumbers.toList());
+}
+
+@visibleForTesting
+String ledgerInvoiceEwayBillDisplay(Map<String, dynamic> row) {
+  final values =
+      <String>{
+          ..._documentNumbers(row['_invoice_eway_bill_numbers']),
+          ..._documentNumbers(row['e_way_bill_number']),
+        }.toList()
+        ..sort();
+  return values.join(' / ');
+}
+
+Set<String> _documentNumbers(dynamic value) {
+  final values = value is Iterable && value is! String ? value : [value];
+  return values
+      .where((item) => item != null)
+      .expand((item) => item.toString().split(' / '))
+      .map((item) => item.trim())
+      .where((item) => item.isNotEmpty)
+      .toSet();
+}
+
+@visibleForTesting
+int countDistinctFreightRows(
+  Iterable<Map<String, dynamic>> rows, {
+  required bool Function(Map<String, dynamic> row) where,
+}) {
+  final ids = <String>{};
+  var rowsWithoutId = 0;
+  for (final row in rows) {
+    if (!where(row)) continue;
+    final id = (row['freight_id'] ?? '').toString().trim();
+    if (id.isEmpty) {
+      rowsWithoutId++;
+    } else {
+      ids.add(id);
+    }
+  }
+  return ids.length + rowsWithoutId;
+}
+
+class _LedgerSettlementTotals {
+  double openingBalance = 0;
+  double payment = 0;
+  double deduction = 0;
+  double freight = 0;
+  bool initialized = false;
+
+  void add(Map<String, dynamic> row) {
+    if (!initialized) {
+      openingBalance = (_num(row['last_month_balance']) ?? 0).toDouble();
+      payment = (_num(row['payment_amount']) ?? 0).toDouble();
+      deduction = (_num(row['settlement_deduction']) ?? 0).toDouble();
+      initialized = true;
+    }
+    freight += (_num(row['total_freight']) ?? 0).toDouble();
+  }
+
+  double get closingBalance => openingBalance + freight - payment - deduction;
+}
+
+String _ledgerSettlementGroupKey(Map<String, dynamic> row) {
+  final company = (row['company_name'] ?? 'Unassigned').toString().trim();
+  final transporter =
+      (row['transporter_id'] ?? row['transporter_name'] ?? 'Unassigned')
+          .toString()
+          .trim();
+  final period = (row['period_month'] ?? '').toString().trim();
+  final date = period.isNotEmpty ? period : _reportDate(row)?.toIso8601String();
+  final monthKey =
+      date == null || date.length < 7 ? 'Unknown' : date.substring(0, 7);
+  return '$company\u0000$transporter\u0000$monthKey';
+}
+
+@visibleForTesting
+List<Map<String, dynamic>> normalizeLedgerSettlementFields({
+  required List<Map<String, dynamic>> displayedRows,
+  required List<Map<String, dynamic>> allRows,
+}) {
+  final totalsByGroup = <String, _LedgerSettlementTotals>{};
+  for (final row in allRows) {
+    totalsByGroup
+        .putIfAbsent(
+          _ledgerSettlementGroupKey(row),
+          _LedgerSettlementTotals.new,
+        )
+        .add(row);
+  }
+
+  final emittedGroups = <String>{};
+  return displayedRows.map((source) {
+    final row =
+        Map<String, dynamic>.from(source)
+          ..['last_month_balance'] = null
+          ..['payment_amount'] = null
+          ..['settlement_deduction'] = null
+          ..['balance'] = null;
+    final key = _ledgerSettlementGroupKey(source);
+    final totals = totalsByGroup[key];
+    if (totals != null && emittedGroups.add(key)) {
+      row['last_month_balance'] = totals.openingBalance;
+      row['payment_amount'] = totals.payment;
+      row['settlement_deduction'] = totals.deduction;
+      row['balance'] = totals.closingBalance;
+    }
+    return row;
+  }).toList();
 }
 
 bool _flag(dynamic value) {
@@ -1455,7 +2182,7 @@ String _podRiskLabel(Map<String, dynamic> row) {
   if (_flag(row['pod_missing_overdue_flag'])) {
     return 'POD overdue';
   }
-  return 'OK';
+  return _podAckLabel(row) == 'Received' ? 'OK' : 'Pending POD';
 }
 
 DateTime? _reportDate(Map<String, dynamic> row) {
@@ -1488,10 +2215,20 @@ String _dispatchStatusLabel(Map<String, dynamic> row) {
 
 String _podAckLabel(Map<String, dynamic> row) {
   final ack = (row['ack_status'] ?? '').toString().toLowerCase();
-  if (ack == 'received' || row['ack_received_at'] != null) return 'Received';
-  if (row['pod_received_date'] != null) return 'Received';
-  if (row['pod_submitted_at'] != null) return 'Received';
-  return 'Pending';
+  return ack == 'received' ? 'Received' : 'Pending';
+}
+
+String _rowTonnageCategory(Map<String, dynamic> row) {
+  final stored = _normalizeVehicleCapacityCategory(
+    (row['vehicle_capacity_category'] ?? '').toString(),
+  );
+  return stored ??
+      _suggestVehicleCapacityCategory(_num(row['weight_kg'])?.toDouble() ?? 0);
+}
+
+dynamic _podReceivedDate(Map<String, dynamic> row) {
+  if (_podAckLabel(row) != 'Received') return null;
+  return row['pod_received_date'] ?? row['ack_received_at'];
 }
 
 String _suggestVehicleCapacityCategory(double weightMt) {
@@ -1503,6 +2240,14 @@ String _suggestVehicleCapacityCategory(double weightMt) {
   if (weightMt <= 15) return '12-15 MT';
   return '15+ MT';
 }
+
+@visibleForTesting
+String ledgerVehicleCapacityForImport({
+  required String? explicitCategory,
+  required double combinedMetricTons,
+}) =>
+    _normalizeVehicleCapacityCategory(explicitCategory ?? '') ??
+    _suggestVehicleCapacityCategory(combinedMetricTons);
 
 String? _normalizeVehicleCapacityCategory(String value) {
   final normalized = value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
@@ -1529,30 +2274,37 @@ class _TransporterSummary {
   _TransporterSummary(this.transporter);
 
   final String transporter;
+  final Set<String> trips = <String>{};
   final Set<String> vehicles = <String>{};
   double totalCases = 0;
   double totalMetricTons = 0;
   double totalFreight = 0;
-  int podPending = 0;
-  int podReceived = 0;
+  final List<Map<String, dynamic>> _podRows = [];
 
   void add(Map<String, dynamic> row) {
+    _podRows.add(row);
+    final trip = (row['freight_id'] ?? '').toString().trim();
+    if (trip.isNotEmpty) trips.add(trip);
     final vehicle = (row['vehicle_number'] ?? '').toString().trim();
     if (vehicle.isNotEmpty) vehicles.add(vehicle);
     totalCases += (_num(row['cases']) ?? 0).toDouble();
     totalMetricTons += (_num(row['weight_kg']) ?? 0).toDouble();
     totalFreight += (_num(row['total_freight']) ?? 0).toDouble();
-    if (_podAckLabel(row) == 'Received') {
-      podReceived++;
-    } else {
-      podPending++;
-    }
   }
 
+  int get totalTrips => trips.length;
   int get totalVehicles => vehicles.length;
   double get freightPerMetricTon =>
       totalMetricTons == 0 ? 0 : totalFreight / totalMetricTons;
   double get freightPerCase => totalCases == 0 ? 0 : totalFreight / totalCases;
+  int get podPending => countDistinctFreightRows(
+    _podRows,
+    where: ledgerProofNeedsReview,
+  );
+  int get podReceived => countDistinctFreightRows(
+    _podRows,
+    where: (row) => !ledgerProofNeedsReview(row),
+  );
 }
 
 class _TransporterSummaryTable extends StatelessWidget {
@@ -1563,7 +2315,31 @@ class _TransporterSummaryTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     if (summaries.isEmpty) return const SizedBox.shrink();
+    if (MediaQuery.sizeOf(context).width < 900) {
+      return ListView(
+        padding: const EdgeInsets.all(12),
+        children:
+            summaries
+                .map(
+                  (summary) => OfficeRecordCard(
+                    title: summary.transporter,
+                    values: {
+                      l.adminTrips: '${summary.totalTrips}',
+                      l.adminVehicles: '${summary.totalVehicles}',
+                      l.adminCases: _number(summary.totalCases),
+                      'MT': _number(summary.totalMetricTons),
+                      l.adminFreight: _money(summary.totalFreight),
+                      l.adminFreightPerMt: _money(summary.freightPerMetricTon),
+                      l.adminPodPending: '${summary.podPending}',
+                      l.adminPodReceived: '${summary.podReceived}',
+                    },
+                  ),
+                )
+                .toList(),
+      );
+    }
     return Container(
       width: double.infinity,
       margin:
@@ -1579,38 +2355,35 @@ class _TransporterSummaryTable extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (framed)
-            const Padding(
-              padding: EdgeInsets.fromLTRB(12, 10, 12, 2),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 2),
               child: Text(
-                'Transporter summary',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                l.adminTransporterSummary,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           Expanded(
-            child: Scrollbar(
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 10),
-                  child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(
-                      const Color(0xFFF6EDFB),
-                    ),
-                    columns: const [
-                      DataColumn(label: Text('Transporter')),
-                      DataColumn(label: Text('Vehicles'), numeric: true),
-                      DataColumn(label: Text('Cases'), numeric: true),
-                      DataColumn(label: Text('MT'), numeric: true),
-                      DataColumn(label: Text('Freight'), numeric: true),
-                      DataColumn(label: Text('Freight/MT'), numeric: true),
-                      DataColumn(label: Text('Freight/Case'), numeric: true),
-                      DataColumn(label: Text('POD Pending'), numeric: true),
-                      DataColumn(label: Text('POD Received'), numeric: true),
-                    ],
-                    rows: summaries.map(_row).toList(),
-                  ),
+            child: LedgerTableScroll(
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.all(
+                  const Color(0xFFF6EDFB),
                 ),
+                columns: [
+                  DataColumn(label: Text(l.transporter)),
+                  DataColumn(label: Text(l.adminTrips), numeric: true),
+                  DataColumn(label: Text(l.adminVehicles), numeric: true),
+                  DataColumn(label: Text(l.adminCases), numeric: true),
+                  const DataColumn(label: Text('MT'), numeric: true),
+                  DataColumn(label: Text(l.adminFreight), numeric: true),
+                  DataColumn(label: Text(l.adminFreightPerMt), numeric: true),
+                  DataColumn(label: Text(l.adminFreightPerCase), numeric: true),
+                  DataColumn(label: Text(l.adminPodPending), numeric: true),
+                  DataColumn(label: Text(l.adminPodReceived), numeric: true),
+                ],
+                rows: summaries.map(_row).toList(),
               ),
             ),
           ),
@@ -1623,6 +2396,7 @@ class _TransporterSummaryTable extends StatelessWidget {
     return DataRow(
       cells: [
         DataCell(Text(summary.transporter)),
+        DataCell(Text(summary.totalTrips.toString())),
         DataCell(Text(summary.totalVehicles.toString())),
         DataCell(Text(_number(summary.totalCases))),
         DataCell(Text(_number(summary.totalMetricTons))),
@@ -1640,6 +2414,7 @@ class _MovementSummary {
   _MovementSummary(this.label);
 
   final String label;
+  final Set<String> trips = <String>{};
   final Set<String> vehicles = <String>{};
   final Map<String, Set<String>> transporterVehicles = <String, Set<String>>{};
   final Map<String, int> transporterRows = <String, int>{};
@@ -1648,11 +2423,14 @@ class _MovementSummary {
   double totalFreight = 0;
 
   void add(Map<String, dynamic> row) {
+    final trip = (row['freight_id'] ?? '').toString().trim();
+    if (trip.isNotEmpty) trips.add(trip);
     final vehicle = (row['vehicle_number'] ?? '').toString().trim();
     if (vehicle.isNotEmpty) vehicles.add(vehicle);
     final transporter = (row['transporter_name'] ?? '').toString().trim();
     final transporterKey = transporter.isEmpty ? 'Unassigned' : transporter;
-    transporterRows[transporterKey] = (transporterRows[transporterKey] ?? 0) + 1;
+    transporterRows[transporterKey] =
+        (transporterRows[transporterKey] ?? 0) + 1;
     if (vehicle.isNotEmpty) {
       transporterVehicles
           .putIfAbsent(transporterKey, () => <String>{})
@@ -1663,6 +2441,7 @@ class _MovementSummary {
     totalFreight += (_num(row['total_freight']) ?? 0).toDouble();
   }
 
+  int get totalTrips => trips.length;
   int get totalVehicles => vehicles.length;
   double get freightPerMetricTon =>
       totalMetricTons == 0 ? 0 : totalFreight / totalMetricTons;
@@ -1684,7 +2463,9 @@ class _MovementSummary {
             return byCount == 0 ? a.key.compareTo(b.key) : byCount;
           });
     if (entries.isEmpty) return '-';
-    final visible = entries.take(3).map((entry) => '${entry.key} ${entry.value}');
+    final visible = entries
+        .take(3)
+        .map((entry) => '${entry.key} ${entry.value}');
     final hidden = entries.length - 3;
     return hidden > 0 ? '${visible.join(', ')} +$hidden' : visible.join(', ');
   }
@@ -1707,7 +2488,31 @@ class _MovementSummaryTable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     if (summaries.isEmpty) return const SizedBox.shrink();
+    if (MediaQuery.sizeOf(context).width < 900) {
+      return ListView(
+        padding: const EdgeInsets.all(12),
+        children:
+            summaries
+                .map(
+                  (summary) => OfficeRecordCard(
+                    title: summary.label,
+                    values: {
+                      l.adminTrips: '${summary.totalTrips}',
+                      l.adminVehicles: '${summary.totalVehicles}',
+                      l.adminCases: _number(summary.totalCases),
+                      'MT': _number(summary.totalMetricTons),
+                      l.adminFreight: _money(summary.totalFreight),
+                      l.adminFreightPerMt: _money(summary.freightPerMetricTon),
+                      if (showBreakup)
+                        l.adminTransporterBreakup: summary.transporterBreakup,
+                    },
+                  ),
+                )
+                .toList(),
+      );
+    }
     return Container(
       width: double.infinity,
       margin:
@@ -1734,32 +2539,26 @@ class _MovementSummaryTable extends StatelessWidget {
               ),
             ),
           Expanded(
-            child: Scrollbar(
-              thumbVisibility: true,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 10),
-                  child: DataTable(
-                    headingRowColor: WidgetStateProperty.all(
-                      const Color(0xFFF6EDFB),
-                    ),
-                    columns: [
-                      DataColumn(label: Text(firstColumn)),
-                      const DataColumn(label: Text('Vehicles'), numeric: true),
-                      const DataColumn(label: Text('Cases'), numeric: true),
-                      const DataColumn(label: Text('MT'), numeric: true),
-                      const DataColumn(label: Text('Freight'), numeric: true),
-                      const DataColumn(
-                        label: Text('Avg Freight/MT'),
-                        numeric: true,
-                      ),
-                      if (showBreakup)
-                        const DataColumn(label: Text('Transporter breakup')),
-                    ],
-                    rows: summaries.map(_row).toList(),
-                  ),
+            child: LedgerTableScroll(
+              child: DataTable(
+                headingRowColor: WidgetStateProperty.all(
+                  const Color(0xFFF6EDFB),
                 ),
+                columns: [
+                  DataColumn(label: Text(firstColumn)),
+                  DataColumn(label: Text(l.adminTrips), numeric: true),
+                  DataColumn(label: Text(l.adminVehicles), numeric: true),
+                  DataColumn(label: Text(l.adminCases), numeric: true),
+                  const DataColumn(label: Text('MT'), numeric: true),
+                  DataColumn(label: Text(l.adminFreight), numeric: true),
+                  DataColumn(
+                    label: Text(l.adminAvgFreightPerMt),
+                    numeric: true,
+                  ),
+                  if (showBreakup)
+                    DataColumn(label: Text(l.adminTransporterBreakup)),
+                ],
+                rows: summaries.map(_row).toList(),
               ),
             ),
           ),
@@ -1772,6 +2571,7 @@ class _MovementSummaryTable extends StatelessWidget {
     return DataRow(
       cells: [
         DataCell(Text(summary.label)),
+        DataCell(Text(summary.totalTrips.toString())),
         DataCell(Text(summary.totalVehicles.toString())),
         DataCell(Text(_number(summary.totalCases))),
         DataCell(Text(_number(summary.totalMetricTons))),
@@ -1814,20 +2614,20 @@ class _OverviewSummaryBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final title = switch (summary) {
-      _OverviewSummary.transporter => 'Transporter-wise summary',
-      _OverviewSummary.destination => 'Place-wise summary',
-      _OverviewSummary.route => 'Route-wise summary',
-      _OverviewSummary.vehicle => 'Vehicle tonnage summary',
+      _OverviewSummary.transporter => l.adminTransporterWiseSummary,
+      _OverviewSummary.destination => l.adminPlaceWiseSummary,
+      _OverviewSummary.route => l.adminRouteWiseSummary,
+      _OverviewSummary.vehicle => l.adminVehicleTonnageSummary,
     };
     final subtitle = switch (summary) {
-      _OverviewSummary.transporter =>
-        'Vehicles, freight efficiency, and POD status by transporter.',
-      _OverviewSummary.destination =>
-        'Destination movement with transporter breakup.',
-      _OverviewSummary.route => 'From-to route freight comparison.',
-      _OverviewSummary.vehicle => 'Vehicle capacity category usage.',
+      _OverviewSummary.transporter => l.adminTransporterSummaryHelp,
+      _OverviewSummary.destination => l.adminPlaceSummaryHelp,
+      _OverviewSummary.route => l.adminRouteSummaryHelp,
+      _OverviewSummary.vehicle => l.adminVehicleSummaryHelp,
     };
+    final compact = MediaQuery.sizeOf(context).width < 700;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Container(
@@ -1836,68 +2636,211 @@ class _OverviewSummaryBody extends StatelessWidget {
           border: Border.all(color: const Color(0xFFCAC4D0)),
           borderRadius: BorderRadius.circular(8),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
+        child:
+            compact
+                ? SingleChildScrollView(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _summaryHeading(title, subtitle),
+                      const Divider(height: 1),
+                      _mobileSummary(context),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: _onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1),
-            Expanded(child: _tableForSummary()),
-          ],
-        ),
+                )
+                : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _summaryHeading(title, subtitle),
+                    const Divider(height: 1),
+                    Expanded(child: _tableForSummary(context)),
+                  ],
+                ),
       ),
     );
   }
 
-  Widget _tableForSummary() {
+  Widget _summaryHeading(String title, String subtitle) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _mobileSummary(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final cards = switch (summary) {
+      _OverviewSummary.transporter =>
+        transporterSummaries
+            .map(
+              (item) => _MobileSummaryCard(
+                label: item.transporter,
+                trips: item.totalTrips,
+                vehicles: item.totalVehicles,
+                cases: item.totalCases,
+                metricTons: item.totalMetricTons,
+                freight: item.totalFreight,
+                detail:
+                    'POD ${item.podReceived} received · ${item.podPending} pending',
+              ),
+            )
+            .toList(),
+      _OverviewSummary.destination =>
+        destinationSummaries.map((item) => _movementCard(item)).toList(),
+      _OverviewSummary.route =>
+        routeSummaries.map((item) => _movementCard(item)).toList(),
+      _OverviewSummary.vehicle =>
+        vehicleCapacitySummaries.map((item) => _movementCard(item)).toList(),
+    };
+    if (cards.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(14),
+        child: Text(l.adminNoRecordsPeriod),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.all(10),
+      child: Column(children: cards),
+    );
+  }
+
+  _MobileSummaryCard _movementCard(_MovementSummary item) {
+    return _MobileSummaryCard(
+      label: item.label,
+      trips: item.totalTrips,
+      vehicles: item.totalVehicles,
+      cases: item.totalCases,
+      metricTons: item.totalMetricTons,
+      freight: item.totalFreight,
+    );
+  }
+
+  Widget _tableForSummary(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return switch (summary) {
       _OverviewSummary.transporter => _TransporterSummaryTable(
         summaries: transporterSummaries,
         framed: false,
       ),
       _OverviewSummary.destination => _MovementSummaryTable(
-        title: 'Destination summary',
-        firstColumn: 'Destination',
+        title: l.adminDestinationSummary,
+        firstColumn: l.adminDestination,
         summaries: destinationSummaries,
         showBreakup: true,
         framed: false,
       ),
       _OverviewSummary.route => _MovementSummaryTable(
-        title: 'Route summary',
-        firstColumn: 'From -> To',
+        title: l.adminRouteSummary,
+        firstColumn: l.adminFromTo,
         summaries: routeSummaries,
         showBreakup: false,
         framed: false,
       ),
       _OverviewSummary.vehicle => _MovementSummaryTable(
-        title: 'Vehicle tonnage summary',
-        firstColumn: 'Category',
+        title: l.adminVehicleTonnageSummary,
+        firstColumn: l.adminCategory,
         summaries: vehicleCapacitySummaries,
         showBreakup: false,
         framed: false,
       ),
     };
+  }
+}
+
+class _MobileSummaryCard extends StatelessWidget {
+  const _MobileSummaryCard({
+    required this.label,
+    required this.trips,
+    required this.vehicles,
+    required this.cases,
+    required this.metricTons,
+    required this.freight,
+    this.detail,
+  });
+
+  final String label;
+  final int trips;
+  final int vehicles;
+  final double cases;
+  final double metricTons;
+  final double freight;
+  final String? detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAF8FF),
+        border: Border.all(color: const Color(0xFFE4E0E8)),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 16,
+            runSpacing: 6,
+            children: [
+              _summaryMetric(l.adminTrips, trips.toString()),
+              _summaryMetric(l.adminVehicles, vehicles.toString()),
+              _summaryMetric(l.adminCases, _number(cases)),
+              _summaryMetric('MT', _number(metricTons)),
+              _summaryMetric(l.adminFreight, _money(freight)),
+            ],
+          ),
+          if (detail != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              detail!,
+              style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryMetric(String label, String value) {
+    return Text.rich(
+      TextSpan(
+        style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
+        children: [
+          TextSpan(text: '$label\n'),
+          TextSpan(
+            text: value,
+            style: const TextStyle(
+              color: Color(0xFF1D1B20),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1936,21 +2879,78 @@ class _LedgerStatChip extends StatelessWidget {
   }
 }
 
-PopupMenuItem<(_ReportExportType, _ReportExportFormat)> _exportMenuItem(
+/// Summary controls shared by the desktop and narrow ledger layouts.
+class LedgerSummaryControls extends StatelessWidget {
+  const LedgerSummaryControls({
+    super.key,
+    required this.invoiceRows,
+    required this.trips,
+    required this.vehicles,
+    required this.cases,
+    required this.metricTons,
+    required this.freight,
+    required this.podPending,
+    required this.presentation,
+    required this.onPresentationChanged,
+  });
+
+  final int invoiceRows;
+  final int trips;
+  final int vehicles;
+  final num cases;
+  final num metricTons;
+  final num freight;
+  final int podPending;
+  final LedgerPresentation presentation;
+  final ValueChanged<LedgerPresentation> onPresentationChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        _LedgerStatChip(label: l.adminInvoiceRows, value: _number(invoiceRows)),
+        _LedgerStatChip(label: l.adminTrips, value: _number(trips)),
+        _LedgerStatChip(label: l.adminVehicles, value: _number(vehicles)),
+        _LedgerStatChip(label: l.adminCases, value: _number(cases)),
+        _LedgerStatChip(label: 'MT', value: _number(metricTons)),
+        _LedgerStatChip(label: l.adminFreight, value: _money(freight)),
+        _LedgerStatChip(label: l.adminPodPending, value: _number(podPending)),
+        SegmentedButton<LedgerPresentation>(
+          segments: [
+            ButtonSegment(
+              value: LedgerPresentation.overview,
+              icon: const Icon(Icons.dashboard_outlined),
+              label: Text(l.adminOverview),
+            ),
+            ButtonSegment(
+              value: LedgerPresentation.rows,
+              icon: const Icon(Icons.table_rows_outlined),
+              label: Text(l.adminRows),
+            ),
+          ],
+          selected: {presentation},
+          onSelectionChanged: (selection) {
+            onPresentationChanged(selection.first);
+          },
+        ),
+      ],
+    );
+  }
+}
+
+PopupMenuItem<_ReportExportType> _exportMenuItem(
   _ReportExportType type,
-  _ReportExportFormat format,
   String label,
 ) {
   return PopupMenuItem(
-    value: (type, format),
+    value: type,
     child: Row(
       children: [
-        Icon(
-          format == _ReportExportFormat.csv
-              ? Icons.description_outlined
-              : Icons.table_chart_outlined,
-          size: 18,
-        ),
+        const Icon(Icons.description_outlined, size: 18),
         const SizedBox(width: 8),
         Text(label),
       ],
@@ -1973,10 +2973,11 @@ class _FilterMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return SizedBox(
       width: 190,
       child: DropdownButtonFormField<String?>(
-        value: value,
+        initialValue: value,
         isExpanded: true,
         decoration: InputDecoration(
           labelText: label,
@@ -1984,48 +2985,22 @@ class _FilterMenu extends StatelessWidget {
           isDense: true,
         ),
         items: [
-          const DropdownMenuItem<String?>(value: null, child: Text('All')),
+          DropdownMenuItem<String?>(value: null, child: Text(l.adminAll)),
           ...options.map(
-            (option) =>
-                DropdownMenuItem<String?>(value: option, child: Text(option)),
+            (option) => DropdownMenuItem<String?>(
+              value: option,
+              child: Text(switch (option) {
+                'Open' => l.adminOpen,
+                'Closed' => l.adminClosed,
+                'Completed' => l.adminCompleted,
+                'Received' => l.adminReceived,
+                'Pending' => l.adminPending,
+                _ => option,
+              }),
+            ),
           ),
         ],
         onChanged: onChanged,
-      ),
-    );
-  }
-}
-
-class _MonthFilter extends StatelessWidget {
-  const _MonthFilter({
-    required this.month,
-    required this.onPick,
-    required this.onClear,
-  });
-
-  final DateTime? month;
-  final Future<void> Function() onPick;
-  final VoidCallback onClear;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 48,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          OutlinedButton.icon(
-            onPressed: () => onPick(),
-            icon: const Icon(Icons.calendar_month_outlined, size: 18),
-            label: Text(month == null ? 'Month' : _formatMonth(month!)),
-          ),
-          if (month != null)
-            IconButton(
-              tooltip: 'Clear month',
-              onPressed: onClear,
-              icon: const Icon(Icons.close, size: 18),
-            ),
-        ],
       ),
     );
   }
@@ -2054,7 +3029,7 @@ class _MonthYearPickerDialogState extends State<_MonthYearPickerDialog> {
             ? widget.years
             : ([...widget.years, _year]..sort((a, b) => b.compareTo(a)));
     return AlertDialog(
-      title: const Text('Select month'),
+      title: Text(AppLocalizations.of(context)!.adminSelectMonth),
       content: SizedBox(
         width: 360,
         child: Column(
@@ -2062,9 +3037,9 @@ class _MonthYearPickerDialogState extends State<_MonthYearPickerDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             InputDecorator(
-              decoration: const InputDecoration(
-                labelText: 'Year',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: AppLocalizations.of(context)!.adminYear,
+                border: const OutlineInputBorder(),
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<int>(
@@ -2080,8 +3055,7 @@ class _MonthYearPickerDialogState extends State<_MonthYearPickerDialog> {
                             ),
                           )
                           .toList(),
-                  onChanged:
-                      (value) => setState(() => _year = value ?? _year),
+                  onChanged: (value) => setState(() => _year = value ?? _year),
                 ),
               ),
             ),
@@ -2102,8 +3076,7 @@ class _MonthYearPickerDialogState extends State<_MonthYearPickerDialog> {
                     widget.initialMonth.month == month;
                 return OutlinedButton(
                   style: OutlinedButton.styleFrom(
-                    backgroundColor:
-                        selected ? const Color(0xFFE8DEF8) : null,
+                    backgroundColor: selected ? const Color(0xFFE8DEF8) : null,
                   ),
                   onPressed:
                       () => Navigator.of(context).pop(DateTime(_year, month)),
@@ -2117,7 +3090,7 @@ class _MonthYearPickerDialogState extends State<_MonthYearPickerDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(AppLocalizations.of(context)!.adminCancel),
         ),
       ],
     );
@@ -2164,10 +3137,6 @@ class _SearchFilter extends StatelessWidget {
       ),
     );
   }
-}
-
-String _formatMonth(DateTime value) {
-  return '${_monthName(value.month)} ${value.year}';
 }
 
 String _monthName(int month) {
@@ -2219,9 +3188,11 @@ class _CsvUploadDialogState extends State<_CsvUploadDialog> {
   void _submit() {
     final company = _company.text.trim();
     if (company.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Company is required.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.adminCompanyRequired),
+        ),
+      );
       return;
     }
     Navigator.of(context).pop(
@@ -2235,34 +3206,51 @@ class _CsvUploadDialogState extends State<_CsvUploadDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: const Text('Upload ledger CSV'),
+      scrollable: true,
+      title: Text(l.adminUploadLedgerCsv),
       content: SizedBox(
         width: 420,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            GuidanceCard(
+              title: officeCopy(
+                context,
+                'Import historical records',
+                'पुराने रिकॉर्ड आयात करें',
+              ),
+              message: officeCopy(
+                context,
+                'Choose the company, then a CSV file. Keep the original file so you can check the import result.',
+                'कंपनी चुनें, फिर CSV फ़ाइल। आयात का परिणाम जाँचने के लिए मूल फ़ाइल रखें।',
+              ),
+              icon: Icons.upload_file_outlined,
+            ),
+            const SizedBox(height: 16),
+
             TextField(
               controller: _company,
-              decoration: const InputDecoration(
-                labelText: 'Company / sheet name *',
+              decoration: InputDecoration(
+                labelText: l.adminCompanySheetName,
                 hintText: 'Bunge, Cargill, Ludhiana',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _source,
-              decoration: const InputDecoration(
-                labelText: 'Upload tag',
+              decoration: InputDecoration(
+                labelText: l.adminUploadTag,
                 hintText: 'CSV Upload',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
-            const Text(
-              'Use an Excel-exported CSV. Direct .xlsx upload is not enabled in this first version.',
-              style: TextStyle(color: _onSurfaceVariant),
+            Text(
+              l.adminCsvHelp,
+              style: const TextStyle(color: _onSurfaceVariant),
             ),
           ],
         ),
@@ -2270,12 +3258,12 @@ class _CsvUploadDialogState extends State<_CsvUploadDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(l.adminCancel),
         ),
         FilledButton.icon(
           onPressed: _submit,
           icon: const Icon(Icons.upload_file_outlined),
-          label: const Text('Choose CSV'),
+          label: Text(l.adminChooseCsv),
         ),
       ],
     );
@@ -2303,27 +3291,30 @@ class _CsvUploadResultDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return AlertDialog(
-      title: const Text('CSV upload complete'),
+      title: Text(l.adminCsvUploadComplete),
       content: SizedBox(
         width: 460,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Rows imported: ${result.rowsImported}'),
-            Text('Charge rows imported: ${result.chargesImported}'),
-            Text('Upload tag: ${result.sourceBranch}'),
+            Text('${l.adminRowsImported}: ${result.rowsImported}'),
+            Text('${l.adminChargeRowsImported}: ${result.chargesImported}'),
+            Text('${l.adminUploadTag}: ${result.sourceBranch}'),
             if (result.missingTransporters.isNotEmpty) ...[
               const SizedBox(height: 12),
-              const Text(
-                'These transporters were not found in approved profiles, so their names were saved in remarks:',
-                style: TextStyle(fontWeight: FontWeight.w600),
+              Text(
+                l.adminMissingTransportersHelp,
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 6),
               Text(result.missingTransporters.take(12).join(', ')),
               if (result.missingTransporters.length > 12)
-                Text('+${result.missingTransporters.length - 12} more'),
+                Text(
+                  '+${result.missingTransporters.length - 12} ${l.adminMore}',
+                ),
             ],
           ],
         ),
@@ -2331,7 +3322,7 @@ class _CsvUploadResultDialog extends StatelessWidget {
       actions: [
         FilledButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Done'),
+          child: Text(l.adminDone),
         ),
       ],
     );
@@ -2360,6 +3351,7 @@ class _LedgerCsvRow {
     required this.vehicleNumber,
     required this.vehicleType,
     required this.vehicleCapacityCategory,
+    required this.vehicleCapacityExplicit,
     required this.lrNumber,
     required this.remarks,
     required this.origin,
@@ -2386,10 +3378,15 @@ class _LedgerCsvRow {
   final String vehicleNumber;
   final String vehicleType;
   final String vehicleCapacityCategory;
+  final bool vehicleCapacityExplicit;
   final String lrNumber;
   final String remarks;
   final String origin;
 }
+
+/// Validates an entire upload before any database write.
+@visibleForTesting
+int validateLedgerCsv(String csvText) => _parseLedgerCsv(csvText).length;
 
 List<_LedgerCsvRow> _parseLedgerCsv(String csvText) {
   final rawRows = _parseCsvRows(csvText);
@@ -2410,25 +3407,30 @@ List<_LedgerCsvRow> _parseLedgerCsv(String csvText) {
 
   final rows = <_LedgerCsvRow>[];
   final dispatchIds = <String, String>{};
+  var rowNumber = headerIndex + 1;
   for (final raw in rawRows.skip(headerIndex + 1)) {
+    rowNumber++;
     if (raw.every((cell) => _cleanCell(cell).isEmpty)) continue;
     final billDate = _parseUploadDate(cell(raw, const ['billdate']));
     final party = cell(raw, const ['partyname', 'customerparty', 'customer']);
     final town = cell(raw, const ['place', 'town', 'destination']);
     final invoice = cell(raw, const ['invoicenumber', 'invoiceno']);
-    final weight = _parseUploadNumber(cell(raw, const [
-      'weightmt',
-      'netweightinmt',
-      'metricton',
-      'mt',
-      'weight',
-    ]));
+    final weight = _parseUploadNumber(
+      cell(raw, const [
+        'weightmt',
+        'netweightinmt',
+        'metricton',
+        'mt',
+        'weight',
+      ]),
+    );
     final rawCapacity = cell(raw, const [
       'vehiclecapacitycategory',
       'vehiclecategory',
       'capacitycategory',
       'tonnagecategory',
     ]);
+    final explicitCapacity = _normalizeVehicleCapacityCategory(rawCapacity);
     final billNumber = cell(raw, const [
       'billnumber',
       'billno',
@@ -2443,7 +3445,15 @@ List<_LedgerCsvRow> _parseLedgerCsv(String csvText) {
       'grbilty',
       'grbiltynumber',
     ]);
-    if (billDate == null || party.isEmpty || town.isEmpty) continue;
+    if (billDate == null ||
+        party.isEmpty ||
+        town.isEmpty ||
+        (invoice.isEmpty && billNumber.isEmpty)) {
+      throw FormatException(
+        'CSV row $rowNumber requires Bill Date, Party, '
+        'Place and Invoice Number (or Bill Number). No rows were imported.',
+      );
+    }
     final freightId =
         dispatchReference.isEmpty
             ? _uuid()
@@ -2470,32 +3480,32 @@ List<_LedgerCsvRow> _parseLedgerCsv(String csvText) {
           'transportername',
           'transportname',
         ]),
-        cases: _parseUploadNumber(cell(raw, const ['cases', 'case'])).round(),
+        cases: _parseUploadCases(cell(raw, const ['cases', 'case'])),
         weight: weight,
-        freight: _parseUploadNumber(cell(raw, const [
-          'freight',
-          'freightamount',
-        ])),
-        extraFreight: _parseUploadNumber(cell(raw, const [
-          'extrafreight',
-          'extra',
-        ])),
+        freight: _parseUploadNumber(
+          cell(raw, const ['freight', 'freightamount']),
+        ),
+        extraFreight: _parseUploadNumber(
+          cell(raw, const ['extrafreight', 'extra']),
+        ),
         labour: _parseUploadNumber(cell(raw, const ['labour', 'labor'])),
         detention: _parseUploadNumber(cell(raw, const ['detention'])),
-        ackReceived: _isAckReceived(cell(raw, const [
-          'podacknowledgement',
-          'acknowledgementstatus',
-          'acknwoledgementstatus',
-          'podstatus',
-          'ackstatus',
-        ])),
+        ackReceived: _isAckReceived(
+          cell(raw, const [
+            'podacknowledgement',
+            'acknowledgementstatus',
+            'acknwoledgementstatus',
+            'podstatus',
+            'ackstatus',
+          ]),
+        ),
         billDate: billDate,
         dispatchDate: _parseUploadDate(cell(raw, const ['dispatchdate'])),
         vehicleNumber: cell(raw, const ['vehiclenumber', 'vehicle']),
         vehicleType: cell(raw, const ['vehicletype']),
         vehicleCapacityCategory:
-            _normalizeVehicleCapacityCategory(rawCapacity) ??
-            _suggestVehicleCapacityCategory(weight),
+            explicitCapacity ?? _suggestVehicleCapacityCategory(weight),
+        vehicleCapacityExplicit: explicitCapacity != null,
         lrNumber: cell(raw, const ['lrno', 'lrnumber', 'lrgr', 'grnumber']),
         remarks: cell(raw, const ['remarks', 'remark']),
         origin: cell(raw, const ['origin', 'from', 'branch']),
@@ -2532,6 +3542,9 @@ List<List<String>> _parseCsvRows(String text) {
       cell.write(char);
     }
   }
+  if (quoted) {
+    throw const FormatException('CSV contains an unclosed quoted field.');
+  }
   row.add(cell.toString());
   if (row.any((cell) => cell.trim().isNotEmpty)) rows.add(row);
   return rows;
@@ -2548,16 +3561,36 @@ String _cleanCell(String value) {
 double _parseUploadNumber(String value) {
   final text = _cleanCell(value).replaceAll(',', '');
   if (text.isEmpty || text == '-' || text == '--') return 0;
-  final cleaned = text.replaceAll(RegExp(r'[^0-9.\-]'), '');
-  if (cleaned.isEmpty || cleaned == '-' || cleaned == '.') return 0;
-  return double.tryParse(cleaned) ?? 0;
+  final amount = double.tryParse(text);
+  if (amount == null || !amount.isFinite || amount < 0) {
+    throw FormatException('Invalid non-negative number in CSV: $value');
+  }
+  return amount;
+}
+
+int _parseUploadCases(String value) {
+  final cases = _parseUploadNumber(value);
+  if (cases != cases.roundToDouble()) {
+    throw FormatException('Cases must be a whole number: $value');
+  }
+  return cases.toInt();
 }
 
 String? _parseUploadDate(String value) {
   final text = _cleanCell(value);
   if (text.isEmpty) return null;
   final iso = DateTime.tryParse(text);
-  if (iso != null) return iso.toIso8601String().substring(0, 10);
+  if (iso != null) {
+    final parts = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(text);
+    if (parts != null) {
+      return _isoDate(
+        int.parse(parts.group(1)!),
+        int.parse(parts.group(2)!),
+        int.parse(parts.group(3)!),
+      );
+    }
+    return iso.toIso8601String().substring(0, 10);
+  }
   final monthPattern = RegExp(r'^(\d{1,2})/([A-Za-z]{3})/(\d{2,4})$');
   final monthMatch = monthPattern.firstMatch(text);
   if (monthMatch != null) {
@@ -2603,12 +3636,19 @@ int _fullYear(String value) {
 }
 
 String _isoDate(int year, int month, int day) {
-  return DateTime(year, month, day).toIso8601String().substring(0, 10);
+  final date = DateTime(year, month, day);
+  if (date.year != year || date.month != month || date.day != day) {
+    throw FormatException('Invalid calendar date: $day/$month/$year');
+  }
+  return date.toIso8601String().substring(0, 10);
 }
 
 bool _isAckReceived(String value) {
   final text = _cleanCell(value).toLowerCase();
-  return text == 'received' || text == 'recd' || text == 'yes' || text == 'pod received';
+  return text == 'received' ||
+      text == 'recd' ||
+      text == 'yes' ||
+      text == 'pod received';
 }
 
 String _normalizeLookup(dynamic value) {
@@ -2625,7 +3665,8 @@ String _uuid() {
   final bytes = List<int>.generate(16, (_) => random.nextInt(256));
   bytes[6] = (bytes[6] & 0x0f) | 0x40;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  final hex = bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
+  final hex =
+      bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join();
   return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
       '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
 }
@@ -2722,7 +3763,11 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
     var isAdmin = false;
     if (uid != null) {
       final profile =
-          await supabase.from('profiles').select('role').eq('id', uid).maybeSingle();
+          await supabase
+              .from('profiles')
+              .select('role')
+              .eq('id', uid)
+              .maybeSingle();
       isAdmin = profile?['role']?.toString() == 'admin';
     }
     if (!mounted) return;
@@ -2740,11 +3785,62 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
     try {
       final freight =
           await supabase.from('freights').select().eq('id', freightId).single();
+      final settlementCompany =
+          (freight['company_name'] ?? row['company_name'] ?? '').toString();
+      final settlementTransporterId =
+          (row['transporter_id'] ?? freight['winner_profile_id'])?.toString();
+      final settlementMonth = _monthStart(
+        (row['period_month'] ?? row['bill_date'] ?? row['dispatch_date'])
+            ?.toString(),
+      );
+      final settlements = await supabase
+          .from('transporter_ledger_settlements')
+          .select(
+            'transporter_id, last_month_balance, payment_amount, deduction_amount, remarks',
+          )
+          .eq('company_name', settlementCompany)
+          .eq('period_month', settlementMonth);
+      final settlement =
+          (settlements as List)
+              .cast<Map<String, dynamic>>()
+              .where(
+                (item) =>
+                    item['transporter_id']?.toString() ==
+                    settlementTransporterId,
+              )
+              .firstOrNull;
       final invoices = await supabase
           .from('invoices')
           .select()
           .eq('freight_id', freightId)
           .order('created_at');
+      final invoiceIds =
+          invoices.map((invoice) => invoice['id'].toString()).toList();
+      final documents =
+          invoiceIds.isEmpty
+              ? <Map<String, dynamic>>[]
+              : await supabase
+                  .from('invoice_documents')
+                  .select('invoice_id, document_kind, document_number')
+                  .inFilter('invoice_id', invoiceIds);
+      final invoicesWithDocuments = [
+        for (final invoice in invoices)
+          {
+            ...invoice,
+            'e_way_bill_numbers': [
+              for (final document in documents)
+                if (document['invoice_id'] == invoice['id'] &&
+                    document['document_kind'] == 'e_way_bill')
+                  document['document_number'],
+            ],
+            'gr_bilty_numbers': [
+              for (final document in documents)
+                if (document['invoice_id'] == invoice['id'] &&
+                    document['document_kind'] == 'gr_bilty')
+                  document['document_number'],
+            ],
+          },
+      ];
       final charges = await supabase
           .from('freight_charges')
           .select()
@@ -2764,7 +3860,9 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
         _vehicle.text = (freight['vehicle_number'] ?? '').toString();
         _vehicleType.text = (freight['vehicle_type'] ?? '').toString();
         _dispatchGrBilty.text =
-            (freight['gr_bilty_number'] ?? row['dispatch_gr_bilty_number'] ?? '')
+            (freight['gr_bilty_number'] ??
+                    row['dispatch_gr_bilty_number'] ??
+                    '')
                 .toString();
         _vehicleCapacityCategory =
             _normalizeVehicleCapacityCategory(
@@ -2787,17 +3885,25 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
                 : freight['pod_file_path'].toString();
         _podRemark.text = (freight['pod_remark'] ?? '').toString();
         _transporterId = freight['winner_profile_id']?.toString();
-        _lastMonthBalance.text = _editNumber(row['last_month_balance']);
-        _payment.text = _editNumber(row['payment_amount']);
-        _settlementDeduction.text = _editNumber(row['settlement_deduction']);
-        _settlementRemarks.text = (row['settlement_remarks'] ?? '').toString();
+        _lastMonthBalance.text = _editNumber(
+          settlement?['last_month_balance'] ?? row['last_month_balance'],
+        );
+        _payment.text = _editNumber(
+          settlement?['payment_amount'] ?? row['payment_amount'],
+        );
+        _settlementDeduction.text = _editNumber(
+          settlement?['deduction_amount'] ?? row['settlement_deduction'],
+        );
+        _settlementRemarks.text =
+            (settlement?['remarks'] ?? row['settlement_remarks'] ?? '')
+                .toString();
         for (final invoice in _invoices) {
           invoice.dispose();
         }
         _invoices
           ..clear()
           ..addAll(
-            (invoices as List).map(
+            invoicesWithDocuments.map(
               (item) =>
                   _InvoiceDraft.fromMap(Map<String, dynamic>.from(item as Map)),
             ),
@@ -2831,9 +3937,11 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadingExisting = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Load failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${AppLocalizations.of(context)!.adminLoadFailed}: $e'),
+        ),
+      );
     }
   }
 
@@ -2843,21 +3951,24 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
     final firstTown = _invoices.first.town.text.trim();
     if (company.isEmpty || firstTown.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Company and first invoice town are required.'),
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.adminCompanyTownRequired),
         ),
       );
       return;
     }
     setState(() => _saving = true);
+    String? newPodPath;
     try {
       final invoiceRows =
           _invoices.map((invoice) => invoice.toInsert()).toList();
-      final currentFreightId = _editing ? widget.row!['freight_id'] as String : null;
+      final currentFreightId =
+          _editing ? widget.row!['freight_id'] as String : null;
       final duplicateMatches = await _findDuplicateInvoiceMatches(
         invoiceRows,
         currentFreightId,
       );
+      if (!mounted) return;
       if (duplicateMatches.isNotEmpty) {
         final reason = _duplicateOverrideReason.text.trim();
         final remark = _duplicateOverrideRemark.text.trim();
@@ -2955,46 +4066,10 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
         'cases': totalCases,
         'weight_kg': totalWeight,
         'remarks': _remarks.text.trim().isEmpty ? null : _remarks.text.trim(),
-        'status': 'locked',
       };
-      final String freightId;
-      if (_editing) {
-        freightId = currentFreightId!;
-        await supabase
-            .from('freights')
-            .update(freightPayload)
-            .eq('id', freightId);
-        await supabase.from('invoices').delete().eq('freight_id', freightId);
-        await supabase
-            .from('freight_charges')
-            .delete()
-            .eq('freight_id', freightId);
-        await supabase
-            .from('freight_product_lines')
-            .delete()
-            .eq('freight_id', freightId);
-      } else {
-        final freight =
-            await supabase
-                .from('freights')
-                .insert({
-                  ...freightPayload,
-                  'created_by': supabase.auth.currentUser!.id,
-                })
-                .select('id')
-                .single();
-        freightId = freight['id'] as String;
-      }
-      if (duplicateMatches.isNotEmpty) {
-        await _saveDuplicateOverrides(duplicateMatches, freightId);
-      }
-      final uploadedPodPath = await _uploadPodFileIfNeeded(freightId);
-      if (uploadedPodPath != null) {
-        await supabase
-            .from('freights')
-            .update({'pod_file_path': uploadedPodPath})
-            .eq('id', freightId);
-      }
+      final freightId = currentFreightId ?? _uuid();
+      newPodPath = await _uploadPodFileIfNeeded(freightId);
+      if (newPodPath != null) freightPayload['pod_file_path'] = newPodPath;
       final invoiceInserts =
           invoiceRows
               .map(
@@ -3019,31 +4094,44 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
                 },
               )
               .toList();
-      await supabase.from('invoices').insert(invoiceInserts);
       final charges =
           _charges
               .map((charge) => charge.toInsert(freightId))
               .where((row) => ((row['amount'] as double?) ?? 0) != 0)
               .toList();
-      if (charges.isNotEmpty) {
-        await supabase.from('freight_charges').insert(charges);
-      }
       final products =
           _products
               .map((product) => product.toInsert(freightId))
               .where((row) => (row['product_name'] as String).isNotEmpty)
               .toList();
-      if (products.isNotEmpty) {
-        await supabase.from('freight_product_lines').insert(products);
-      }
-      await _saveSettlement(
-        company: company,
-        transporterId: _transporterId,
-        periodSource: firstBillDate ?? firstDispatchDate,
+      await supabase.rpc(
+        'save_manual_ledger_entry',
+        params: {
+          'p_freight_id': freightId,
+          'p_is_new': !_editing,
+          'p_freight': freightPayload,
+          'p_invoices': invoiceInserts,
+          'p_charges': charges,
+          'p_products': products,
+          'p_overrides': _duplicateOverridePayload(duplicateMatches, freightId),
+          'p_settlement': _settlementPayload(
+            company: company,
+            transporterId: _transporterId,
+            periodSource: firstBillDate ?? firstDispatchDate,
+          ),
+        },
       );
+      newPodPath = null; // The committed ledger now owns the uploaded proof.
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
+      if (newPodPath != null) {
+        try {
+          await supabase.storage.from('delivery-documents').remove([
+            newPodPath,
+          ]);
+        } catch (_) {}
+      }
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(
@@ -3071,41 +4159,32 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
       },
     );
     return (rows as List)
-        .map((row) => _DuplicateInvoiceMatch.fromMap(Map<String, dynamic>.from(row as Map)))
+        .map(
+          (row) => _DuplicateInvoiceMatch.fromMap(
+            Map<String, dynamic>.from(row as Map),
+          ),
+        )
         .toList();
   }
 
-  Future<void> _saveDuplicateOverrides(
+  List<Map<String, dynamic>> _duplicateOverridePayload(
     List<_DuplicateInvoiceMatch> matches,
     String freightId,
-  ) async {
-    final uid = supabase.auth.currentUser?.id;
-    if (uid == null) throw Exception('You must be signed in to approve override.');
-    final reason = _duplicateOverrideReason.text.trim();
-    final remark = _duplicateOverrideRemark.text.trim();
-    await supabase.from('duplicate_freight_overrides').insert(
+  ) =>
       matches
           .map(
-            (match) => {
+            (match) => <String, dynamic>{
               'invoice_number': match.invoiceNumber,
-              'invoice_number_norm': match.invoiceNumberNorm,
               'existing_freight_id': match.existingFreightId,
-              'new_freight_id': freightId,
-              'approved_by': uid,
-              'reason': reason,
-              'remark': remark,
+              'reason': _duplicateOverrideReason.text.trim(),
+              'remark': _duplicateOverrideRemark.text.trim(),
               'metadata': {
                 'company_name': match.companyName,
                 'transporter_name': match.transporterName,
-                'bill_date': match.billDate,
-                'dispatch_date': match.dispatchDate,
-                'total_freight': match.totalFreight,
               },
             },
           )
-          .toList(),
-    );
-  }
+          .toList();
 
   void _showDuplicateSnackBar(List<_DuplicateInvoiceMatch> matches) {
     final invoice = matches.first.invoiceNumber;
@@ -3156,9 +4235,11 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
     final bytes = file.bytes;
     if (bytes == null || bytes.isEmpty) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Could not read POD file')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.adminPodFileReadFailed),
+        ),
+      );
       return;
     }
     setState(() {
@@ -3169,7 +4250,10 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
       );
       _ack = 'received';
       if (_podReceivedDate.text.trim().isEmpty) {
-        _podReceivedDate.text = DateTime.now().toIso8601String().substring(0, 10);
+        _podReceivedDate.text = DateTime.now().toIso8601String().substring(
+          0,
+          10,
+        );
       }
     });
   }
@@ -3182,7 +4266,10 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
     final originalName = file.name;
     final baseName =
         originalName.toLowerCase().endsWith('.${extension.toLowerCase()}')
-            ? originalName.substring(0, originalName.length - extension.length - 1)
+            ? originalName.substring(
+              0,
+              originalName.length - extension.length - 1,
+            )
             : originalName;
     final fileName =
         '${DateTime.now().millisecondsSinceEpoch}-${_cleanSegment(baseName)}';
@@ -3202,6 +4289,7 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final suggestedCapacity = _suggestVehicleCapacityCategory(
       _invoices.fold<double>(
         0,
@@ -3220,10 +4308,10 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
               padding: const EdgeInsets.fromLTRB(20, 18, 12, 8),
               child: Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Ledger entry',
-                      style: TextStyle(
+                      l.adminLedgerEntry,
+                      style: const TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w600,
                       ),
@@ -3244,17 +4332,40 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
                       : ListView(
                         padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
                         children: [
+                          GuidanceCard(
+                            title: officeCopy(
+                              context,
+                              'Record the trip, then its invoices',
+                              'पहले चक्कर, फिर इनवॉइस भरें',
+                            ),
+                            message: officeCopy(
+                              context,
+                              'Start with the company, route and vehicle. Add one line for each invoice. Optional charges and payments are below.',
+                              'कंपनी, मार्ग और वाहन से शुरुआत करें। हर इनवॉइस की एक पंक्ति जोड़ें। वैकल्पिक शुल्क और भुगतान नीचे हैं।',
+                            ),
+                            icon: Icons.edit_note_outlined,
+                          ),
+                          const SizedBox(height: 20),
+                          SectionHeading(
+                            title: officeCopy(
+                              context,
+                              'Trip and delivery details',
+                              'चक्कर और डिलीवरी की जानकारी',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+
                           Wrap(
                             spacing: 10,
                             runSpacing: 10,
                             children: [
-                              _field(_company, 'Company *'),
-                              _field(_party, 'Party'),
-                              _field(_origin, 'Origin'),
-                              _field(_branch, 'Branch'),
-                              _field(_vehicle, 'Vehicle'),
-                              _field(_vehicleType, 'Vehicle type'),
-                              _field(_dispatchGrBilty, 'Dispatch GR/Bilty'),
+                              _field(_company, l.adminCompanyRequiredLabel),
+                              _field(_party, l.adminParty),
+                              _field(_origin, l.adminOrigin),
+                              _field(_branch, l.adminBranch),
+                              _field(_vehicle, l.adminVehicle),
+                              _field(_vehicleType, l.adminVehicleType),
+                              _field(_dispatchGrBilty, l.adminDispatchGrBilty),
                               _VehicleCapacityPicker(
                                 value: capacityValue,
                                 onChanged:
@@ -3266,10 +4377,10 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
                               SizedBox(
                                 width: 260,
                                 child: DropdownButtonFormField<String>(
-                                  value: _transporterId,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Transporter',
-                                    border: OutlineInputBorder(),
+                                  initialValue: _transporterId,
+                                  decoration: InputDecoration(
+                                    labelText: l.transporter,
+                                    border: const OutlineInputBorder(),
                                   ),
                                   items:
                                       _transporters
@@ -3287,43 +4398,41 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
                               SizedBox(
                                 width: 180,
                                 child: DropdownButtonFormField<String>(
-                                  value: _ack,
-                                  decoration: const InputDecoration(
-                                    labelText: 'Ack status',
-                                    border: OutlineInputBorder(),
+                                  initialValue: _ack,
+                                  decoration: InputDecoration(
+                                    labelText: l.adminAckStatus,
+                                    border: const OutlineInputBorder(),
                                   ),
-                                  items: const [
+                                  items: [
                                     DropdownMenuItem(
                                       value: 'pending',
-                                      child: Text('Pending'),
+                                      child: Text(l.adminPending),
                                     ),
                                     DropdownMenuItem(
                                       value: 'received',
-                                      child: Text('Received'),
+                                      child: Text(l.adminReceived),
                                     ),
                                     DropdownMenuItem(
                                       value: 'not_required',
-                                      child: Text('Not required'),
+                                      child: Text(l.adminNotRequired),
                                     ),
                                   ],
                                   onChanged:
                                       (v) => setState(() {
                                         _ack = v ?? 'pending';
                                         if (_ack == 'received' &&
-                                            _podReceivedDate.text.trim().isEmpty) {
-                                          _podReceivedDate.text =
-                                              DateTime.now()
-                                                  .toIso8601String()
-                                                  .substring(0, 10);
+                                            _podReceivedDate.text
+                                                .trim()
+                                                .isEmpty) {
+                                          _podReceivedDate.text = DateTime.now()
+                                              .toIso8601String()
+                                              .substring(0, 10);
                                         }
                                       }),
                                 ),
                               ),
-                              _field(
-                                _podReceivedDate,
-                                'POD received yyyy-mm-dd',
-                              ),
-                              _field(_podRemark, 'POD remark'),
+                              _field(_podReceivedDate, l.adminPodReceivedDate),
+                              _field(_podRemark, l.adminPodRemark),
                               _PodFilePicker(
                                 path: _podFilePath,
                                 pendingName: _podPendingFile?.name,
@@ -3333,7 +4442,7 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
                           ),
                           const SizedBox(height: 18),
                           _SectionHeader(
-                            title: 'Invoice lines',
+                            title: l.adminInvoiceLines,
                             onAdd:
                                 () => setState(
                                   () => _invoices.add(_InvoiceDraft()),
@@ -3351,14 +4460,12 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
                               onRemove:
                                   _invoices.length == 1
                                       ? null
-                                      : () => setState(
-                                        () {
-                                          _invoices.removeAt(i).dispose();
-                                          if (!_vehicleCapacityEdited) {
-                                            _vehicleCapacityCategory = null;
-                                          }
-                                        },
-                                      ),
+                                      : () => setState(() {
+                                        _invoices.removeAt(i).dispose();
+                                        if (!_vehicleCapacityEdited) {
+                                          _vehicleCapacityCategory = null;
+                                        }
+                                      }),
                             ),
                           _DuplicateFreightOverridePanel(
                             matches: _duplicateMatches,
@@ -3374,75 +4481,106 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
                                 ),
                           ),
                           const SizedBox(height: 14),
-                          _SectionHeader(
-                            title: 'Charges',
-                            onAdd:
-                                () => setState(
-                                  () =>
-                                      _charges.add(_ChargeDraft(kind: 'other')),
-                                ),
-                          ),
-                          for (var i = 0; i < _charges.length; i++)
-                            _ChargeDraftRow(
-                              draft: _charges[i],
-                              onRemove:
-                                  _charges.length == 1
-                                      ? null
-                                      : () => setState(
-                                        () => _charges.removeAt(i).dispose(),
-                                      ),
+                          ExpansionTile(
+                            initiallyExpanded: widget.row != null,
+                            tilePadding: EdgeInsets.zero,
+                            title: Text(
+                              officeCopy(
+                                context,
+                                'Charges, settlement and products',
+                                'शुल्क, भुगतान और उत्पाद',
+                              ),
                             ),
-                          const SizedBox(height: 14),
-                          const _SectionHeader(
-                            title: 'Settlement',
-                            onAdd: null,
-                          ),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
+                            subtitle: Text(
+                              officeCopy(
+                                context,
+                                'Open when this entry needs extra charges or payment details.',
+                                'अतिरिक्त शुल्क या भुगतान की जानकारी के लिए खोलें।',
+                              ),
+                            ),
                             children: [
-                              _field(
-                                _lastMonthBalance,
-                                'Last month balance',
-                                number: true,
+                              _SectionHeader(
+                                title: l.adminCharges,
+                                onAdd:
+                                    () => setState(
+                                      () => _charges.add(
+                                        _ChargeDraft(kind: 'other'),
+                                      ),
+                                    ),
                               ),
-                              _field(_payment, 'Payment', number: true),
-                              _field(
-                                _settlementDeduction,
-                                'Settlement deduction',
-                                number: true,
+                              for (var i = 0; i < _charges.length; i++)
+                                _ChargeDraftRow(
+                                  draft: _charges[i],
+                                  onRemove:
+                                      _charges.length == 1
+                                          ? null
+                                          : () => setState(
+                                            () =>
+                                                _charges.removeAt(i).dispose(),
+                                          ),
+                                ),
+                              const SizedBox(height: 14),
+                              _SectionHeader(
+                                title: l.adminSettlement,
+                                onAdd: null,
                               ),
-                              _field(_settlementRemarks, 'Settlement remarks'),
+                              Wrap(
+                                spacing: 10,
+                                runSpacing: 10,
+                                children: [
+                                  _field(
+                                    _lastMonthBalance,
+                                    l.adminLastMonthBalance,
+                                    number: true,
+                                  ),
+                                  _field(
+                                    _payment,
+                                    l.adminPayment,
+                                    number: true,
+                                  ),
+                                  _field(
+                                    _settlementDeduction,
+                                    l.adminSettlementDeduction,
+                                    number: true,
+                                  ),
+                                  _field(
+                                    _settlementRemarks,
+                                    l.adminSettlementRemarks,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              _SectionHeader(
+                                title: l.adminProducts,
+                                onAdd:
+                                    () => setState(
+                                      () => _products.add(_ProductDraft()),
+                                    ),
+                              ),
+                              if (_products.isEmpty)
+                                Text(
+                                  l.adminOptionalProductsHelp,
+                                  style: const TextStyle(
+                                    color: _onSurfaceVariant,
+                                  ),
+                                ),
+                              for (var i = 0; i < _products.length; i++)
+                                _ProductDraftRow(
+                                  draft: _products[i],
+                                  onRemove:
+                                      () => setState(
+                                        () => _products.removeAt(i).dispose(),
+                                      ),
+                                ),
                             ],
                           ),
-                          const SizedBox(height: 14),
-                          _SectionHeader(
-                            title: 'Products',
-                            onAdd:
-                                () => setState(
-                                  () => _products.add(_ProductDraft()),
-                                ),
-                          ),
-                          if (_products.isEmpty)
-                            const Text(
-                              'Optional product/category quantities for Karnal-style reports.',
-                              style: TextStyle(color: _onSurfaceVariant),
-                            ),
-                          for (var i = 0; i < _products.length; i++)
-                            _ProductDraftRow(
-                              draft: _products[i],
-                              onRemove:
-                                  () => setState(
-                                    () => _products.removeAt(i).dispose(),
-                                  ),
-                            ),
                           const SizedBox(height: 10),
                           TextField(
                             controller: _remarks,
                             maxLines: 2,
-                            decoration: const InputDecoration(
-                              labelText: 'Remarks',
-                              border: OutlineInputBorder(),
+                            decoration: InputDecoration(
+                              labelText: l.adminRemarks,
+                              border: const OutlineInputBorder(),
                             ),
                           ),
                         ],
@@ -3456,7 +4594,7 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
                   TextButton(
                     onPressed:
                         _saving ? null : () => Navigator.of(context).pop(false),
-                    child: const Text('Cancel'),
+                    child: Text(l.adminCancel),
                   ),
                   const SizedBox(width: 8),
                   FilledButton.icon(
@@ -3469,7 +4607,7 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                             : const Icon(Icons.save_outlined),
-                    label: const Text('Save entry'),
+                    label: Text(l.adminSaveEntry),
                   ),
                 ],
               ),
@@ -3480,20 +4618,20 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
     );
   }
 
-  Future<void> _saveSettlement({
+  Map<String, dynamic>? _settlementPayload({
     required String company,
     required String? transporterId,
     required String? periodSource,
-  }) async {
-    if (transporterId == null) return;
+  }) {
+    if (transporterId == null) return null;
     final hasSettlement =
         _lastMonthBalance.text.trim().isNotEmpty ||
         _payment.text.trim().isNotEmpty ||
         _settlementDeduction.text.trim().isNotEmpty ||
         _settlementRemarks.text.trim().isNotEmpty;
-    if (!hasSettlement) return;
+    if (!hasSettlement) return null;
     final periodMonth = _monthStart(periodSource);
-    await supabase.from('transporter_ledger_settlements').upsert({
+    return {
       'company_name': company,
       'transporter_id': transporterId,
       'period_month': periodMonth,
@@ -3507,7 +4645,7 @@ class _LedgerEntryDialogState extends State<_LedgerEntryDialog> {
               : _settlementRemarks.text.trim(),
       'created_by': supabase.auth.currentUser?.id,
       'updated_at': DateTime.now().toIso8601String(),
-    }, onConflict: 'company_name,transporter_id,period_month');
+    };
   }
 }
 
@@ -3531,7 +4669,7 @@ class _SectionHeader extends StatelessWidget {
           TextButton.icon(
             onPressed: onAdd,
             icon: const Icon(Icons.add),
-            label: const Text('Add'),
+            label: Text(AppLocalizations.of(context)!.adminAdd),
           ),
       ],
     );
@@ -3593,6 +4731,7 @@ class _DuplicateFreightOverridePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (matches.isEmpty) return const SizedBox.shrink();
+    final l = AppLocalizations.of(context)!;
     return Card(
       elevation: 0,
       color: const Color(0xFFFFF8E1),
@@ -3602,9 +4741,9 @@ class _DuplicateFreightOverridePanel extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Duplicate freight lock',
-              style: TextStyle(fontWeight: FontWeight.w700),
+            Text(
+              l.adminDuplicateFreightLock,
+              style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             for (final match in matches.take(4))
@@ -3613,17 +4752,18 @@ class _DuplicateFreightOverridePanel extends StatelessWidget {
                 '${match.billDate.isEmpty ? '' : 'on ${match.billDate} '}'
                 '${match.transporterName.isEmpty ? '' : 'via ${match.transporterName}'}',
               ),
-            if (matches.length > 4) Text('+${matches.length - 4} more'),
+            if (matches.length > 4)
+              Text('+${matches.length - 4} ${l.adminMore}'),
             const SizedBox(height: 8),
             CheckboxListTile(
               contentPadding: EdgeInsets.zero,
               value: approved,
               onChanged: isAdmin ? onApprovedChanged : null,
-              title: const Text('Admin approval to override duplicate lock'),
+              title: Text(l.adminOverrideApproval),
               subtitle:
                   isAdmin
-                      ? const Text('Reason and remark are mandatory.')
-                      : const Text('Only an admin can approve duplicate freight.'),
+                      ? Text(l.adminReasonRemarkRequired)
+                      : Text(l.adminOnlyAdminOverride),
               controlAffinity: ListTileControlAffinity.leading,
             ),
             if (approved) ...[
@@ -3631,8 +4771,8 @@ class _DuplicateFreightOverridePanel extends StatelessWidget {
                 spacing: 8,
                 runSpacing: 8,
                 children: [
-                  _field(reason, 'Override reason *'),
-                  _field(remark, 'Override remark *'),
+                  _field(reason, l.adminOverrideReason),
+                  _field(remark, l.adminOverrideRemark),
                 ],
               ),
             ],
@@ -3645,11 +4785,16 @@ class _DuplicateFreightOverridePanel extends StatelessWidget {
 
 class _InvoiceDraft {
   _InvoiceDraft();
+  String id = _uuid();
+  Map<String, dynamic> preservedFields = {};
 
   final invoice = TextEditingController();
+  final party = TextEditingController();
   final eWay = TextEditingController();
+  final extraEways = <TextEditingController>[];
   final deliveryReference = TextEditingController();
   final lr = TextEditingController();
+  final extraGrs = <TextEditingController>[];
   final town = TextEditingController();
   final billDate = TextEditingController();
   final dispatchDate = TextEditingController();
@@ -3658,17 +4803,22 @@ class _InvoiceDraft {
   final baseFreight = TextEditingController();
 
   Map<String, dynamic> toInsert() => {
+    ...preservedFields,
+    'id': id,
     'invoice_number':
         invoice.text.trim().isEmpty
             ? 'MANUAL-${DateTime.now().millisecondsSinceEpoch}'
             : invoice.text.trim(),
     'e_way_bill_number': eWay.text.trim().isEmpty ? null : eWay.text.trim(),
+    'e_way_bill_numbers': _numbers(eWay, extraEways),
     'delivery_reference':
         deliveryReference.text.trim().isEmpty
             ? null
             : deliveryReference.text.trim(),
     'gr_number': lr.text.trim().isEmpty ? null : lr.text.trim(),
     'lr_number': lr.text.trim().isEmpty ? null : lr.text.trim(),
+    'gr_bilty_numbers': _numbers(lr, extraGrs),
+    'party_name': party.text.trim().isEmpty ? null : party.text.trim(),
     'town': town.text.trim(),
     'bill_date': _dateText(billDate.text),
     'dispatch_date': _dateText(dispatchDate.text),
@@ -3678,12 +4828,50 @@ class _InvoiceDraft {
     'freight_share': double.tryParse(baseFreight.text.trim()),
   };
 
+  List<String> _numbers(
+    TextEditingController primary,
+    List<TextEditingController> extras,
+  ) =>
+      [primary, ...extras]
+          .map((controller) => controller.text.trim())
+          .where((value) => value.isNotEmpty)
+          .toSet()
+          .toList();
+
+  void _loadExtraNumbers(
+    Map<String, dynamic> map,
+    String key,
+    TextEditingController primary,
+    List<TextEditingController> extras,
+  ) {
+    final numbers =
+        (map[key] as List? ?? const [])
+            .map((value) => value.toString().trim())
+            .where((value) => value.isNotEmpty)
+            .toList();
+    if (numbers.isEmpty) return;
+    primary.text = numbers.first;
+    extras.addAll(
+      numbers.skip(1).map((value) => TextEditingController(text: value)),
+    );
+  }
+
   factory _InvoiceDraft.fromMap(Map<String, dynamic> map) {
     final draft = _InvoiceDraft();
+    draft.id = map['id']?.toString() ?? draft.id;
+    draft.preservedFields = Map<String, dynamic>.from(map);
     draft.invoice.text = (map['invoice_number'] ?? '').toString();
+    draft.party.text = (map['party_name'] ?? '').toString();
     draft.eWay.text = (map['e_way_bill_number'] ?? '').toString();
+    draft._loadExtraNumbers(
+      map,
+      'e_way_bill_numbers',
+      draft.eWay,
+      draft.extraEways,
+    );
     draft.deliveryReference.text = (map['delivery_reference'] ?? '').toString();
     draft.lr.text = (map['lr_number'] ?? map['gr_number'] ?? '').toString();
+    draft._loadExtraNumbers(map, 'gr_bilty_numbers', draft.lr, draft.extraGrs);
     draft.town.text = (map['town'] ?? '').toString();
     draft.billDate.text = _shortDate(map['bill_date']);
     if (draft.billDate.text == '-') draft.billDate.clear();
@@ -3700,6 +4888,7 @@ class _InvoiceDraft {
   factory _InvoiceDraft.fromLedgerRow(Map<String, dynamic> row) {
     final draft = _InvoiceDraft();
     draft.invoice.text = (row['invoice_number'] ?? '').toString();
+    draft.party.text = (row['party_name'] ?? '').toString();
     draft.eWay.text = (row['e_way_bill_number'] ?? '').toString();
     draft.deliveryReference.text = (row['delivery_reference'] ?? '').toString();
     draft.lr.text = (row['lr_gr_number'] ?? '').toString();
@@ -3716,9 +4905,16 @@ class _InvoiceDraft {
 
   void dispose() {
     invoice.dispose();
+    party.dispose();
     eWay.dispose();
+    for (final controller in extraEways) {
+      controller.dispose();
+    }
     deliveryReference.dispose();
     lr.dispose();
+    for (final controller in extraGrs) {
+      controller.dispose();
+    }
     town.dispose();
     billDate.dispose();
     dispatchDate.dispose();
@@ -3731,12 +4927,16 @@ class _InvoiceDraft {
 class _ChargeDraft {
   _ChargeDraft({required this.kind});
   String kind;
+  String? invoiceId;
+  bool addedAfterLock = false;
   final amount = TextEditingController();
   final remarks = TextEditingController();
 
   Map<String, dynamic> toInsert(String freightId) => {
     'freight_id': freightId,
     'kind': kind,
+    'invoice_id': invoiceId,
+    'added_after_lock': addedAfterLock,
     'amount': double.tryParse(amount.text.trim()) ?? 0,
     'remarks': remarks.text.trim().isEmpty ? null : remarks.text.trim(),
     'added_by': supabase.auth.currentUser?.id,
@@ -3745,6 +4945,8 @@ class _ChargeDraft {
 
   factory _ChargeDraft.fromMap(Map<String, dynamic> map) {
     final draft = _ChargeDraft(kind: (map['kind'] ?? 'other').toString());
+    draft.invoiceId = map['invoice_id']?.toString();
+    draft.addedAfterLock = map['added_after_lock'] == true;
     draft.amount.text = _editNumber(map['amount']);
     draft.remarks.text = (map['remarks'] ?? '').toString();
     return draft;
@@ -3794,6 +4996,7 @@ class _InvoiceDraftRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 8),
@@ -3804,23 +5007,67 @@ class _InvoiceDraftRow extends StatelessWidget {
           runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            _field(draft.invoice, 'Invoice'),
-            _field(draft.eWay, 'E-way bill'),
-            _field(draft.deliveryReference, 'DEL ref'),
-            _field(draft.lr, 'LR/GR'),
-            _field(draft.town, 'Town *'),
-            _field(draft.billDate, 'Bill date yyyy-mm-dd'),
-            _field(draft.dispatchDate, 'Dispatch date yyyy-mm-dd'),
-            _field(draft.cases, 'Cases', number: true, onChanged: onChanged),
+            _field(draft.invoice, l.adminInvoiceShort),
+            _field(draft.party, l.adminParty),
+            _field(draft.eWay, l.adminEwayBill),
+            for (final controller in draft.extraEways)
+              _extraDocumentField(
+                controller,
+                l.adminEwayBill,
+                l.opsRemoveDocument,
+                () {
+                  draft.extraEways.remove(controller);
+                  controller.dispose();
+                  onChanged();
+                },
+              ),
+            TextButton.icon(
+              onPressed: () {
+                draft.extraEways.add(TextEditingController());
+                onChanged();
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(l.opsAddAnotherEwayBill),
+            ),
+            _field(draft.deliveryReference, l.adminDelRef),
+            _field(draft.lr, l.adminLrGr),
+            for (final controller in draft.extraGrs)
+              _extraDocumentField(
+                controller,
+                l.adminLrGr,
+                l.opsRemoveDocument,
+                () {
+                  draft.extraGrs.remove(controller);
+                  controller.dispose();
+                  onChanged();
+                },
+              ),
+            TextButton.icon(
+              onPressed: () {
+                draft.extraGrs.add(TextEditingController());
+                onChanged();
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: Text(l.opsAddAnotherGrBilty),
+            ),
+            _field(draft.town, l.adminTownRequired),
+            _field(draft.billDate, l.adminBillDate),
+            _field(draft.dispatchDate, l.adminDispatchDate),
             _field(
-              draft.weight,
-              'Metric Ton',
+              draft.cases,
+              l.adminCases,
               number: true,
               onChanged: onChanged,
             ),
-            _field(draft.baseFreight, 'Freight share', number: true),
+            _field(
+              draft.weight,
+              l.adminMetricMt,
+              number: true,
+              onChanged: onChanged,
+            ),
+            _field(draft.baseFreight, l.adminFreightShare, number: true),
             IconButton(
-              tooltip: 'Remove invoice',
+              tooltip: l.adminRemoveInvoice,
               onPressed: onRemove,
               icon: const Icon(Icons.delete_outline),
             ),
@@ -3829,6 +5076,23 @@ class _InvoiceDraftRow extends StatelessWidget {
       ),
     );
   }
+
+  Widget _extraDocumentField(
+    TextEditingController controller,
+    String label,
+    String removeTooltip,
+    VoidCallback onRemove,
+  ) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      _field(controller, label),
+      IconButton(
+        tooltip: removeTooltip,
+        onPressed: onRemove,
+        icon: const Icon(Icons.close, size: 18),
+      ),
+    ],
+  );
 }
 
 class _PickedPodFile {
@@ -3856,9 +5120,12 @@ class _PodFilePicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final label =
         pendingName ??
-        (((path ?? '').trim().isEmpty) ? 'POD file' : 'POD file uploaded');
+        (((path ?? '').trim().isEmpty)
+            ? l.adminPodFile
+            : l.adminPodFileUploaded);
     return SizedBox(
       width: 220,
       child: OutlinedButton.icon(
@@ -3868,10 +5135,7 @@ class _PodFilePicker extends StatelessWidget {
               ? Icons.attach_file
               : Icons.upload_file_outlined,
         ),
-        label: Text(
-          label,
-          overflow: TextOverflow.ellipsis,
-        ),
+        label: Text(label, overflow: TextOverflow.ellipsis),
       ),
     );
   }
@@ -3888,18 +5152,16 @@ class _VehicleCapacityPicker extends StatelessWidget {
     return SizedBox(
       width: 220,
       child: DropdownButtonFormField<String>(
-        value: value,
-        decoration: const InputDecoration(
-          labelText: 'Vehicle capacity',
-          border: OutlineInputBorder(),
+        initialValue: value,
+        decoration: InputDecoration(
+          labelText: AppLocalizations.of(context)!.adminVehicleCapacity,
+          border: const OutlineInputBorder(),
         ),
         items:
             _vehicleCapacityCategories
                 .map(
-                  (category) => DropdownMenuItem(
-                    value: category,
-                    child: Text(category),
-                  ),
+                  (category) =>
+                      DropdownMenuItem(value: category, child: Text(category)),
                 )
                 .toList(),
         onChanged: onChanged,
@@ -3916,6 +5178,7 @@ class _ChargeDraftRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 8),
@@ -3929,10 +5192,10 @@ class _ChargeDraftRow extends StatelessWidget {
             SizedBox(
               width: 180,
               child: DropdownButtonFormField<String>(
-                value: draft.kind,
-                decoration: const InputDecoration(
-                  labelText: 'Kind',
-                  border: OutlineInputBorder(),
+                initialValue: draft.kind,
+                decoration: InputDecoration(
+                  labelText: l.adminKind,
+                  border: const OutlineInputBorder(),
                 ),
                 items:
                     _chargeKinds
@@ -3944,10 +5207,10 @@ class _ChargeDraftRow extends StatelessWidget {
                 onChanged: (v) => draft.kind = v ?? draft.kind,
               ),
             ),
-            _field(draft.amount, 'Amount', number: true),
-            _field(draft.remarks, 'Charge remarks'),
+            _field(draft.amount, l.adminAmount, number: true),
+            _field(draft.remarks, l.adminChargeRemarks),
             IconButton(
-              tooltip: 'Remove charge',
+              tooltip: l.adminRemoveCharge,
               onPressed: onRemove,
               icon: const Icon(Icons.delete_outline),
             ),
@@ -3966,6 +5229,7 @@ class _ProductDraftRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return Card(
       elevation: 0,
       margin: const EdgeInsets.only(bottom: 8),
@@ -3976,10 +5240,10 @@ class _ProductDraftRow extends StatelessWidget {
           runSpacing: 8,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            _field(draft.name, 'Product'),
-            _field(draft.quantity, 'Cases', number: true),
+            _field(draft.name, l.adminProduct),
+            _field(draft.quantity, l.adminCases, number: true),
             IconButton(
-              tooltip: 'Remove product',
+              tooltip: l.adminRemoveProduct,
               onPressed: onRemove,
               icon: const Icon(Icons.delete_outline),
             ),
@@ -4089,43 +5353,48 @@ String _tableCsv(List<String> headers, List<List<dynamic>> rows) {
   return [headers.map(_csvCell).join(','), ...body].join('\n');
 }
 
-String _excelTable(
-  String title,
-  List<String> headers,
-  List<List<dynamic>> rows,
-) {
-  final headerCells = headers.map((header) => '<th>${_htmlCell(header)}</th>');
-  final bodyRows = rows.map((row) {
-    final cells = row.map((value) => '<td>${_htmlCell(value)}</td>').join();
-    return '<tr>$cells</tr>';
-  });
-  return '''
-<html>
-<head>
-  <meta charset="utf-8">
-  <style>
-    table { border-collapse: collapse; font-family: Arial, sans-serif; }
-    th { background: #f6edfb; font-weight: bold; }
-    th, td { border: 1px solid #c8c8c8; padding: 6px 8px; }
-  </style>
-</head>
-<body>
-  <h3>${_htmlCell(title)}</h3>
-  <table>
-    <thead><tr>${headerCells.join()}</tr></thead>
-    <tbody>${bodyRows.join()}</tbody>
-  </table>
-</body>
-</html>
-''';
+/// Each table owns both axes so its visible scrollbars always have a position.
+class LedgerTableScroll extends StatefulWidget {
+  const LedgerTableScroll({super.key, required this.child});
+  final Widget child;
+  @override
+  State<LedgerTableScroll> createState() => _LedgerTableScrollState();
 }
 
-String _htmlCell(dynamic value) {
-  return (value ?? '')
-      .toString()
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#39;');
+class _LedgerTableScrollState extends State<LedgerTableScroll> {
+  final _horizontal = ScrollController();
+  final _vertical = ScrollController();
+  @override
+  void dispose() {
+    _horizontal.dispose();
+    _vertical.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ScrollConfiguration(
+    behavior: const ScrollBehavior().copyWith(scrollbars: false),
+    child: Scrollbar(
+      controller: _horizontal,
+      thumbVisibility: true,
+      notificationPredicate: (n) => n.metrics.axis == Axis.horizontal,
+      scrollbarOrientation: ScrollbarOrientation.bottom,
+      child: SingleChildScrollView(
+        controller: _horizontal,
+        primary: false,
+        scrollDirection: Axis.horizontal,
+        child: Scrollbar(
+          controller: _vertical,
+          thumbVisibility: true,
+          notificationPredicate: (n) => n.metrics.axis == Axis.vertical,
+          child: SingleChildScrollView(
+            controller: _vertical,
+            primary: false,
+            padding: const EdgeInsets.fromLTRB(8, 4, 8, 16),
+            child: widget.child,
+          ),
+        ),
+      ),
+    ),
+  );
 }

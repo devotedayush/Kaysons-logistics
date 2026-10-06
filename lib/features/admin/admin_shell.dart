@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../l10n/app_localizations.dart';
 
 import '../../core/supabase/auth_service.dart';
 import '../../core/widgets/compact_mobile_navigation.dart';
-import '../../core/widgets/mobile_desktop_feature.dart';
 import '../../core/widgets/responsive_tabbed_shell.dart';
 import '../../core/widgets/shell_settings_button.dart';
 import 'admin_ai_body.dart';
@@ -49,10 +49,11 @@ class _AdminShellState extends State<AdminShell> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return ResponsiveTabbedShell(
-      title: 'Admin console',
-      subtitle:
-          'Review users, oversee freight activity, and keep the network healthy from the browser.',
+      role: AppRole.admin,
+      title: l.adminConsole,
+      subtitle: l.adminSubtitle,
       icon: Icons.admin_panel_settings_outlined,
       currentIndex: _index,
       onDestinationSelected: _goto,
@@ -76,28 +77,8 @@ class _AdminShellState extends State<AdminShell> {
           AdminDashboardBody(),
           AdminUsersBody(),
           AdminBidsBody(),
-          MobileDesktopFeature(
-            icon: Icons.receipt_long_outlined,
-            title: 'Ledger belongs on the web',
-            description:
-                'Use the mobile app for approvals, bid oversight, and urgent operational checks.',
-            desktopFeatures: [
-              'Bulk CSV import and manual ledger entry',
-              'Advanced invoice, POD, route, and date filters',
-              'Detailed financial exports and monthly reports',
-            ],
-          ),
-          MobileDesktopFeature(
-            icon: Icons.psychology_alt_outlined,
-            title: 'Clawd analysis is a web workspace',
-            description:
-                'Complex investigation and reporting needs more room than a phone can offer comfortably.',
-            desktopFeatures: [
-              'Expanded AI conversations and saved prompts',
-              'Daily and monthly operational reports',
-              'Anomaly detection and review queue management',
-            ],
-          ),
+          AdminLedgerBody(),
+          AdminAiBody(),
         ],
       ),
       sidebarFooter: ShellSettingsButton(
@@ -111,31 +92,31 @@ class _AdminShellState extends State<AdminShell> {
         currentIndex: _index,
         onSelect: _goto,
         primaryIndices: const [0, 1, 2],
-        destinations: const [
+        destinations: [
           CompactMobileDestination(
             icon: Icons.dashboard_outlined,
             selectedIcon: Icons.dashboard,
-            label: 'Home',
+            label: l.home,
           ),
           CompactMobileDestination(
             icon: Icons.people_outline,
             selectedIcon: Icons.people,
-            label: 'Users',
+            label: l.users,
           ),
           CompactMobileDestination(
             icon: Icons.gavel_outlined,
             selectedIcon: Icons.gavel,
-            label: 'Bids',
+            label: l.bids,
           ),
           CompactMobileDestination(
             icon: Icons.receipt_long_outlined,
             selectedIcon: Icons.receipt_long,
-            label: 'Ledger',
+            label: l.ledger,
           ),
           CompactMobileDestination(
             icon: Icons.psychology_alt_outlined,
             selectedIcon: Icons.psychology_alt,
-            label: 'Clawd',
+            label: l.clawd,
           ),
         ],
         onProfile: () => context.push('/admin/profile'),
@@ -144,31 +125,31 @@ class _AdminShellState extends State<AdminShell> {
           if (context.mounted) context.go('/welcome');
         },
       ),
-      destinations: const [
+      destinations: [
         NavigationRailDestination(
           icon: Icon(Icons.dashboard_outlined),
           selectedIcon: Icon(Icons.dashboard),
-          label: Text('Dashboard'),
+          label: Text(l.dashboard),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.people_outline),
           selectedIcon: Icon(Icons.people),
-          label: Text('Users'),
+          label: Text(l.users),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.gavel_outlined),
           selectedIcon: Icon(Icons.gavel),
-          label: Text('Bids'),
+          label: Text(l.bids),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.receipt_long_outlined),
           selectedIcon: Icon(Icons.receipt_long),
-          label: Text('Ledger'),
+          label: Text(l.ledger),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.psychology_alt_outlined),
           selectedIcon: Icon(Icons.psychology_alt),
-          label: Text('Clawd'),
+          label: Text(l.clawd),
         ),
       ],
     );

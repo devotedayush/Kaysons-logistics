@@ -1,0 +1,24 @@
+- document:
+  - img "Kaysons logo"
+  - text: लेखाकार KAYSONS खाता बही, रिपोर्ट और Clawd विश्लेषण देखें।
+  - group:
+    - button "खाता बही" [ref=e1]
+    - button "विश्लेषण" [ref=e2]
+    - button "Clawd" [ref=e3]
+  - button "प्रोफ़ाइल प्रोफ़ाइल प्रोफ़ाइल" [ref=e4]
+  - group:
+    - group "विश्लेषण":
+      - button "रीफ़्रेश करें" [ref=e5]
+    - button "7 दिन" [ref=e6]
+    - button "15 दिन" [ref=e7]
+    - button "30 दिन" [ref=e8]
+    - button "90 दिन" [ref=e9]
+    - button "अपनी तारीखें चुनें" [ref=e10]
+    - text: ₹15466 कुल भाड़ा 81 केस 167.00 मेट्रिक MT ₹93 PMT 2 लंबित पावती
+    - group "ट्रांसपोर्टर कारोबार Jagdamba Enterprises ₹10000 Unassigned ₹5466 कंपनी अनुसार भाड़ा Unassigned ₹15466 शहर अनुसार भाड़ा Agartala ₹10000 Adilabad ₹5466 Delhi ₹0 देरी और पावती की सूचनाएँ इस अवधि में देरी वाला कोई डिस्पैच नहीं है।":
+      - progressbar "65"
+      - progressbar "100"
+      - progressbar "35"
+      - progressbar "65"
+      - progressbar "35"
+      - progressbar "0"

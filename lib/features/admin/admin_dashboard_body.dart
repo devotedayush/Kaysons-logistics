@@ -2,10 +2,13 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../core/widgets/workspace_widgets.dart';
+import 'widgets/office_widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/auth_service.dart';
 import '../../core/supabase/supabase_bootstrap.dart';
+import '../../l10n/app_localizations.dart';
 
 const _onSurface = Color(0xFF1D1B20);
 const _onSurfaceVariant = Color(0xFF49454F);
@@ -21,9 +24,11 @@ class AdminDashboardBody extends StatefulWidget {
 class _AdminDashboardBodyState extends State<AdminDashboardBody> {
   String _displayName = '';
   bool _loading = true;
+  String? _loadError;
   bool _showTrends = false;
   DateTime? _periodStart;
   DateTime? _periodEnd;
+  DateTime _todayDate = DateTime.now();
   _DashboardSnapshot? _snapshot;
   _DashboardSnapshot? _todaySnapshot;
 
@@ -52,7 +57,10 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
   }
 
   Future<void> _loadData() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final params = <String, dynamic>{};
       if (_periodStart != null && _periodEnd != null) {
@@ -76,14 +84,20 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
 
       if (!mounted) return;
       setState(() {
+        _todayDate = today;
         _snapshot = _DashboardSnapshot.fromData(results[0]);
         _todaySnapshot = _DashboardSnapshot.fromData(results[1]);
         _periodStart = _snapshot?.periodStart;
         _periodEnd = _snapshot?.periodEnd;
         _loading = false;
       });
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _loadError = error.toString();
+        });
+      }
     }
   }
 
@@ -101,6 +115,37 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
     _loadData();
   }
 
+  Future<void> _pickPeriodStart() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime.now().subtract(const Duration(days: 730)),
+      lastDate: DateTime.now().add(const Duration(days: 30)),
+      initialDate:
+          _periodStart ?? DateTime.now().subtract(const Duration(days: 30)),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _periodStart = picked;
+      if (_periodEnd == null || _periodEnd!.isBefore(picked)) {
+        _periodEnd = picked;
+      }
+    });
+    _loadData();
+  }
+
+  Future<void> _pickPeriodEnd() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate:
+          _periodStart ?? DateTime.now().subtract(const Duration(days: 730)),
+      lastDate: DateTime.now().add(const Duration(days: 30)),
+      initialDate: _periodEnd ?? _periodStart ?? DateTime.now(),
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _periodEnd = picked);
+    _loadData();
+  }
+
   void _useLatestPeriod() {
     setState(() {
       _periodStart = null;
@@ -111,6 +156,7 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final snapshot = _snapshot;
     return RefreshIndicator(
       onRefresh: _loadData,
@@ -123,9 +169,16 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
           ),
           const SizedBox(height: 12),
           _PeriodBar(
-            label: snapshot?.periodLabel ?? 'Loading latest period',
+            label:
+                snapshot?.periodLabel ??
+                (_loading ? l.adminLoadingPeriod : l.adminLatestPeriod),
+            todayDate: _todayDate,
             todayDispatches: _todaySnapshot?.dispatches ?? 0,
+            periodStart: _periodStart,
+            periodEnd: _periodEnd,
             onPickMonth: _pickMonth,
+            onPickStart: _pickPeriodStart,
+            onPickEnd: _pickPeriodEnd,
             onLatest: _useLatestPeriod,
           ),
           const SizedBox(height: 16),
@@ -134,12 +187,27 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
               padding: EdgeInsets.symmetric(vertical: 48),
               child: Center(child: CircularProgressIndicator()),
             )
+          else if (_loadError != null)
+            WorkspaceEmptyState(
+              title: l.adminDashboardLoadFailed,
+              message: officeCopy(
+                context,
+                'Your figures could not be loaded. Retry to get the latest information.',
+                'आँकड़े लोड नहीं हुए। नई जानकारी के लिए फिर प्रयास करें।',
+              ),
+              icon: Icons.cloud_off_outlined,
+              action: OutlinedButton.icon(
+                onPressed: _loadData,
+                icon: const Icon(Icons.refresh),
+                label: Text(l.adminRetry),
+              ),
+            )
           else if (snapshot == null)
             const _EmptyState()
           else ...[
-            _KpiStrip(snapshot: snapshot),
-            const SizedBox(height: 16),
             _NeedsAttention(snapshot: snapshot),
+            const SizedBox(height: 16),
+            _KpiStrip(snapshot: snapshot),
             const SizedBox(height: 16),
             _SummaryTables(snapshot: snapshot),
             const SizedBox(height: 16),
@@ -232,31 +300,22 @@ class _AppBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            name.isEmpty ? 'Admin Dashboard' : 'Welcome, $name',
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: _onSurface,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
+    final l = AppLocalizations.of(context)!;
+    return WorkspaceHeader(
+      title: name.isEmpty ? l.adminDashboard : '${l.adminWelcome}, $name',
+      description: officeCopy(
+        context,
+        'Start with work that needs attention, then check dispatch and freight totals for your chosen period.',
+        'पहले ज़रूरी काम देखें, फिर चुनी अवधि के डिस्पैच और भाड़े का कुल देखें।',
+      ),
+      icon: Icons.space_dashboard_outlined,
+      action: OutlinedButton.icon(
+        onPressed: () => context.push('/admin/notifications'),
+        icon: const Icon(Icons.notifications_outlined),
+        label: Text(
+          '${l.adminNotifications}${openAlertCount > 0 ? ' ($openAlertCount)' : ''}',
         ),
-        IconButton(
-          tooltip: 'Notifications',
-          onPressed: () => context.push('/admin/notifications'),
-          icon:
-              openAlertCount > 0
-                  ? Badge.count(
-                    count: openAlertCount,
-                    child: const Icon(Icons.notifications_outlined),
-                  )
-                  : const Icon(Icons.notifications_outlined),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -264,38 +323,67 @@ class _AppBar extends StatelessWidget {
 class _PeriodBar extends StatelessWidget {
   const _PeriodBar({
     required this.label,
+    required this.todayDate,
     required this.todayDispatches,
+    required this.periodStart,
+    required this.periodEnd,
     required this.onPickMonth,
+    required this.onPickStart,
+    required this.onPickEnd,
     required this.onLatest,
   });
 
   final String label;
+  final DateTime todayDate;
   final int todayDispatches;
+  final DateTime? periodStart;
+  final DateTime? periodEnd;
   final VoidCallback onPickMonth;
+  final VoidCallback onPickStart;
+  final VoidCallback onPickEnd;
   final VoidCallback onLatest;
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         _Pill(icon: Icons.calendar_month_outlined, text: label, strong: true),
-        if (todayDispatches > 0)
-          _Pill(
-            icon: Icons.today_outlined,
-            text: 'Today: $todayDispatches dispatches',
-          ),
+        _Pill(
+          icon: Icons.today_outlined,
+          text:
+              '${l.today} · ${_dateKey(todayDate)} · $todayDispatches ${l.adminTrips}',
+        ),
         OutlinedButton.icon(
           onPressed: onPickMonth,
           icon: const Icon(Icons.event_outlined, size: 18),
-          label: const Text('Month'),
+          label: Text(l.adminMonth),
+        ),
+        OutlinedButton.icon(
+          onPressed: onPickStart,
+          icon: const Icon(Icons.first_page_outlined, size: 18),
+          label: Text(
+            periodStart == null
+                ? l.adminFrom
+                : '${l.adminFrom} ${_dateKey(periodStart!)}',
+          ),
+        ),
+        OutlinedButton.icon(
+          onPressed: onPickEnd,
+          icon: const Icon(Icons.last_page_outlined, size: 18),
+          label: Text(
+            periodEnd == null
+                ? l.adminTo
+                : '${l.adminTo} ${_dateKey(periodEnd!)}',
+          ),
         ),
         TextButton.icon(
           onPressed: onLatest,
           icon: const Icon(Icons.update, size: 18),
-          label: const Text('Latest'),
+          label: Text(l.adminLatest),
         ),
       ],
     );
@@ -309,27 +397,36 @@ class _KpiStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final cards = [
       _KpiData(
-        'Dispatches',
+        l.adminTrips,
         snapshot.dispatches.toString(),
         Icons.local_shipping_outlined,
       ),
-      _KpiData('Cases', _fmtInt(snapshot.cases), Icons.inventory_2_outlined),
       _KpiData(
-        'Metric Tons',
+        l.adminCases,
+        _fmtInt(snapshot.cases),
+        Icons.inventory_2_outlined,
+      ),
+      _KpiData(
+        l.adminMetricTons,
         '${_fmtDecimal(snapshot.metricTons)} MT',
         Icons.scale_outlined,
       ),
-      _KpiData('Freight', _fmtMoney(snapshot.freight), Icons.currency_rupee),
       _KpiData(
-        'POD Pending',
+        l.adminFreight,
+        _fmtMoney(snapshot.freight),
+        Icons.currency_rupee,
+      ),
+      _KpiData(
+        l.adminPodPending,
         snapshot.podPending.toString(),
         Icons.assignment_late_outlined,
         warning: snapshot.podPending > 0,
       ),
       _KpiData(
-        'Review Value',
+        l.adminReviewValue,
         _fmtMoney(snapshot.reviewValue),
         Icons.fact_check_outlined,
         warning: snapshot.reviewValue > 0,
@@ -344,10 +441,10 @@ class _KpiStrip extends StatelessWidget {
                 : constraints.maxWidth >= 760
                 ? 3
                 : 2;
-        final width = (constraints.maxWidth - (columns - 1) * 8) / columns;
+        final width = (constraints.maxWidth - (columns - 1) * 10) / columns;
         return Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: 10,
+          runSpacing: 10,
           children:
               cards
                   .map(
@@ -368,6 +465,7 @@ class _NeedsAttention extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final items = <_AttentionItem>[];
     if (snapshot.podByTransporter.isNotEmpty) {
       final top = snapshot.podByTransporter.first;
@@ -375,10 +473,9 @@ class _NeedsAttention extends StatelessWidget {
         _AttentionItem(
           icon: Icons.assignment_late_outlined,
           title:
-              '${top['transporter_name']} has ${_int(top['pending'])} POD pending',
-          detail:
-              '${_fmtMoney(_double(top['value']))} needs acknowledgement follow-up.',
-          action: 'Open ledger',
+              '${top['transporter_name']}: ${_int(top['pending'])} ${l.adminPodPending}',
+          detail: '${_fmtMoney(_double(top['value']))}: ${l.adminAckFollowUp}.',
+          action: l.adminOpenLedger,
           route: '/admin/ledger',
         ),
       );
@@ -387,9 +484,9 @@ class _NeedsAttention extends StatelessWidget {
       items.add(
         _AttentionItem(
           icon: Icons.copy_all_outlined,
-          title: '${snapshot.duplicateEwayRisks} duplicate e-way risk(s)',
-          detail: 'Review document-wise before payment release.',
-          action: 'Ask Clawd',
+          title: '${snapshot.duplicateEwayRisks} ${l.adminDuplicateEwayRisk}',
+          detail: l.adminDocumentReview,
+          action: l.adminAskClawd,
           route: '/admin/clawd',
         ),
       );
@@ -400,9 +497,9 @@ class _NeedsAttention extends StatelessWidget {
       items.add(
         _AttentionItem(
           icon: Icons.trending_up_outlined,
-          title: '${snapshot.routeCostSpikeRisks} route cost spike(s)',
-          detail: '$route needs freight/MT comparison.',
-          action: 'Review routes',
+          title: '${snapshot.routeCostSpikeRisks} ${l.adminRouteCostSpike}',
+          detail: '$route: ${l.adminCompareFreight}.',
+          action: l.adminReviewRoutes,
           route: '/admin/ledger',
         ),
       );
@@ -411,9 +508,9 @@ class _NeedsAttention extends StatelessWidget {
       items.add(
         _AttentionItem(
           icon: Icons.receipt_long_outlined,
-          title: '${snapshot.highExtraChargeRisks} high extra charge case(s)',
-          detail: 'Check labour, detention, toll, and out-route charges.',
-          action: 'Open Clawd',
+          title: '${snapshot.highExtraChargeRisks} ${l.adminHighExtraCharge}',
+          detail: l.adminExtraChargesHelp,
+          action: l.adminOpenClawd,
           route: '/admin/clawd',
         ),
       );
@@ -421,7 +518,7 @@ class _NeedsAttention extends StatelessWidget {
 
     final visible = items.take(3).toList();
     return _Panel(
-      title: 'Needs Attention',
+      title: l.adminNeedsAttention,
       trailing: TextButton.icon(
         onPressed: () => context.push('/admin/clawd'),
         icon: const Icon(Icons.psychology_alt_outlined, size: 18),
@@ -429,9 +526,9 @@ class _NeedsAttention extends StatelessWidget {
       ),
       child:
           visible.isEmpty
-              ? const Text(
-                'No priority review items in this period.',
-                style: TextStyle(color: _onSurfaceVariant),
+              ? Text(
+                l.adminNoPriorityItems,
+                style: const TextStyle(color: _onSurfaceVariant),
               )
               : Column(
                 children:
@@ -448,14 +545,15 @@ class _SummaryTables extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 980;
         final left = _Panel(
-          title: 'Transporter Performance',
+          title: l.adminTransporterPerformance,
           child: _MiniTable(
             rows: snapshot.transporters.take(6).toList(),
-            columns: const ['Transporter', 'Vehicles', 'MT', 'Freight', 'POD'],
+            columns: [l.transporter, l.adminTrips, 'MT', l.adminFreight, 'POD'],
             cells:
                 (row) => [
                   row['transporter_name'].toString(),
@@ -467,12 +565,12 @@ class _SummaryTables extends StatelessWidget {
           ),
         );
         final right = _Panel(
-          title: 'Routes & Destinations',
+          title: l.adminRoutesDestinations,
           child: Column(
             children: [
               _MiniTable(
                 rows: snapshot.routes.take(5).toList(),
-                columns: const ['Route', 'Vehicles', 'Freight/MT'],
+                columns: [l.adminRoute, l.adminTrips, l.adminFreightPerMt],
                 cells:
                     (row) => [
                       row['route'].toString(),
@@ -483,7 +581,7 @@ class _SummaryTables extends StatelessWidget {
               const Divider(height: 18),
               _MiniTable(
                 rows: snapshot.destinations.take(5).toList(),
-                columns: const ['Place', 'Vehicles', 'POD'],
+                columns: [l.adminPlace, l.adminTrips, 'POD'],
                 cells:
                     (row) => [
                       row['destination'].toString(),
@@ -524,12 +622,13 @@ class _TrendSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return _Panel(
-      title: 'Trends',
+      title: l.adminTrends,
       trailing: TextButton.icon(
         onPressed: onToggle,
         icon: Icon(expanded ? Icons.expand_less : Icons.expand_more, size: 18),
-        label: Text(expanded ? 'Hide' : 'Show'),
+        label: Text(expanded ? l.adminHide : l.adminShow),
       ),
       child:
           expanded
@@ -537,7 +636,7 @@ class _TrendSection extends StatelessWidget {
                 height: 180,
                 child:
                     snapshot.trend.isEmpty
-                        ? const Center(child: Text('No trend data'))
+                        ? Center(child: Text(l.adminNoTrendData))
                         : CustomPaint(
                           painter: _LineChart(
                             snapshot.trend
@@ -547,9 +646,9 @@ class _TrendSection extends StatelessWidget {
                           size: Size.infinite,
                         ),
               )
-              : const Text(
-                'Daily freight trend is available here, kept secondary so the cockpit stays focused on action.',
-                style: TextStyle(color: _onSurfaceVariant),
+              : Text(
+                l.adminTrendHelp,
+                style: const TextStyle(color: _onSurfaceVariant),
               ),
     );
   }
@@ -569,7 +668,7 @@ class _Panel extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _border),
       ),
       child: Column(
@@ -606,11 +705,11 @@ class _KpiCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 104,
-      padding: const EdgeInsets.all(12),
+      height: 112,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: data.warning ? const Color(0xFFFFF7E8) : Colors.white,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: data.warning ? const Color(0xFFE9C46A) : _border,
         ),
@@ -618,7 +717,14 @@ class _KpiCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(data.icon, size: 20, color: _onSurfaceVariant),
+          Icon(
+            data.icon,
+            size: 22,
+            color:
+                data.warning
+                    ? const Color(0xFF8A5A00)
+                    : const Color(0xFF6750A4),
+          ),
           const Spacer(),
           Text(
             data.value,
@@ -650,39 +756,16 @@ class _AttentionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(item.icon, color: const Color(0xFF8A5A00)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: _onSurface,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  item.detail,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: _onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: () => context.push(item.route),
-            child: Text(item.action),
-          ),
-        ],
+      padding: const EdgeInsets.only(bottom: 12),
+      child: GuidanceCard(
+        title: item.title,
+        message: item.detail,
+        icon: item.icon,
+        tone: WorkspaceTone.warning,
+        action: OutlinedButton(
+          onPressed: () => context.push(item.route),
+          child: Text(item.action),
+        ),
       ),
     );
   }
@@ -702,9 +785,24 @@ class _MiniTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (rows.isEmpty) {
-      return const Text(
-        'No records in this period.',
-        style: TextStyle(color: _onSurfaceVariant),
+      return Text(
+        AppLocalizations.of(context)!.adminNoRecordsPeriod,
+        style: const TextStyle(color: _onSurfaceVariant),
+      );
+    }
+    if (MediaQuery.sizeOf(context).width < 700) {
+      return Column(
+        children:
+            rows.map((row) {
+              final values = cells(row);
+              return OfficeRecordCard(
+                title: values.first,
+                values: {
+                  for (var i = 1; i < columns.length && i < values.length; i++)
+                    columns[i]: values[i],
+                },
+              );
+            }).toList(),
       );
     }
     return Table(
@@ -807,14 +905,14 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Select month'),
+      title: Text(AppLocalizations.of(context)!.adminSelectMonth),
       content: SizedBox(
         width: 360,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             DropdownButtonFormField<int>(
-              value: _year,
+              initialValue: _year,
               items: [
                 for (
                   var year = DateTime.now().year - 2;
@@ -824,7 +922,9 @@ class _MonthPickerDialogState extends State<_MonthPickerDialog> {
                   DropdownMenuItem(value: year, child: Text(year.toString())),
               ],
               onChanged: (value) => setState(() => _year = value ?? _year),
-              decoration: const InputDecoration(labelText: 'Year'),
+              decoration: InputDecoration(
+                labelText: AppLocalizations.of(context)!.adminYear,
+              ),
             ),
             const SizedBox(height: 12),
             Wrap(
@@ -895,12 +995,12 @@ class _EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 48),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48),
       child: Center(
         child: Text(
-          'No dashboard data found.',
-          style: TextStyle(color: _onSurfaceVariant),
+          AppLocalizations.of(context)!.adminNoDashboardData,
+          style: const TextStyle(color: _onSurfaceVariant),
         ),
       ),
     );

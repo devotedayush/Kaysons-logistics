@@ -1,17 +1,29 @@
+import '../../core/widgets/workspace_widgets.dart';
+import 'widgets/transporter_workspace.dart';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/auth_service.dart';
 import '../../core/supabase/freights_repo.dart';
-import '../../core/theme/app_theme.dart';
+import '../../core/utils/bid_window.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/route_timeline.dart';
+import '../../l10n/app_localizations.dart';
 import 'widgets/transporter_bottom_nav.dart';
 
 class BidDetailScreen extends StatefulWidget {
-  const BidDetailScreen({super.key, required this.bidId});
+  const BidDetailScreen({
+    super.key,
+    required this.bidId,
+    this.freightStream,
+    this.bidsStream,
+  });
 
   final String bidId;
+  final Stream<Map<String, dynamic>?>? freightStream;
+  final Stream<List<Map<String, dynamic>>>? bidsStream;
 
   @override
   State<BidDetailScreen> createState() => _BidDetailScreenState();
@@ -19,28 +31,68 @@ class BidDetailScreen extends StatefulWidget {
 
 class _BidDetailScreenState extends State<BidDetailScreen> {
   final _bidController = TextEditingController();
+  late Stream<Map<String, dynamic>?> _freightStream;
+  late Stream<List<Map<String, dynamic>>> _bidsStream;
   bool _placing = false;
-  bool _prefilled = false;
+  String? _bidError;
+  final _quoteKey = GlobalKey();
+  bool _hasExistingBid = false;
+  late final Timer _clock;
 
   @override
   void initState() {
     super.initState();
+    _freightStream =
+        widget.freightStream ??
+        FreightsRepo.instance.streamFreight(widget.bidId);
+    _bidsStream =
+        widget.bidsStream ?? FreightsRepo.instance.streamBidsFor(widget.bidId);
+    _clock = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => setState(() {}),
+    );
     _prefillMyBid();
+  }
+
+  @override
+  void didUpdateWidget(covariant BidDetailScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.bidId != widget.bidId) {
+      _bidController.clear();
+      _hasExistingBid = false;
+      _freightStream =
+          widget.freightStream ??
+          FreightsRepo.instance.streamFreight(widget.bidId);
+      _bidsStream =
+          widget.bidsStream ??
+          FreightsRepo.instance.streamBidsFor(widget.bidId);
+      _prefillMyBid();
+    } else if (oldWidget.freightStream != widget.freightStream ||
+        oldWidget.bidsStream != widget.bidsStream) {
+      _freightStream =
+          widget.freightStream ??
+          FreightsRepo.instance.streamFreight(widget.bidId);
+      _bidsStream =
+          widget.bidsStream ??
+          FreightsRepo.instance.streamBidsFor(widget.bidId);
+    }
   }
 
   Future<void> _prefillMyBid() async {
     final uid = AuthService.instance.user?.id;
     if (uid == null) return;
-    final mine = await FreightsRepo.instance.getMyBid(widget.bidId, uid);
-    if (!mounted) return;
+    final bidId = widget.bidId;
+    final mine = await FreightsRepo.instance.getMyBid(bidId, uid);
+    if (!mounted || widget.bidId != bidId) return;
     if (mine != null && mine['amount'] != null) {
       _bidController.text = (mine['amount'] as num).toStringAsFixed(0);
     }
-    _prefilled = true;
+    setState(() => _hasExistingBid = mine != null);
   }
 
   @override
   void dispose() {
+    _clock.cancel();
     _bidController.dispose();
     super.dispose();
   }
@@ -50,29 +102,56 @@ class _BidDetailScreenState extends State<BidDetailScreen> {
     final value = double.tryParse(
       _bidController.text.replaceAll(',', '').trim(),
     );
-    if (value == null || value <= 0) return;
+    if (value == null || !value.isFinite || value <= 0) {
+      setState(
+        () =>
+            _bidError = tpText(
+              context,
+              'Enter a freight amount greater than zero.',
+              'शून्य से अधिक भाड़ा भरें।',
+            ),
+      );
+      return;
+    }
     final uid = AuthService.instance.user?.id;
     if (uid == null) return;
     setState(() => _placing = true);
     try {
+      final freight = await FreightsRepo.instance.fetchFreight(widget.bidId);
+      if (freight == null ||
+          bidWindowPhase(
+                status: (freight['status'] ?? '').toString(),
+                opensAt: bidTimestamp(freight['bid_opens_at']),
+                closesAt: bidTimestamp(freight['bid_closes_at']),
+              ) !=
+              BidWindowPhase.live) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Bidding is not open yet.')),
+        );
+        return;
+      }
       await FreightsRepo.instance.upsertBid(
         freightId: widget.bidId,
         transporterId: uid,
         amount: value,
       );
       if (!mounted) return;
+      setState(() => _hasExistingBid = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Bid placed: ₹${value.toStringAsFixed(0)}. You can revise it until bidding closes.',
+            AppLocalizations.of(context)!.tpBidPlaced(value.toStringAsFixed(0)),
           ),
         ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Bid failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.tpBidFailed('$e')),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _placing = false);
     }
@@ -80,12 +159,13 @@ class _BidDetailScreenState extends State<BidDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.sizeOf(context).width >= 900;
+    final l = AppLocalizations.of(context)!;
+    final isWide = MediaQuery.sizeOf(context).width >= 1024;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: StreamBuilder<Map<String, dynamic>?>(
-          stream: FreightsRepo.instance.streamFreight(widget.bidId),
+          stream: _freightStream,
           builder: (context, snap) {
             final freight = snap.data;
             final route =
@@ -96,17 +176,16 @@ class _BidDetailScreenState extends State<BidDetailScreen> {
             final myUid = AuthService.instance.user?.id;
             final winnerId = freight?['winner_profile_id'] as String?;
             final iWon = winnerId != null && winnerId == myUid;
-            final closesAt = DateTime.tryParse(
-              (freight?['bid_closes_at'] ?? '').toString(),
+            final opensAt = bidTimestamp(freight?['bid_opens_at']);
+            final closesAt = bidTimestamp(freight?['bid_closes_at']);
+            final phase = bidWindowPhase(
+              status: status,
+              opensAt: opensAt,
+              closesAt: closesAt,
             );
-            final minsLeft = closesAt?.difference(DateTime.now()).inMinutes;
-            final openByTime =
-                closesAt != null && closesAt.isAfter(DateTime.now());
-            final bidOpen = status == 'bidding' && openByTime;
+            final bidOpen = phase == BidWindowPhase.live;
             final hiddenClosedLoss =
-                freight != null &&
-                !iWon &&
-                (status != 'bidding' || !openByTime);
+                freight != null && !iWon && phase == BidWindowPhase.closed;
 
             if (hiddenClosedLoss) {
               return _ResponsiveTransporterPage(
@@ -124,19 +203,19 @@ class _BidDetailScreenState extends State<BidDetailScreen> {
                           color: Color(0xFF49454F),
                         ),
                         const SizedBox(height: 14),
-                        const Text(
-                          'Bid closed',
-                          style: TextStyle(
+                        Text(
+                          l.tpBidClosed,
+                          style: const TextStyle(
                             fontSize: 28,
                             fontWeight: FontWeight.w700,
                             color: Color(0xFF1D1B20),
                           ),
                         ),
                         const SizedBox(height: 10),
-                        const Text(
-                          'Only bids you win stay available in your past bids and fleet.',
+                        Text(
+                          l.tpBidClosedHint,
                           textAlign: TextAlign.center,
-                          style: TextStyle(
+                          style: const TextStyle(
                             fontSize: 17,
                             color: Color(0xFF49454F),
                           ),
@@ -144,7 +223,7 @@ class _BidDetailScreenState extends State<BidDetailScreen> {
                         const SizedBox(height: 20),
                         TextButton(
                           onPressed: () => context.go('/bids'),
-                          child: const Text('Back to open bids'),
+                          child: Text(l.tpBackToOpenBids),
                         ),
                       ],
                     ),
@@ -153,19 +232,74 @@ class _BidDetailScreenState extends State<BidDetailScreen> {
               );
             }
 
+            if (snap.hasError) {
+              return WorkspaceEmptyState(
+                title: tpText(
+                  context,
+                  'This load could not be opened',
+                  'माल का विवरण नहीं खुला',
+                ),
+                message: tpText(
+                  context,
+                  'Check your connection and return to open bids.',
+                  'इंटरनेट जाँचकर खुली बोलियों पर लौटें।',
+                ),
+                icon: Icons.wifi_off,
+                action: FilledButton(
+                  onPressed: () => context.go('/bids'),
+                  child: Text(l.tpBackToOpenBids),
+                ),
+              );
+            }
+            if (freight == null) {
+              return const Center(child: CircularProgressIndicator());
+            }
             return _ResponsiveTransporterPage(
               isWide: isWide,
               currentIndex: 1,
               child: ListView(
-                padding: EdgeInsets.zero,
+                padding: const EdgeInsets.all(20),
                 children: [
-                  _HeaderHero(route: route),
-                  const SizedBox(height: 12),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: _StatusBanner(
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => context.pop(),
+                      icon: const Icon(Icons.arrow_back),
+                      label: Text(l.tpBackToOpenBids),
+                    ),
+                  ),
+                  WorkspaceHeader(
+                    action:
+                        bidOpen
+                            ? FilledButton.icon(
+                              onPressed: () {
+                                final target = _quoteKey.currentContext;
+                                if (target != null) {
+                                  Scrollable.ensureVisible(
+                                    target,
+                                    duration: const Duration(milliseconds: 300),
+                                    alignment: .1,
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.edit_outlined),
+                              label: Text(
+                                tpText(context, 'Quote freight', 'भाड़ा दें'),
+                              ),
+                            )
+                            : null,
+                    title: route,
+                    description: tpText(
+                      context,
+                      'Review this load before quoting. Your amount is the total freight for the complete route.',
+                      'भाड़ा देने से पहले माल का विवरण देखें। आपकी राशि पूरे मार्ग का कुल भाड़ा है।',
+                    ),
+                    icon: Icons.inventory_2_outlined,
+                    eyebrow: tpText(context, 'Load details', 'माल का विवरण'),
+                    summary: _StatusBanner(
                       status: status,
-                      minsLeft: minsLeft,
+                      opensAt: opensAt,
+                      closesAt: closesAt,
                       iWon: iWon,
                       onOpenDelivery:
                           iWon
@@ -173,121 +307,121 @@ class _BidDetailScreenState extends State<BidDetailScreen> {
                               : null,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  if (freight != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: RouteTimeline(points: _routePointsFor(freight)),
-                    ),
-                  const SizedBox(height: 18),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    child: Text(
-                      'Live Bidding',
-                      style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1D1B20),
+                  const SizedBox(height: 20),
+                  WorkspaceFormLayout(
+                    showAsideOnMobile: true,
+                    aside: WorkspaceSection(
+                      title: tpText(context, 'Route & load', 'मार्ग और माल'),
+                      description: tpText(
+                        context,
+                        'Pickup, stops and quantities for this trip.',
+                        'इस यात्रा के माल उठाने का स्थान, पड़ाव और मात्रा।',
                       ),
-                    ),
-                  ),
-                  StreamBuilder<List<Map<String, dynamic>>>(
-                    stream: FreightsRepo.instance.streamBidsFor(widget.bidId),
-                    builder: (context, snap) {
-                      final bids = snap.data ?? const [];
-                      final lowest =
-                          bids.isNotEmpty
-                              ? (bids.first['amount'] as num).toDouble()
-                              : null;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
                           children: [
-                            const SizedBox(height: 8),
-                            Text(
-                              lowest == null
-                                  ? 'No bids yet'
-                                  : '₹ ${lowest.toStringAsFixed(0)}/-',
-                              style: const TextStyle(
-                                fontSize: 48,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF1D1B20),
-                              ),
+                            StatusBadge(
+                              label:
+                                  '${freight['cases'] ?? '—'} ${tpText(context, 'cases', 'केस')}',
                             ),
-                            Text(
-                              '${bids.length} anonymous bidder(s)',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                color: Color(0xFF49454F),
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-                            ...bids.asMap().entries.map(
-                              (e) => _bidRow(
-                                index: e.key + 1,
-                                amount: (e.value['amount'] as num).toDouble(),
-                                isMine:
-                                    e.value['transporter_id'] ==
-                                    AuthService.instance.user?.id,
-                              ),
+                            StatusBadge(
+                              label: '${freight['weight_kg'] ?? '—'} MT',
                             ),
                           ],
                         ),
-                      );
-                    },
-                  ),
-                  if (bidOpen)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: _bidController,
-                              keyboardType: TextInputType.number,
-                              style: const TextStyle(fontSize: 20),
-                              decoration: InputDecoration(
-                                prefixText: '₹ ',
-                                hintText: '15000',
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 18,
-                                  vertical: 18,
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(28),
-                                  borderSide: const BorderSide(
-                                    color: Color(0xFFCAC4D0),
+                        const SizedBox(height: 16),
+                        RouteTimeline(
+                          points: _routePointsFor(context, freight),
+                        ),
+                        const SizedBox(height: 16),
+                        GuidanceCard(
+                          title: tpText(
+                            context,
+                            'Before you quote',
+                            'भाड़ा देने से पहले',
+                          ),
+                          message: tpText(
+                            context,
+                            'Check that your vehicle can carry this load and serve every stop. The office will confirm the winning quote.',
+                            'जाँचें कि आपका वाहन यह माल ले जा सकता है और हर पड़ाव पहुँच सकता है। कार्यालय चुने गए भाड़े की पुष्टि करेगा।',
+                          ),
+                        ),
+                      ],
+                    ),
+                    content: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (bidOpen)
+                          WorkspaceSection(
+                            key: _quoteKey,
+                            title: tpText(
+                              context,
+                              _hasExistingBid
+                                  ? 'Update your freight quote'
+                                  : 'Your freight quote',
+                              _hasExistingBid
+                                  ? 'अपना भाड़ा बदलें'
+                                  : 'अपना भाड़ा दें',
+                            ),
+                            description: tpText(
+                              context,
+                              'Enter the total amount in rupees.',
+                              'कुल राशि रुपये में भरें।',
+                            ),
+                            children: [
+                              TextField(
+                                controller: _bidController,
+                                keyboardType: TextInputType.number,
+                                onChanged: (_) {
+                                  if (_bidError != null) {
+                                    setState(() => _bidError = null);
+                                  }
+                                },
+                                decoration: InputDecoration(
+                                  labelText: tpText(
+                                    context,
+                                    'Total freight (₹)',
+                                    'कुल भाड़ा (₹)',
                                   ),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(28),
-                                  borderSide: const BorderSide(
-                                    color: AppColors.black,
-                                    width: 1.5,
-                                  ),
+                                  prefixText: '₹ ',
+                                  hintText: '15000',
+                                  errorText: _bidError,
+                                  border: const OutlineInputBorder(),
+                                  contentPadding: const EdgeInsets.all(18),
                                 ),
                               ),
-                            ),
+                              const SizedBox(height: 16),
+                              SizedBox(
+                                width: double.infinity,
+                                child: PrimaryButton(
+                                  label:
+                                      _placing
+                                          ? l.tpPlacing
+                                          : (_hasExistingBid
+                                              ? l.tpUpdateBid
+                                              : l.tpPlaceBid),
+                                  onPressed: _placing ? null : _submitBid,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                tpText(
+                                  context,
+                                  'You can change your quote while bidding is open.',
+                                  'बोली खुली रहने तक अपना भाड़ा बदल सकते हैं।',
+                                ),
+                                style: const TextStyle(height: 1.5),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 14),
-                          SizedBox(
-                            width: 170,
-                            height: 58,
-                            child: PrimaryButton(
-                              label:
-                                  _placing
-                                      ? 'Placing...'
-                                      : (_prefilled &&
-                                              _bidController.text.isNotEmpty
-                                          ? 'Update bid'
-                                          : 'Place bid'),
-                              onPressed: _placing ? null : _submitBid,
-                            ),
-                          ),
-                        ],
-                      ),
+                        const SizedBox(height: 16),
+                        _biddingSummary(),
+                      ],
                     ),
+                  ),
+                  const SizedBox(height: 32),
                 ],
               ),
             );
@@ -296,6 +430,59 @@ class _BidDetailScreenState extends State<BidDetailScreen> {
       ),
     );
   }
+
+  Widget _biddingSummary() => StreamBuilder<List<Map<String, dynamic>>>(
+    stream: _bidsStream,
+    builder: (context, snap) {
+      final l = AppLocalizations.of(context)!;
+      final bids = snap.data ?? const [];
+      return WorkspaceSection(
+        title: tpText(context, 'Current quotes', 'वर्तमान भाड़े'),
+        children: [
+          if (snap.hasError)
+            Text(
+              tpText(
+                context,
+                'Quotes could not be loaded. Your saved quote is not changed.',
+                'भाड़े लोड नहीं हुए। आपका सहेजा हुआ भाड़ा नहीं बदला।',
+              ),
+            )
+          else ...[
+            Text(
+              bids.isEmpty
+                  ? l.tpNoBidsYet
+                  : '₹ ${(bids.first['amount'] as num).toStringAsFixed(0)}',
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w700),
+            ),
+            Text(
+              l.tpAnonymousBidders(bids.length),
+              style: const TextStyle(height: 1.5),
+            ),
+            if (bids.isNotEmpty)
+              Material(
+                color: Colors.transparent,
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: Text(
+                    tpText(context, 'Compare quotes', 'भाड़ों की तुलना करें'),
+                  ),
+                  children: [
+                    for (final (i, bid) in bids.indexed)
+                      _bidRow(
+                        index: i + 1,
+                        amount: (bid['amount'] as num).toDouble(),
+                        isMine:
+                            bid['transporter_id'] ==
+                            AuthService.instance.user?.id,
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      );
+    },
+  );
 
   Widget _bidRow({
     required int index,
@@ -323,7 +510,9 @@ class _BidDetailScreenState extends State<BidDetailScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              isMine ? 'You' : 'Anonymous bidder',
+              isMine
+                  ? AppLocalizations.of(context)!.tpYou
+                  : AppLocalizations.of(context)!.tpAnonymousBidder,
               style: const TextStyle(fontSize: 18, color: Color(0xFF1D1B20)),
             ),
           ),
@@ -360,25 +549,7 @@ class _ResponsiveTransporterPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isWide) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _DesktopTransporterNav(
-            currentIndex: currentIndex,
-            onTap: (index) => _goto(context, index),
-          ),
-          Expanded(
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1120),
-                child: child,
-              ),
-            ),
-          ),
-        ],
-      );
-    }
+    if (isWide) return child;
 
     return Column(
       children: [
@@ -397,188 +568,63 @@ class _ResponsiveTransporterPage extends StatelessWidget {
   }
 }
 
-class _DesktopTransporterNav extends StatelessWidget {
-  const _DesktopTransporterNav({
-    required this.currentIndex,
-    required this.onTap,
-  });
-
-  final int currentIndex;
-  final ValueChanged<int> onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 248,
-      margin: const EdgeInsets.fromLTRB(16, 16, 12, 16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: const Color(0xFFE9E1F1)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x12000000),
-            blurRadius: 24,
-            offset: Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.local_shipping_outlined, size: 30),
-          const SizedBox(height: 20),
-          const Text(
-            'Transporter',
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Manage bids, fleet, and delivery updates from the browser.',
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.4,
-              color: Color(0xFF6B6176),
-            ),
-          ),
-          const SizedBox(height: 28),
-          _DesktopNavTile(
-            selected: currentIndex == 0,
-            icon: Icons.dashboard_outlined,
-            label: 'Dashboard',
-            onTap: () => onTap(0),
-          ),
-          const SizedBox(height: 8),
-          _DesktopNavTile(
-            selected: currentIndex == 1,
-            icon: Icons.gavel_outlined,
-            label: 'Bids',
-            onTap: () => onTap(1),
-          ),
-          const SizedBox(height: 8),
-          _DesktopNavTile(
-            selected: currentIndex == 2,
-            icon: Icons.local_shipping_outlined,
-            label: 'Fleet',
-            onTap: () => onTap(2),
-          ),
-          const Spacer(),
-          _DesktopNavTile(
-            selected: false,
-            icon: Icons.account_circle_outlined,
-            label: 'Profile',
-            onTap: () => context.push('/profile'),
-          ),
-          const SizedBox(height: 8),
-          _DesktopNavTile(
-            selected: false,
-            icon: Icons.logout,
-            label: 'Logout',
-            onTap: () async {
-              await AuthService.instance.signOut();
-              if (context.mounted) context.go('/welcome');
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DesktopNavTile extends StatelessWidget {
-  const _DesktopNavTile({
-    required this.selected,
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final bool selected;
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFFF6EDFB) : Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: selected ? const Color(0xFFE1D2F8) : Colors.transparent,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 22, color: const Color(0xFF49454F)),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color:
-                      selected
-                          ? const Color(0xFF1D1B20)
-                          : const Color(0xFF49454F),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _StatusBanner extends StatelessWidget {
   const _StatusBanner({
     required this.status,
-    required this.minsLeft,
+    required this.opensAt,
+    required this.closesAt,
     required this.iWon,
     required this.onOpenDelivery,
   });
   final String status;
-  final int? minsLeft;
+  final DateTime? opensAt;
+  final DateTime? closesAt;
   final bool iWon;
   final VoidCallback? onOpenDelivery;
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     String label;
     Color bg;
     Color fg;
     IconData icon;
     switch (status) {
       case 'bidding':
-        if (minsLeft != null && minsLeft! > 0) {
-          label =
-              minsLeft! >= 60
-                  ? 'Bidding open · ${minsLeft! ~/ 60}h ${minsLeft! % 60}m left'
-                  : 'Bidding open · ${minsLeft}m left';
-        } else {
-          label = 'Bidding open';
-        }
+        final phase = bidWindowPhase(
+          status: status,
+          opensAt: opensAt,
+          closesAt: closesAt,
+        );
+        final minutes = closesAt?.difference(DateTime.now()).inMinutes ?? 0;
+        label =
+            phase == BidWindowPhase.live
+                ? (closesAt == null
+                    ? l.tpBiddingOpen
+                    : minutes >= 60
+                    ? l.tpBiddingOpenHours(minutes ~/ 60, minutes % 60)
+                    : l.tpBiddingOpenMinutes(minutes.clamp(0, 59)))
+                : phase == BidWindowPhase.upcoming
+                ? tpText(
+                  context,
+                  'Bidding opens soon. You can review the load now.',
+                  'बोली जल्द खुलेगी। अभी माल का विवरण देख सकते हैं।',
+                )
+                : l.tpClosed;
         bg = const Color(0xFFF6EDFB);
         fg = const Color(0xFF4F378A);
         icon = Icons.gavel_outlined;
         break;
       case 'awarded':
       case 'dispatched':
-        label = iWon ? 'You won this bid' : 'Awarded to another transporter';
+        label = iWon ? l.tpYouWonBid : l.tpAwardedOther;
         bg = iWon ? const Color(0xFFE7F6EC) : const Color(0xFFECE6F0);
         fg = iWon ? const Color(0xFF14A33A) : const Color(0xFF49454F);
         icon = iWon ? Icons.emoji_events : Icons.block;
         break;
       case 'locked':
       case 'completed':
-        label = iWon ? 'Delivery $status' : 'Closed';
+        label = iWon ? l.tpDeliveryStatus(status) : l.tpClosed;
         bg = const Color(0xFFECE6F0);
         fg = const Color(0xFF49454F);
         icon = Icons.lock_outline;
@@ -610,76 +656,17 @@ class _StatusBanner extends StatelessWidget {
             ),
           ),
           if (onOpenDelivery != null)
-            TextButton(onPressed: onOpenDelivery, child: const Text('Track →')),
+            TextButton(onPressed: onOpenDelivery, child: Text(l.tpTrackArrow)),
         ],
       ),
     );
   }
 }
 
-class _HeaderHero extends StatelessWidget {
-  const _HeaderHero({required this.route});
-  final String route;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Container(
-          height: 220,
-          color: const Color(0xFFECE6F0),
-          child: const Center(
-            child: Icon(
-              Icons.local_shipping_outlined,
-              size: 96,
-              color: Color(0xFFB39DC8),
-            ),
-          ),
-        ),
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.black.withValues(alpha: 0.5),
-                ],
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          top: 8,
-          left: 8,
-          child: IconButton(
-            style: IconButton.styleFrom(
-              backgroundColor: const Color(0xFFE8DEF8),
-            ),
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => context.pop(),
-          ),
-        ),
-        Positioned(
-          left: 16,
-          right: 16,
-          bottom: 16,
-          child: Text(
-            route,
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-List<RoutePoint> _routePointsFor(Map<String, dynamic> freight) {
+List<RoutePoint> _routePointsFor(
+  BuildContext context,
+  Map<String, dynamic> freight,
+) {
   final stopDetails = _stopDetailsList(freight['stop_details']);
   final stopPoints =
       stopDetails
@@ -689,7 +676,7 @@ List<RoutePoint> _routePointsFor(Map<String, dynamic> freight) {
             return RoutePoint(
               label: (data['name'] ?? '').toString(),
               kind: RoutePointKind.stop,
-              meta: _quantityMeta(data['cases'], data['weight_kg']),
+              meta: _quantityMeta(context, data['cases'], data['weight_kg']),
             );
           })
           .where((point) => point.label.trim().isNotEmpty)
@@ -712,16 +699,16 @@ List<RoutePoint> _routePointsFor(Map<String, dynamic> freight) {
     RoutePoint(
       label: (freight['destination_town'] ?? '').toString(),
       kind: RoutePointKind.destination,
-      meta: _destinationMeta(freight),
+      meta: _destinationMeta(context, freight),
     ),
   ];
 }
 
-String? _destinationMeta(Map<String, dynamic> freight) {
+String? _destinationMeta(BuildContext context, Map<String, dynamic> freight) {
   final stopDetails = _stopDetailsList(freight['stop_details']);
   for (final row in stopDetails) {
     if (row is Map && row['kind'] == 'destination') {
-      return _quantityMeta(row['cases'], row['weight_kg']);
+      return _quantityMeta(context, row['cases'], row['weight_kg']);
     }
   }
   return null;
@@ -731,12 +718,13 @@ List<dynamic> _stopDetailsList(dynamic value) {
   return value is List ? value : const [];
 }
 
-String? _quantityMeta(dynamic cases, dynamic weight) {
+String? _quantityMeta(BuildContext context, dynamic cases, dynamic weight) {
   final caseText = (cases ?? '').toString();
   final weightText = (weight ?? '').toString();
   final parts = [
-    if (caseText.isNotEmpty && caseText != 'null') '$caseText Cases',
-    if (weightText.isNotEmpty && weightText != 'null') '$weightText Ton',
+    if (caseText.isNotEmpty && caseText != 'null')
+      AppLocalizations.of(context)!.tpCases(caseText),
+    if (weightText.isNotEmpty && weightText != 'null') '$weightText MT',
   ];
   return parts.isEmpty ? null : parts.join(' · ');
 }

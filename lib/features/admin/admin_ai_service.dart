@@ -6,10 +6,10 @@ class AdminAiService {
   AdminAiService._();
   static final instance = AdminAiService._();
 
-  Future<ClawdResponse> ask(String question) async {
+  Future<ClawdResponse> ask(String question, {String language = 'en'}) async {
     final response = await supabase.functions.invoke(
       'clawd-admin-ai',
-      body: {'action': 'chat', 'question': question},
+      body: {'action': 'chat', 'question': question, 'language': language},
     );
     return ClawdResponse.fromData(response.data);
   }
@@ -46,6 +46,7 @@ class AdminAiService {
   Future<ClawdResponse> runTemplate({
     required String templateId,
     Map<String, dynamic> variables = const {},
+    String language = 'en',
   }) async {
     final response = await supabase.functions.invoke(
       'clawd-admin-ai',
@@ -53,6 +54,7 @@ class AdminAiService {
         'action': 'template_run',
         'template_id': templateId,
         'variables': variables,
+        'language': language,
       },
     );
     return ClawdResponse.fromData(response.data);
@@ -130,10 +132,16 @@ class ClawdResponse {
 
   factory ClawdResponse.fromData(dynamic data) {
     final map = Map<String, dynamic>.from(data as Map);
+    final error = (map['error'] ?? '').toString().trim();
+    if (error.isNotEmpty) throw StateError(error);
+    final answer = _PlainEnglishAiText.clean(
+      (map['answer'] ?? map['report']?['summary'] ?? '').toString(),
+    );
+    if (answer.trim().isEmpty) {
+      throw StateError('Clawd returned an empty answer. Please try again.');
+    }
     return ClawdResponse(
-      answer: _PlainEnglishAiText.clean(
-        (map['answer'] ?? map['report']?['summary'] ?? '').toString(),
-      ),
+      answer: answer,
       metrics: Map<String, dynamic>.from(map['metrics'] as Map? ?? const {}),
       anomalies: (map['anomalies'] as List?) ?? const [],
     );

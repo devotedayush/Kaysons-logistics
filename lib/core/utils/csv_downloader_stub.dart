@@ -1,7 +1,20 @@
-void downloadFile(String fileName, String content, String mimeType) {
-  throw UnsupportedError('File download is only available on web.');
+import 'dart:convert';
+
+import 'package:file_picker/file_picker.dart';
+
+Future<void> downloadFile(
+  String fileName,
+  String content,
+  String mimeType,
+) async {
+  await FilePicker.saveFile(
+    fileName: fileName,
+    type: FileType.custom,
+    allowedExtensions: [fileName.split('.').last],
+    bytes: utf8.encode(content),
+  );
 }
 
-void downloadCsv(String fileName, String csvContent) {
-  throw UnsupportedError('CSV download is only available on web.');
+Future<void> downloadCsv(String fileName, String csvContent) {
+  return downloadFile(fileName, csvContent, 'text/csv;charset=utf-8');
 }

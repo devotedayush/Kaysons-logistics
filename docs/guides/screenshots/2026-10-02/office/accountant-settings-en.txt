@@ -1,0 +1,9 @@
+- document:
+  - group "Dismiss menu":
+    - menu:
+      - group:
+        - menuitem "Profile" [ref=e1]
+        - menuitem "Account & privacy" [ref=e2]
+        - 'menuitemcheckbox "Language: English" [checked]'
+        - 'menuitemcheckbox "Language: हिंदी"'
+        - menuitem "Log out" [ref=e3]

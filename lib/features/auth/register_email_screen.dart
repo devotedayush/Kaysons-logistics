@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/widgets/pill_text_field.dart';
@@ -23,14 +24,14 @@ class _RegisterEmailScreenState extends State<RegisterEmailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return RegistrationShell(
       step: 1,
-      title: 'Enter your email address',
-      subtitle:
-          "Sign in with your email. If you don't have a Kaysons account yet, we'll set one up",
+      title: l.registerEmailTitle,
+      subtitle: l.registerEmailSubtitle,
       fields: [
         LabeledField(
-          label: 'Your Email',
+          label: l.yourEmail,
           child: PillTextField(
             controller: _email,
             hint: 'abc@gmail.com',
@@ -38,7 +39,7 @@ class _RegisterEmailScreenState extends State<RegisterEmailScreen> {
           ),
         ),
       ],
-      ctaLabel: 'Next',
+      ctaLabel: l.next,
       onNext: () {
         final v = _email.text.trim();
         if (v.isEmpty || !v.contains('@')) return;

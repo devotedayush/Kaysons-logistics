@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/app_localizations.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -27,25 +28,26 @@ class _RegisterPasswordScreenState extends State<RegisterPasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return RegistrationShell(
       step: 2,
-      title: 'Create Password',
-      subtitle: 'Must be 8 character or longer',
+      title: l.createPassword,
+      subtitle: l.passwordLength,
       fields: [
         LabeledField(
-          label: 'New Password',
+          label: l.newPassword,
           child: PillTextField(
             controller: _pwd,
             obscureText: true,
-            hint: 'Password',
+            hint: l.password,
           ),
         ),
         LabeledField(
-          label: 'Confirm New Password',
+          label: l.confirmPassword,
           child: PillTextField(
             controller: _confirm,
             obscureText: true,
-            hint: 'Confirm password',
+            hint: l.confirmPassword,
           ),
         ),
       ],
@@ -55,15 +57,17 @@ class _RegisterPasswordScreenState extends State<RegisterPasswordScreen> {
           Checkbox(
             value: _agree,
             onChanged: (v) => setState(() => _agree = v ?? false),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(2)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(2),
+            ),
             activeColor: AppColors.primary,
           ),
-          const Expanded(
+          Expanded(
             child: Padding(
-              padding: EdgeInsets.only(top: 12),
+              padding: const EdgeInsets.only(top: 12),
               child: Text(
-                'Please agree to Kaysons Terms of Use and Privacy Policy and to receive emails from Kaysons.',
-                style: TextStyle(
+                l.termsAgreement,
+                style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: Color(0x80000000),
@@ -75,9 +79,11 @@ class _RegisterPasswordScreenState extends State<RegisterPasswordScreen> {
           ),
         ],
       ),
-      ctaLabel: 'Next',
+      ctaLabel: l.next,
       onNext: () {
-        if (_pwd.text.length < 8 || _pwd.text != _confirm.text || !_agree) return;
+        if (_pwd.text.length < 8 || _pwd.text != _confirm.text || !_agree) {
+          return;
+        }
         RegistrationDraft.instance.password = _pwd.text;
         context.push('/register/name');
       },

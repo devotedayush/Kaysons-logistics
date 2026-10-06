@@ -1,0 +1,81 @@
+- document:
+  - img "Kaysons logo"
+  - text: एडमिन पैनल KAYSONS उपयोगकर्ताओं और माल ढुलाई की गतिविधि पर नज़र रखें।
+  - group:
+    - button "डैशबोर्ड" [ref=e1]
+    - button "उपयोगकर्ता" [ref=e2]
+    - button "बोलियाँ" [ref=e3]
+    - button "खाता बही" [ref=e4]
+    - button "Clawd" [ref=e5]
+  - button "प्रोफ़ाइल प्रोफ़ाइल" [ref=e6]
+  - group:
+    - group "स्वागत है, Google Play Review Administrator उपयोगकर्ताओं और माल ढुलाई की गतिविधि पर नज़र रखें।":
+      - button "151 सूचनाएँ" [ref=e7]
+    - group "April 2026 आज · 2026-10-02 · 0 चक्कर":
+      - button "महीना" [ref=e8]
+      - button "से 2026-04-01" [ref=e9]
+      - button "तक 2026-04-30" [ref=e10]
+      - button "नवीनतम" [ref=e11]
+    - 'group "ध्यान दें NEW SODHI: 90 लंबित POD ₹1.18 L: पावती के लिए फ़ॉलो-अप ज़रूरी है. 2 डुप्लिकेट ई-वे जोखिम भुगतान जारी करने से पहले दस्तावेज़ अनुसार समीक्षा करें। 61 अधिक अतिरिक्त शुल्क वाले मामले मज़दूरी, डिटेंशन, टोल और मार्ग से बाहर के शुल्क जाँचें।"':
+      - button "Clawd" [ref=e12] [nth=1]
+      - button "लेजर खोलें" [ref=e13]
+      - button "Clawd से पूछें" [ref=e14]
+      - button "Clawd खोलें" [ref=e15]
+    - text: 519 चक्कर 133,106 केस 1860 MT मेट्रिक टन ₹20.51 L भाड़ा 164 लंबित POD ₹3.83 L समीक्षा राशि
+    - group "ट्रांसपोर्टर प्रदर्शन मार्ग और गंतव्य":
+      - table:
+        - row "ट्रांसपोर्टर चक्कर MT भाड़ा POD":
+          - cell "ट्रांसपोर्टर" [ref=e16]
+          - cell "चक्कर" [ref=e17]
+          - cell "MT" [ref=e18]
+          - cell "भाड़ा" [ref=e19]
+          - cell "POD" [ref=e20]
+        - row "NEW SODHI 322 966 ₹12.36 L 90":
+          - cell "NEW SODHI" [ref=e21]
+          - cell "322" [ref=e22]
+          - cell "966" [ref=e23]
+          - cell "₹12.36 L" [ref=e24]
+          - cell "90" [ref=e25]
+        - row "AMAN ROAD 157 679 ₹6.34 L 69":
+          - cell "AMAN ROAD" [ref=e26]
+          - cell "157" [ref=e27]
+          - cell "679" [ref=e28]
+          - cell "₹6.34 L" [ref=e29]
+          - cell "69" [ref=e30]
+        - row "NICE TRANSPORT 16 113 ₹1.01 L 2":
+          - cell "NICE TRANSPORT" [ref=e31]
+          - cell "16" [ref=e32]
+          - cell "113" [ref=e33]
+          - cell "₹1.01 L" [ref=e34]
+          - cell "2" [ref=e35]
+        - row "SELF 16 63.6 ₹36.3K 1":
+          - cell "SELF" [ref=e36]
+          - cell "16" [ref=e37] [nth=1]
+          - cell "63.6" [ref=e38]
+          - cell "₹36.3K" [ref=e39]
+          - cell "1" [ref=e40]
+        - row "LORD KRISHNA 6 22.5 ₹30.4K 2":
+          - cell "LORD KRISHNA" [ref=e41]
+          - cell "6" [ref=e42]
+          - cell "22.5" [ref=e43]
+          - cell "₹30.4K" [ref=e44]
+          - cell "2" [ref=e45] [nth=1]
+        - row "DELUXE 1 5.64 ₹7.4K 0":
+          - cell "DELUXE" [ref=e46]
+          - cell "1" [ref=e47] [nth=1]
+          - cell "5.64" [ref=e48]
+          - cell "₹7.4K" [ref=e49]
+          - cell "0" [ref=e50]
+      - table:
+        - row "मार्ग चक्कर भाड़ा/MT":
+          - cell "मार्ग" [ref=e51]
+          - cell "चक्कर" [ref=e52] [nth=1]
+          - cell "भाड़ा/MT" [ref=e53]
+        - row "Ludhiana -> PATHANKOT 22 ₹1.8K":
+          - cell "Ludhiana -> PATHANKOT" [ref=e54]
+          - cell "22" [ref=e55]
+          - cell "₹1.8K" [ref=e56]
+        - row
+        - row
+        - row
+        - row

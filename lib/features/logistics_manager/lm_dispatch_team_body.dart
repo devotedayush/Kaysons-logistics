@@ -1,3 +1,6 @@
+import 'widgets/operational_workspace.dart';
+import '../../core/widgets/workspace_widgets.dart';
+import '../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/supabase/supabase_bootstrap.dart';
@@ -115,9 +118,22 @@ class _LmDispatchTeamBodyState extends State<LmDispatchTeamBody> {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: Text(
-            'Error: $_error',
-            style: const TextStyle(color: Colors.red),
+          child: WorkspaceEmptyState(
+            title: operationalCopy(
+              context,
+              'Team could not load',
+              'टीम लोड नहीं हुई',
+            ),
+            message: operationalCopy(
+              context,
+              'Try loading your team again.',
+              'अपनी टीम फिर लोड करें।',
+            ),
+            action: OutlinedButton.icon(
+              onPressed: _load,
+              icon: const Icon(Icons.refresh),
+              label: Text(AppLocalizations.of(context)!.opsRefresh),
+            ),
           ),
         ),
       );
@@ -137,17 +153,43 @@ class _LmDispatchTeamBodyState extends State<LmDispatchTeamBody> {
 
     return RefreshIndicator(
       onRefresh: _load,
-      child: ListView(
+      child: OperationalListView(
         padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
         children: [
+          WorkspaceHeader(
+            title: operationalCopy(
+              context,
+              'Manage your dispatch team',
+              'अपनी डिस्पैच टीम संभालें',
+            ),
+            description: operationalCopy(
+              context,
+              'Assign approved dispatch managers to check your trucks and follow deliveries.',
+              'अपने ट्रक जाँचने और डिलीवरी देखने के लिए स्वीकृत डिस्पैच मैनेजर जोड़ें।',
+            ),
+            icon: Icons.groups_outlined,
+          ),
+          OperationalStep(
+            '1',
+            operationalCopy(
+              context,
+              'Review assigned managers',
+              'सौंपे गए मैनेजर देखें',
+            ),
+            operationalCopy(
+              context,
+              'Your team can check the deliveries assigned to you.',
+              'आपकी टीम आपके ट्रिप की जाँच कर सकती है।',
+            ),
+          ),
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Dispatch team',
+                      AppLocalizations.of(context)!.opsDispatchTeam,
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w600,
@@ -155,14 +197,14 @@ class _LmDispatchTeamBodyState extends State<LmDispatchTeamBody> {
                     ),
                     SizedBox(height: 4),
                     Text(
-                      'Assign registered users to track your accepted deliveries.',
+                      AppLocalizations.of(context)!.opsAssignRegisteredUsers,
                       style: TextStyle(color: Color(0xFF6B6176)),
                     ),
                   ],
                 ),
               ),
               IconButton(
-                tooltip: 'Refresh',
+                tooltip: AppLocalizations.of(context)!.opsRefresh,
                 onPressed: _load,
                 icon: const Icon(Icons.refresh),
               ),
@@ -350,7 +392,7 @@ class _EmptyState extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F5FB),
+        color: const Color(0xFFF8F9FC),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: const Color(0xFFE9E1F1)),
       ),

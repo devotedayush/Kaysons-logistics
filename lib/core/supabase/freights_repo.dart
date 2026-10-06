@@ -1,4 +1,23 @@
 import 'supabase_bootstrap.dart';
+import '../utils/workflow_formatters.dart';
+
+/// Keep previously recorded office references while updating delivery details.
+/// Invoice fields are managed by the office and are not transporter inputs.
+Map<String, dynamic> mergeTransporterDeliveryStage(
+  Map<String, dynamic> saved,
+  Map<String, dynamic> update,
+  DateTime submittedAt,
+) {
+  final deliveryUpdate = Map<String, dynamic>.from(update)
+    ..remove('invoice_number')
+    ..remove('invoice_numbers')
+    ..remove('invoice_photo_path');
+  return {
+    ...saved,
+    ...deliveryUpdate,
+    'submitted_at': submittedAt.toUtc().toIso8601String(),
+  };
+}
 
 class FreightsRepo {
   FreightsRepo._();
@@ -50,6 +69,57 @@ class FreightsRepo {
     return r;
   }
 
+  Future<Map<String, dynamic>> fetchInvoiceState(String freightId) async {
+    final freight =
+        await supabase
+            .from('freights')
+            .select('status')
+            .eq('id', freightId)
+            .single();
+    final invoices = await supabase
+        .from('invoices')
+        .select()
+        .eq('freight_id', freightId)
+        .order('created_at');
+    final invoiceIds =
+        invoices.map((invoice) => invoice['id'].toString()).toList();
+    final documentRows =
+        invoiceIds.isEmpty
+            ? <Map<String, dynamic>>[]
+            : await supabase
+                .from('invoice_documents')
+                .select('invoice_id, document_kind, document_number')
+                .inFilter('invoice_id', invoiceIds);
+    final invoicesWithDocuments = [
+      for (final invoice in invoices)
+        {
+          ...invoice,
+          'gr_bilty_numbers': [
+            for (final document in documentRows)
+              if (document['invoice_id'] == invoice['id'] &&
+                  document['document_kind'] == 'gr_bilty')
+                document['document_number'],
+          ],
+          'e_way_bill_numbers': [
+            for (final document in documentRows)
+              if (document['invoice_id'] == invoice['id'] &&
+                  document['document_kind'] == 'e_way_bill')
+                document['document_number'],
+          ],
+        },
+    ];
+    final charges = await supabase
+        .from('freight_charges')
+        .select()
+        .eq('freight_id', freightId)
+        .order('created_at');
+    return {
+      'status': freight['status'],
+      'invoices': invoicesWithDocuments,
+      'charges': charges,
+    };
+  }
+
   Stream<Map<String, dynamic>?> streamFreight(String id) {
     return supabase
         .from('freights')
@@ -63,19 +133,60 @@ class FreightsRepo {
     required String stage,
     required Map<String, dynamic> data,
   }) async {
+    if (stage == 'delivered_stop') {
+      final stopIndex = data['stop_index'];
+      if (stopIndex is! int) {
+        throw const FormatException('A delivery stop is required');
+      }
+      final result = await supabase.rpc(
+        'save_delivered_stop',
+        params: {
+          'p_freight_id': freightId,
+          'p_stop_index': stopIndex,
+          'p_data': data,
+        },
+      );
+      if (result is Map && result['newly_completed'] == true) {
+        final freight =
+            await supabase
+                .from('freights')
+                .select(
+                  'dispatched_at, origin, destination_town, winner_profile_id',
+                )
+                .eq('id', freightId)
+                .single();
+        await _createLatePodAlertIfNeeded(
+          freightId: freightId,
+          freight: freight,
+          submittedAt: DateTime.now(),
+          podPhotoPath:
+              result['all_pods_received'] == true
+                  ? (data['pod_photo_path'] ?? '').toString()
+                  : null,
+        );
+      }
+      return;
+    }
     final submittedAt = DateTime.now();
     final current =
         await supabase
             .from('freights')
             .select(
-              'delivery_stages, status, dispatched_at, origin, destination_town, winner_profile_id',
+              'delivery_stages, status, dispatched_at, origin, destination_town, winner_profile_id, stop_details, stops',
             )
             .eq('id', freightId)
             .single();
+    if (stage == 'delivered' && _hasMultipleDeliveryStops(current)) {
+      throw StateError('Record each delivery stop separately');
+    }
     final existing = Map<String, dynamic>.from(
       current['delivery_stages'] as Map? ?? {},
     );
-    existing[stage] = {...data, 'submitted_at': submittedAt.toIso8601String()};
+    existing[stage] = mergeTransporterDeliveryStage(
+      existing[stage] is Map ? Map<String, dynamic>.from(existing[stage]) : {},
+      data,
+      submittedAt,
+    );
     if (stage == 'dispatched') {
       existing.remove('vehicle_confirmation');
     }
@@ -99,7 +210,10 @@ class FreightsRepo {
       if (podPath.isNotEmpty) {
         update['ack_status'] = 'received';
         update['ack_received_at'] = submittedAt.toIso8601String();
-        update['pod_received_date'] = submittedAt.toIso8601String().substring(0, 10);
+        update['pod_received_date'] = submittedAt.toIso8601String().substring(
+          0,
+          10,
+        );
         update['pod_file_path'] = podPath;
         update['pod_received_by'] = supabase.auth.currentUser?.id;
       }
@@ -125,10 +239,13 @@ class FreightsRepo {
         await supabase
             .from('freights')
             .select(
-              'delivery_stages, dispatched_at, origin, destination_town, winner_profile_id',
+              'delivery_stages, dispatched_at, origin, destination_town, winner_profile_id, stop_details, stops',
             )
             .eq('id', freightId)
             .single();
+    if (stage == 'delivered' && _hasMultipleDeliveryStops(current)) {
+      throw StateError('Record each delivery stop separately');
+    }
     final existing = Map<String, dynamic>.from(
       current['delivery_stages'] as Map? ?? {},
     );
@@ -146,7 +263,10 @@ class FreightsRepo {
       if (podPath.isNotEmpty) {
         update['ack_status'] = 'received';
         update['ack_received_at'] = submittedAt.toIso8601String();
-        update['pod_received_date'] = submittedAt.toIso8601String().substring(0, 10);
+        update['pod_received_date'] = submittedAt.toIso8601String().substring(
+          0,
+          10,
+        );
         update['pod_file_path'] = podPath;
         update['pod_received_by'] = supabase.auth.currentUser?.id;
       }
@@ -275,25 +395,61 @@ class FreightsRepo {
         .maybeSingle();
   }
 
+  /// Returns every freight for which this transporter has a bid, including
+  /// awarded, lost, expired, locked, and completed history.  The open-bid
+  /// stream intentionally stays small for the bidding surface; this query is
+  /// used by the history section so a transporter can revisit a closed bid.
+  Future<List<Map<String, dynamic>>> fetchMyBidHistory(
+    String transporterId,
+  ) async {
+    final bidRows = await supabase
+        .from('bids')
+        .select('freight_id, amount, state, created_at, updated_at')
+        .eq('transporter_id', transporterId)
+        .order('updated_at', ascending: false);
+    final bids = (bidRows as List).cast<Map<String, dynamic>>();
+    final ids =
+        bids
+            .map((row) => row['freight_id']?.toString())
+            .whereType<String>()
+            .where((id) => id.isNotEmpty)
+            .toSet()
+            .toList();
+    if (ids.isEmpty) return const [];
+    final freightRows = await supabase
+        .from('freights')
+        .select()
+        .inFilter('id', ids)
+        .order('created_at', ascending: false);
+    final byFreight = <String, Map<String, dynamic>>{
+      for (final row in (freightRows as List).cast<Map<String, dynamic>>())
+        row['id'].toString(): row,
+    };
+    final result = <Map<String, dynamic>>[];
+    for (final bid in bids) {
+      final id = bid['freight_id']?.toString();
+      final freight = id == null ? null : byFreight[id];
+      if (freight == null) continue;
+      result.add({
+        ...freight,
+        'my_bid_amount': bid['amount'],
+        'my_bid_state': bid['state'],
+      });
+    }
+    return result;
+  }
+
   Future<void> awardWinner({
     required String freightId,
     required String winnerProfileId,
   }) async {
-    await supabase
-        .from('freights')
-        .update({'winner_profile_id': winnerProfileId, 'status': 'awarded'})
-        .eq('id', freightId);
-
-    // mark bids as won/lost
-    await supabase
-        .from('bids')
-        .update({'state': 'lost'})
-        .eq('freight_id', freightId);
-    await supabase
-        .from('bids')
-        .update({'state': 'won'})
-        .eq('freight_id', freightId)
-        .eq('transporter_id', winnerProfileId);
+    // Awarding changes the freight winner and every bid state together.  Keep
+    // this behind the narrow RPC so a failed award cannot leave a freight
+    // looking awarded while its bids are still active (or vice versa).
+    await supabase.rpc(
+      'award_freight',
+      params: {'p_freight_id': freightId, 'p_transporter_id': winnerProfileId},
+    );
 
     await _createFaultAlertForMissingVehicleDocs(
       freightId: freightId,
@@ -303,67 +459,58 @@ class FreightsRepo {
 
   Future<void> linkInvoiceAndLock({
     required String freightId,
-    required String invoiceNumber,
-    required String grNumber,
-    required String eWayBillNumber,
-    required double? toll,
-    required double? club,
-    required double? dalla,
-    required double? other,
+    required List<Map<String, dynamic>> invoices,
+    required List<Map<String, dynamic>> charges,
   }) async {
     final freight =
         await supabase
             .from('freights')
-            .select('winner_profile_id, delivery_stages')
+            .select('delivery_stages')
             .eq('id', freightId)
             .single();
-    final invoice =
-        await supabase
-            .from('invoices')
-            .insert({
-              'freight_id': freightId,
-              'invoice_number': invoiceNumber,
-              'gr_number': grNumber,
-              'e_way_bill_number': eWayBillNumber,
-              'transporter_id': freight['winner_profile_id'],
-              'validated': true,
-            })
-            .select('id')
-            .single();
-    final charges = [
-      ('toll', toll),
-      ('club', club),
-      ('dalla', dalla),
-      ('other', other),
-    ];
-    final inserts =
-        charges
-            .where((c) => (c.$2 ?? 0) > 0)
-            .map(
-              (c) => {
-                'freight_id': freightId,
-                'kind': c.$1,
-                'amount': c.$2,
-                'approved': false,
-              },
-            )
-            .toList();
-    if (inserts.isNotEmpty) {
-      await supabase.from('freight_charges').insert(inserts);
+    if (invoices.isEmpty) {
+      throw ArgumentError.value(
+        invoices,
+        'invoices',
+        'At least one invoice is required',
+      );
     }
-    await supabase
-        .from('freights')
-        .update({
-          'status': 'locked',
-          'locked_at': DateTime.now().toIso8601String(),
-        })
-        .eq('id', freightId);
+    // The RPC owns freight/transporter linkage and invoice validation. Keep
+    // the client payload to the documented invoice JSON contract so server
+    // changes cannot accidentally persist transport-only fields from here.
+    final normalizedInvoices = [
+      for (final invoice in invoices) {...invoice},
+    ];
+    final normalizedCharges = <Map<String, dynamic>>[];
+    for (final charge in charges) {
+      final rawAmount = charge['amount'];
+      final amount =
+          rawAmount is num
+              ? rawAmount.toDouble()
+              : double.tryParse(rawAmount?.toString() ?? '');
+      if (amount == null || amount <= 0) continue;
+      final normalizedCharge = <String, dynamic>{
+        'kind': canonicalChargeKind((charge['kind'] ?? 'other').toString()),
+        'amount': amount,
+        'remarks': charge['remarks'],
+      };
+      if (charge['invoice_index'] != null) {
+        normalizedCharge['invoice_index'] = charge['invoice_index'];
+      }
+      normalizedCharges.add(normalizedCharge);
+    }
+    await supabase.rpc(
+      'lock_freight_invoices',
+      params: {
+        'p_freight_id': freightId,
+        'p_invoices': normalizedInvoices,
+        'p_charges': normalizedCharges,
+      },
+    );
 
     await _createInvoiceMismatchAlerts(
       freightId: freightId,
-      invoiceId: invoice['id'] as String?,
-      invoiceGrNumber: grNumber,
-      invoiceEWayBillNumber: eWayBillNumber,
+      invoices: normalizedInvoices,
       deliveryStages: Map<String, dynamic>.from(
         freight['delivery_stages'] as Map? ?? const {},
       ),
@@ -417,9 +564,7 @@ class FreightsRepo {
 
   Future<void> _createInvoiceMismatchAlerts({
     required String freightId,
-    required String? invoiceId,
-    required String invoiceGrNumber,
-    required String invoiceEWayBillNumber,
+    required List<Map<String, dynamic>> invoices,
     required Map<String, dynamic> deliveryStages,
   }) async {
     final inTransit = Map<String, dynamic>.from(
@@ -429,65 +574,50 @@ class FreightsRepo {
       deliveryStages['delivered'] as Map? ?? const {},
     );
 
-    final stageGr =
-        (inTransit['gr_bilty_number'] ?? delivered['gr_number'] ?? '')
-            .toString()
-            .trim();
-    final stageEWay =
-        (inTransit['e_way_bill_number'] ?? delivered['e_way_bill_number'] ?? '')
-            .toString()
-            .trim();
-
-    final alerts = <Map<String, dynamic>>[];
-    if (stageGr.isEmpty) {
-      alerts.add({
-        'category': 'missing_verification',
-        'severity': 'high',
-        'title': 'GR/Bilty missing in transit trail',
-        'message':
-            'Invoice verification was submitted before the transporter shared a GR/Bilty number in transit updates.',
-      });
-    } else if (stageGr != invoiceGrNumber.trim()) {
-      alerts.add({
-        'category': 'mismatch',
-        'severity': 'high',
-        'title': 'GR/Bilty mismatch detected',
-        'message':
-            'Transit GR/Bilty "$stageGr" does not match invoice GR/Bilty "${invoiceGrNumber.trim()}".',
-      });
+    final stops = deliveryStages['delivered_stops'] as List? ?? const [];
+    final expectedGr = <String>{};
+    final expectedEway = <String>{};
+    for (final invoice in invoices) {
+      expectedGr.addAll(
+        _documentValues(invoice, 'gr_bilty_numbers', 'gr_number'),
+      );
+      expectedEway.addAll(
+        _documentValues(invoice, 'e_way_bill_numbers', 'e_way_bill_number'),
+      );
     }
-
-    if (stageEWay.isEmpty) {
-      alerts.add({
-        'category': 'missing_verification',
-        'severity': 'high',
-        'title': 'E-way bill missing in transit trail',
-        'message':
-            'Invoice verification was submitted before the transporter shared an e-way bill number in transit updates.',
-      });
-    } else if (stageEWay != invoiceEWayBillNumber.trim()) {
-      alerts.add({
-        'category': 'mismatch',
-        'severity': 'high',
-        'title': 'E-way bill mismatch detected',
-        'message':
-            'Transit e-way bill "$stageEWay" does not match invoice e-way bill "${invoiceEWayBillNumber.trim()}".',
-      });
+    final observedGr = <String>{
+      ..._documentValues(inTransit, 'gr_numbers', 'gr_bilty_number'),
+      ..._documentValues(delivered, 'gr_numbers', 'gr_number'),
+    };
+    final observedEway = <String>{
+      ..._documentValues(inTransit, 'e_way_bill_numbers', 'e_way_bill_number'),
+      ..._documentValues(delivered, 'e_way_bill_numbers', 'e_way_bill_number'),
+    };
+    for (final stop in stops) {
+      if (stop is! Map) continue;
+      observedGr.addAll(_documentValues(stop, 'gr_numbers', 'gr_number'));
+      observedEway.addAll(
+        _documentValues(stop, 'e_way_bill_numbers', 'e_way_bill_number'),
+      );
     }
-
-    for (final alert in alerts) {
+    for (final (kind, expected, observed) in [
+      ('GR/Bilty', expectedGr, observedGr),
+      ('E-way bill', expectedEway, observedEway),
+    ]) {
+      final absent = expected.difference(observed);
+      if (absent.isEmpty) continue;
       await _createAlertSafe(
         freightId: freightId,
-        invoiceId: invoiceId,
-        category: alert['category'] as String,
-        severity: alert['severity'] as String,
-        title: alert['title'] as String,
-        message: alert['message'] as String,
+        category: observed.isEmpty ? 'missing_verification' : 'mismatch',
+        severity: 'high',
+        title: '$kind references need verification',
+        message:
+            'Office $kind numbers absent from the transporter trail: ${absent.join(', ')}.',
         metadata: {
-          'invoice_gr_number': invoiceGrNumber.trim(),
-          'invoice_e_way_bill_number': invoiceEWayBillNumber.trim(),
-          'transit_gr_bilty_number': stageGr,
-          'transit_e_way_bill_number': stageEWay,
+          'document_kind': kind,
+          'office_numbers': expected.toList(),
+          'transporter_numbers': observed.toList(),
+          'unmatched_numbers': absent.toList(),
         },
       );
     }
@@ -577,6 +707,25 @@ int _calendarDayDifference(DateTime from, DateTime to) {
   final start = DateTime(from.year, from.month, from.day);
   final end = DateTime(to.year, to.month, to.day);
   return end.difference(start).inDays;
+}
+
+bool _hasMultipleDeliveryStops(Map<String, dynamic> freight) {
+  final details = freight['stop_details'];
+  if (details is List && details.length > 1) return true;
+  final stops = freight['stops'];
+  return stops is List && stops.isNotEmpty;
+}
+
+Set<String> _documentValues(Map document, String listKey, String scalarKey) {
+  final list = document[listKey];
+  if (list is List && list.isNotEmpty) {
+    return list
+        .map((value) => value.toString().trim().toUpperCase())
+        .where((value) => value.isNotEmpty)
+        .toSet();
+  }
+  final scalar = (document[scalarKey] ?? '').toString().trim().toUpperCase();
+  return scalar.isEmpty ? <String>{} : <String>{scalar};
 }
 
 List<Map<String, dynamic>> _onlyOpenBids(List<Map<String, dynamic>> rows) {

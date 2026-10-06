@@ -1,0 +1,23 @@
+- document:
+  - img "Kaysons logo"
+  - text: एडमिन पैनल KAYSONS उपयोगकर्ताओं और माल ढुलाई की गतिविधि पर नज़र रखें।
+  - group:
+    - button "डैशबोर्ड" [ref=e1]
+    - button "उपयोगकर्ता" [ref=e2]
+    - button "बोलियाँ" [ref=e3]
+    - button "खाता बही" [ref=e4]
+    - button "Clawd" [ref=e5]
+  - button "प्रोफ़ाइल प्रोफ़ाइल" [ref=e6]
+  - group "उपयोगकर्ता प्रबंधन":
+    - button [ref=e7]
+    - tablist:
+      - tab "उपयोगकर्ता (13)" [ref=e8]
+      - tab "लंबित (1)" [ref=e9] [selected]
+    - tabpanel:
+      - group:
+        - group "पहुँच निर्धारित भूमिका और मंज़ूरी की स्थिति के अनुसार मिलती है।":
+          - button "नाम उपलब्ध नहीं ट्रांसपोर्टर" [ref=e10]
+          - button "भूमिका ट्रांसपोर्टर" [ref=e11]
+          - button "मंज़ूर करें" [ref=e12]
+          - button "अस्वीकार करें" [ref=e13]
+          - button "हटाएँ" [ref=e14]

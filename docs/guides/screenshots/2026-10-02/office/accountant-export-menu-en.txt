@@ -1,0 +1,10 @@
+- document:
+  - group "Dismiss menu":
+    - menu:
+      - group:
+        - menuitem "Transporter monthly CSV" [ref=e1]
+        - menuitem "Place-wise CSV" [ref=e2]
+        - menuitem "Invoice-wise CSV" [ref=e3]
+        - menuitem "POD pending CSV" [ref=e4]
+        - menuitem "Vehicle tonnage CSV" [ref=e5]
+        - menuitem "Route-wise CSV" [ref=e6]

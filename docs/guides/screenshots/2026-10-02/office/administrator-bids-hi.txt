@@ -1,0 +1,20 @@
+- document:
+  - img "Kaysons logo"
+  - text: एडमिन पैनल KAYSONS उपयोगकर्ताओं और माल ढुलाई की गतिविधि पर नज़र रखें।
+  - group:
+    - button "डैशबोर्ड" [ref=e1]
+    - button "उपयोगकर्ता" [ref=e2]
+    - button "बोलियाँ" [ref=e3]
+    - button "खाता बही" [ref=e4]
+    - button "Clawd" [ref=e5]
+  - button "प्रोफ़ाइल प्रोफ़ाइल" [ref=e6]
+  - group "सभी बोलियाँ":
+    - button "7 दिन" [ref=e7]
+    - button "15 दिन" [ref=e8]
+    - button "30 दिन" [ref=e9]
+    - button "90 दिन" [ref=e10]
+    - button "अपनी तारीखें चुनें" [ref=e11]
+    - group:
+      - 'button "26 Sep 2026 Agartala → Agartala 23 केस · 43 MT स्थिति: पूरा हुआ"'
+      - 'button "26 Sep 2026 Agartala → Adilabad 23 केस · 45 MT स्थिति: बंद"'
+      - 'button "26 Sep 2026 Adilabad → Delhi 35 केस · 79 MT स्थिति: बंद"'

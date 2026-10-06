@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../l10n/app_localizations.dart';
+import '../theme/app_theme.dart';
 
 class PillTextField extends StatefulWidget {
   const PillTextField({
@@ -10,6 +12,10 @@ class PillTextField extends StatefulWidget {
     this.textAlign = TextAlign.start,
     this.maxLength,
     this.maxWidth = 520,
+    this.prefixIcon,
+    this.enabled = true,
+    this.autofillHints,
+    this.onSubmitted,
   });
 
   final TextEditingController controller;
@@ -19,6 +25,10 @@ class PillTextField extends StatefulWidget {
   final TextAlign textAlign;
   final int? maxLength;
   final double? maxWidth;
+  final IconData? prefixIcon;
+  final bool enabled;
+  final Iterable<String>? autofillHints;
+  final ValueChanged<String>? onSubmitted;
 
   @override
   State<PillTextField> createState() => _PillTextFieldState();
@@ -35,22 +45,26 @@ class _PillTextFieldState extends State<PillTextField> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return Align(
       alignment: Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: widget.maxWidth ?? double.infinity,
         ),
-        child: SizedBox(
-          height: 56,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 54),
           child: TextField(
             controller: widget.controller,
+            enabled: widget.enabled,
+            autofillHints: widget.autofillHints,
+            onSubmitted: widget.onSubmitted,
             keyboardType: widget.keyboardType,
             obscureText: _obscure,
             textAlign: widget.textAlign,
             maxLength: widget.maxLength,
             textAlignVertical: TextAlignVertical.center,
-            style: const TextStyle(fontSize: 17, height: 1.25),
+            style: const TextStyle(fontSize: 16, height: 1.25),
             decoration: InputDecoration(
               isDense: true,
               filled: true,
@@ -58,9 +72,17 @@ class _PillTextFieldState extends State<PillTextField> {
               counterText: '',
               hintText: widget.hint,
               hintStyle: const TextStyle(
-                color: Color(0xFF6B6176),
-                fontSize: 16,
+                color: AppColors.onSurfaceVariant,
+                fontSize: 15,
               ),
+              prefixIcon:
+                  widget.prefixIcon == null
+                      ? null
+                      : Icon(
+                        widget.prefixIcon,
+                        size: 19,
+                        color: AppColors.onSurfaceVariant,
+                      ),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 16,
                 vertical: 14,
@@ -76,26 +98,26 @@ class _PillTextFieldState extends State<PillTextField> {
                           size: 19,
                           color: const Color(0xFF625B71),
                         ),
-                        tooltip: _obscure ? 'Show password' : 'Hide password',
+                        tooltip: _obscure ? l.showPassword : l.hidePassword,
                       )
                       : null,
               enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFD9D2E2)),
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.outline),
               ),
               focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(
-                  color: Color(0xFF1D1B20),
-                  width: 1.4,
+                  color: AppColors.accent,
+                  width: 1.6,
                 ),
               ),
               errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(color: Color(0xFFB3261E)),
               ),
               focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(
                   color: Color(0xFFB3261E),
                   width: 1.4,

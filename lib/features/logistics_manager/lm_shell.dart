@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../l10n/app_localizations.dart';
 
 import '../../core/supabase/auth_service.dart';
 import '../../core/widgets/compact_mobile_navigation.dart';
-import '../../core/widgets/mobile_desktop_feature.dart';
 import '../../core/widgets/responsive_tabbed_shell.dart';
 import '../../core/widgets/shell_settings_button.dart';
 import '../admin/admin_ledger_body.dart';
@@ -47,10 +47,11 @@ class _LogisticsShellState extends State<LogisticsShell> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return ResponsiveTabbedShell(
-      title: 'Logistics manager',
-      subtitle:
-          'Publish freights, monitor open bids, and track live deliveries in a single web workspace.',
+      role: AppRole.logisticsManager,
+      title: l.logisticsManager,
+      subtitle: l.logisticsSubtitle,
       icon: Icons.work_outline,
       currentIndex: _index,
       onDestinationSelected: _goto,
@@ -74,17 +75,7 @@ class _LogisticsShellState extends State<LogisticsShell> {
           LmDashboardBody(),
           LmBidsBody(),
           LmFleetBody(),
-          MobileDesktopFeature(
-            icon: Icons.receipt_long_outlined,
-            title: 'Detailed ledger is on the web',
-            description:
-                'On mobile, stay focused on publishing loads, awarding bids, and tracking deliveries.',
-            desktopFeatures: [
-              'Invoice and POD reconciliation',
-              'Multi-field filters and bulk ledger entry',
-              'Monthly, route, and transporter reports',
-            ],
-          ),
+          AdminLedgerBody(),
           LmDispatchTeamBody(),
         ],
       ),
@@ -99,31 +90,31 @@ class _LogisticsShellState extends State<LogisticsShell> {
         currentIndex: _index,
         onSelect: _goto,
         primaryIndices: const [0, 1, 2],
-        destinations: const [
+        destinations: [
           CompactMobileDestination(
             icon: Icons.dashboard_outlined,
             selectedIcon: Icons.dashboard,
-            label: 'Home',
+            label: l.home,
           ),
           CompactMobileDestination(
             icon: Icons.gavel_outlined,
             selectedIcon: Icons.gavel,
-            label: 'Bids',
+            label: l.bids,
           ),
           CompactMobileDestination(
             icon: Icons.local_shipping_outlined,
             selectedIcon: Icons.local_shipping,
-            label: 'Fleet',
+            label: l.fleet,
           ),
           CompactMobileDestination(
             icon: Icons.receipt_long_outlined,
             selectedIcon: Icons.receipt_long,
-            label: 'Ledger',
+            label: l.ledger,
           ),
           CompactMobileDestination(
             icon: Icons.assignment_ind_outlined,
             selectedIcon: Icons.assignment_ind,
-            label: 'Dispatch',
+            label: l.dispatch,
           ),
         ],
         onProfile: () => context.push('/lm/profile'),
@@ -132,31 +123,31 @@ class _LogisticsShellState extends State<LogisticsShell> {
           if (context.mounted) context.go('/welcome');
         },
       ),
-      destinations: const [
+      destinations: [
         NavigationRailDestination(
           icon: Icon(Icons.dashboard_outlined),
           selectedIcon: Icon(Icons.dashboard),
-          label: Text('Dashboard'),
+          label: Text(l.dashboard),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.gavel_outlined),
           selectedIcon: Icon(Icons.gavel),
-          label: Text('Bids'),
+          label: Text(l.bids),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.local_shipping_outlined),
           selectedIcon: Icon(Icons.local_shipping),
-          label: Text('Fleet'),
+          label: Text(l.fleet),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.receipt_long_outlined),
           selectedIcon: Icon(Icons.receipt_long),
-          label: Text('Ledger'),
+          label: Text(l.ledger),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.assignment_ind_outlined),
           selectedIcon: Icon(Icons.assignment_ind),
-          label: Text('Dispatch'),
+          label: Text(l.dispatch),
         ),
       ],
     );

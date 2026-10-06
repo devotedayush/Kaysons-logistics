@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../l10n/app_localizations.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:go_router/go_router.dart';
 
@@ -37,7 +38,7 @@ class _RegisterBankScreenState extends State<RegisterBankScreen> {
     if (bytes == null || bytes.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not read selected image')),
+        SnackBar(content: Text(AppLocalizations.of(context)!.imageReadFailed)),
       );
       return;
     }
@@ -50,17 +51,18 @@ class _RegisterBankScreenState extends State<RegisterBankScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return RegistrationShell(
       step: 4,
-      title: 'What is your bank name?',
-      subtitle: 'This is used to build your profile on our platform',
+      title: l.registerBankTitle,
+      subtitle: l.registerProfileSubtitle,
       fields: [
         LabeledField(
-          label: 'Full Name on Bank Account',
+          label: l.accountHolderName,
           child: PillTextField(controller: _holder, hint: 'Naveen Garg'),
         ),
         LabeledField(
-          label: 'Bank Account Number',
+          label: l.bankAccountNumber,
           child: PillTextField(
             controller: _account,
             hint: '135469464313464',
@@ -68,14 +70,14 @@ class _RegisterBankScreenState extends State<RegisterBankScreen> {
           ),
         ),
         LabeledField(
-          label: 'Photo Upload',
+          label: l.photoUpload,
           child: _UploadChip(
             selectedName: _selectedChequeName,
             onTap: _pickChequePhoto,
           ),
         ),
       ],
-      ctaLabel: 'Next',
+      ctaLabel: l.next,
       onNext: () {
         RegistrationDraft.instance.bankHolder = _holder.text.trim();
         RegistrationDraft.instance.bankAccountNumber = _account.text.trim();
@@ -92,6 +94,7 @@ class _UploadChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(28),
@@ -118,9 +121,7 @@ class _UploadChip extends StatelessWidget {
             const SizedBox(width: 8),
             Flexible(
               child: Text(
-                selectedName == null
-                    ? 'Upload a Photo of Blank Cheque'
-                    : 'Selected - tap to replace',
+                selectedName == null ? l.uploadBlankCheque : l.selectedReplace,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(

@@ -1,3 +1,5 @@
+import '../../core/widgets/workspace_widgets.dart';
+import 'widgets/transporter_workspace.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -5,6 +7,7 @@ import '../../core/supabase/auth_service.dart';
 import '../../core/supabase/supabase_bootstrap.dart';
 import '../../core/widgets/pill_text_field.dart';
 import '../../core/widgets/primary_button.dart';
+import '../../l10n/app_localizations.dart';
 
 const _surface = Color(0xFFF8F5FB);
 const _onSurface = Color(0xFF1D1B20);
@@ -12,7 +15,8 @@ const _onSurfaceVariant = Color(0xFF49454F);
 const _outline = Color(0xFFCAC4D0);
 
 class VehiclesScreen extends StatefulWidget {
-  const VehiclesScreen({super.key});
+  const VehiclesScreen({super.key, this.loadData});
+  final Future<List<Map<String, dynamic>>> Function()? loadData;
 
   @override
   State<VehiclesScreen> createState() => _VehiclesScreenState();
@@ -21,6 +25,8 @@ class VehiclesScreen extends StatefulWidget {
 class _VehiclesScreenState extends State<VehiclesScreen> {
   List<Map<String, dynamic>> _vehicles = [];
   bool _loading = true;
+  String _query = '';
+  bool _failed = false;
 
   @override
   void initState() {
@@ -29,12 +35,39 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
   }
 
   Future<void> _load() async {
+    if (widget.loadData != null) {
+      setState(() {
+        _loading = true;
+        _failed = false;
+      });
+      try {
+        final rows = await widget.loadData!();
+        if (mounted) {
+          setState(() {
+            _vehicles = rows;
+            _loading = false;
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _failed = true;
+          });
+        }
+      }
+      return;
+    }
+
     final uid = AuthService.instance.user?.id;
     if (uid == null) {
       if (mounted) setState(() => _loading = false);
       return;
     }
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
     try {
       final rows = await supabase
           .from('vehicles')
@@ -50,29 +83,41 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _loading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not load vehicles: $e')));
+      setState(() {
+        _loading = false;
+        _failed = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.tpCouldNotLoadVehicles('$e'),
+          ),
+        ),
+      );
     }
   }
 
   Future<void> _deleteVehicle(Map<String, dynamic> vehicle) async {
-    final label = (vehicle['registration_number'] ?? 'this vehicle').toString();
+    final label =
+        (vehicle['registration_number'] ??
+                AppLocalizations.of(context)!.tpThisVehicle)
+            .toString();
     final confirmed = await showDialog<bool>(
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text('Delete vehicle?'),
-            content: Text('$label will be removed from your fleet records.'),
+            title: Text(AppLocalizations.of(context)!.tpDeleteVehicleQuestion),
+            content: Text(
+              AppLocalizations.of(context)!.tpVehicleWillBeRemoved(label),
+            ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
+                child: Text(AppLocalizations.of(context)!.tpCancel),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Delete'),
+                child: Text(AppLocalizations.of(context)!.tpDelete),
               ),
             ],
           ),
@@ -82,14 +127,16 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
       await supabase.from('vehicles').delete().eq('id', vehicle['id']);
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Vehicle deleted')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.tpVehicleDeleted)),
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.tpDeleteFailed('$e')),
+        ),
+      );
     }
   }
 
@@ -108,70 +155,130 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final visible =
+        _vehicles
+            .where(
+              (row) =>
+                  '${row['registration_number'] ?? ''} ${row['vehicle_type'] ?? ''}'
+                      .toLowerCase()
+                      .contains(_query.toLowerCase()),
+            )
+            .toList();
     return Scaffold(
       backgroundColor: _surface,
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 16, 6),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () => context.pop(),
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => context.pop(),
+                  icon: const Icon(Icons.arrow_back),
+                  label: Text(tpText(context, 'Back', 'वापस')),
+                ),
+              ),
+              WorkspaceHeader(
+                title: l.tpVehicles,
+                description: tpText(
+                  context,
+                  'Keep your vehicles ready. Add or update details before assigning a trip.',
+                  'अपने वाहन तैयार रखें। यात्रा से पहले जानकारी जोड़ें या बदलें।',
+                ),
+                icon: Icons.local_shipping_outlined,
+                action: FilledButton.icon(
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 50)),
+                  onPressed: () => _openVehicleSheet(),
+                  icon: const Icon(Icons.add),
+                  label: Text(l.tpAddVehicle),
+                ),
+              ),
+              const SizedBox(height: 20),
+              TransporterSearch(
+                label: tpText(
+                  context,
+                  'Search vehicle number or type',
+                  'वाहन नंबर या प्रकार से खोजें',
+                ),
+                onChanged: (v) => setState(() => _query = v),
+              ),
+              const SizedBox(height: 20),
+              if (_loading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(36),
+                    child: CircularProgressIndicator(),
                   ),
-                  const Expanded(
+                )
+              else if (_failed)
+                WorkspaceEmptyState(
+                  title: tpText(
+                    context,
+                    'Could not load vehicles',
+                    'जानकारी लोड नहीं हुई',
+                  ),
+                  message: tpText(
+                    context,
+                    'Check your connection and try again.',
+                    'इंटरनेट जाँचकर फिर प्रयास करें।',
+                  ),
+                  icon: Icons.wifi_off,
+                  action: FilledButton(
+                    onPressed: _load,
                     child: Text(
-                      'Vehicles',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w500,
-                        color: _onSurface,
-                      ),
+                      tpText(context, 'Try again', 'फिर प्रयास करें'),
                     ),
                   ),
-                  IconButton.filledTonal(
-                    tooltip: 'Add vehicle',
-                    onPressed: () => _openVehicleSheet(),
-                    icon: const Icon(Icons.add),
+                )
+              else if (_vehicles.isEmpty)
+                _EmptyVehicles(onAdd: () => _openVehicleSheet())
+              else if (visible.isEmpty)
+                WorkspaceEmptyState(
+                  title: tpText(
+                    context,
+                    'No matching vehicles',
+                    'कोई मेल नहीं मिला',
                   ),
-                ],
-              ),
-            ),
-            Expanded(
-              child:
-                  _loading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _vehicles.isEmpty
-                      ? _EmptyVehicles(onAdd: () => _openVehicleSheet())
-                      : RefreshIndicator(
-                        onRefresh: _load,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-                          itemCount: _vehicles.length,
-                          separatorBuilder:
-                              (_, __) => const SizedBox(height: 12),
-                          itemBuilder:
-                              (_, i) => _VehicleCard(
-                                vehicle: _vehicles[i],
-                                onEdit: () => _openVehicleSheet(_vehicles[i]),
-                                onDelete: () => _deleteVehicle(_vehicles[i]),
-                              ),
-                        ),
+                  message: tpText(
+                    context,
+                    'Try another name or number in the search above.',
+                    'ऊपर खोज में दूसरा नाम या नंबर भरें।',
+                  ),
+                  icon: Icons.search_off,
+                )
+              else ...[
+                SectionHeading(
+                  title: tpText(
+                    context,
+                    '${visible.length} vehicles',
+                    '${visible.length} वाहन',
+                  ),
+                  description: tpText(
+                    context,
+                    'Choose Edit to update details. Remove is in the more menu.',
+                    'जानकारी बदलने के लिए संपादित करें चुनें। हटाना अधिक मेनू में है।',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TransporterCardGrid(
+                  children: [
+                    for (final row in visible)
+                      _VehicleCard(
+                        vehicle: row,
+                        onEdit: () => _openVehicleSheet(row),
+                        onDelete: () => _deleteVehicle(row),
                       ),
-            ),
-          ],
+                  ],
+                ),
+              ],
+              const SizedBox(height: 32),
+            ],
+          ),
         ),
       ),
-      floatingActionButton:
-          _vehicles.isEmpty
-              ? null
-              : FloatingActionButton.extended(
-                onPressed: () => _openVehicleSheet(),
-                icon: const Icon(Icons.add),
-                label: const Text('Add vehicle'),
-              ),
     );
   }
 }
@@ -195,10 +302,11 @@ class _VehicleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final capacity = [
-      if (_value('capacity_qt').trim() != '-') '${_value('capacity_qt')} Cases',
+      if (_value('capacity_qt').trim() != '-') l.tpCases(_value('capacity_qt')),
       if (_value('capacity_weight_kg').trim() != '-')
-        '${_value('capacity_weight_kg')} Ton',
+        '${_value('capacity_weight_kg')} MT',
     ].join(' · ');
 
     return Container(
@@ -232,7 +340,7 @@ class _VehicleCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _value('registration_number', 'Vehicle number missing'),
+                      _value('registration_number', l.tpVehicleNumberMissing),
                       style: const TextStyle(
                         color: _onSurface,
                         fontSize: 18,
@@ -241,7 +349,7 @@ class _VehicleCard extends StatelessWidget {
                     ),
                     Text(
                       [
-                        _value('vehicle_type', 'Truck'),
+                        _value('vehicle_type', l.tpTruck),
                         if (capacity.isNotEmpty) capacity,
                       ].join(' · '),
                       style: const TextStyle(color: _onSurfaceVariant),
@@ -255,24 +363,39 @@ class _VehicleCard extends StatelessWidget {
                   if (value == 'delete') onDelete();
                 },
                 itemBuilder:
-                    (context) => const [
-                      PopupMenuItem(value: 'edit', child: Text('Edit')),
-                      PopupMenuItem(value: 'delete', child: Text('Delete')),
+                    (context) => [
+                      PopupMenuItem(value: 'edit', child: Text(l.tpEdit)),
+                      PopupMenuItem(value: 'delete', child: Text(l.tpDelete)),
                     ],
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 48),
+            ),
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit_outlined),
+            label: Text(l.tpEditVehicle),
           ),
           const SizedBox(height: 14),
           Wrap(
             spacing: 10,
             runSpacing: 10,
             children: [
-              _DetailChip(label: 'RC', value: _value('rc_number')),
+              _DetailChip(label: l.tpRc, value: _value('rc_number')),
               _DetailChip(
-                label: 'Insurance',
+                label: l.tpInsurance,
                 value: _value('insurance_number'),
               ),
-              _DetailChip(label: 'Status', value: _value('status', 'active')),
+              _DetailChip(
+                label: l.tpStatus,
+                value:
+                    _value('status', 'active') == 'active'
+                        ? l.tpActive
+                        : tpText(context, 'Inactive', 'निष्क्रिय'),
+              ),
             ],
           ),
         ],
@@ -323,6 +446,7 @@ class _EmptyVehicles extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
@@ -335,24 +459,24 @@ class _EmptyVehicles extends StatelessWidget {
               color: Color(0xFF6750A4),
             ),
             const SizedBox(height: 14),
-            const Text(
-              'No vehicles added yet',
-              style: TextStyle(
+            Text(
+              l.tpNoVehicles,
+              style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
                 color: _onSurface,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Add each truck with RC, insurance, and capacity details.',
+            Text(
+              l.tpAddVehiclesHint,
               textAlign: TextAlign.center,
-              style: TextStyle(color: _onSurfaceVariant),
+              style: const TextStyle(color: _onSurfaceVariant),
             ),
             const SizedBox(height: 20),
             SizedBox(
               width: 220,
-              child: PrimaryButton(label: 'Add vehicle', onPressed: onAdd),
+              child: PrimaryButton(label: l.tpAddVehicle, onPressed: onAdd),
             ),
           ],
         ),
@@ -426,9 +550,11 @@ class _VehicleFormSheetState extends State<_VehicleFormSheet> {
     final uid = AuthService.instance.user?.id;
     if (uid == null) return;
     if (_number.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Enter a vehicle number')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.tpEnterVehicleNumber),
+        ),
+      );
       return;
     }
 
@@ -463,9 +589,11 @@ class _VehicleFormSheetState extends State<_VehicleFormSheet> {
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.tpSaveFailed('$e')),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -473,6 +601,7 @@ class _VehicleFormSheetState extends State<_VehicleFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     return SafeArea(
       child: Center(
@@ -490,8 +619,8 @@ class _VehicleFormSheetState extends State<_VehicleFormSheet> {
                       Expanded(
                         child: Text(
                           widget.vehicle == null
-                              ? 'Add vehicle'
-                              : 'Edit vehicle',
+                              ? l.tpAddVehicle
+                              : l.tpEditVehicle,
                           style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w600,
@@ -506,8 +635,21 @@ class _VehicleFormSheetState extends State<_VehicleFormSheet> {
                     ],
                   ),
                   const SizedBox(height: 12),
+                  GuidanceCard(
+                    title: tpText(
+                      context,
+                      'Start with the essential details',
+                      'पहले ज़रूरी जानकारी भरें',
+                    ),
+                    message: tpText(
+                      context,
+                      'Review the details before saving. You can edit them later.',
+                      'सहेजने से पहले जानकारी जाँचें। बाद में इसे बदल सकते हैं।',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   _Field(
-                    label: 'Vehicle number',
+                    label: l.tpVehicleNumber,
                     child: PillTextField(
                       controller: _number,
                       hint: 'PB10AB1234',
@@ -515,59 +657,70 @@ class _VehicleFormSheetState extends State<_VehicleFormSheet> {
                     ),
                   ),
                   _Field(
-                    label: 'Vehicle type',
+                    label: l.tpVehicleType,
                     child: PillTextField(
                       controller: _type,
-                      hint: 'Truck / Trailer',
+                      hint: l.tpTruckTrailer,
                       textAlign: TextAlign.start,
                     ),
                   ),
-                  Row(
+                  TransporterCardGrid(
+                    breakpoint: 560,
                     children: [
-                      Expanded(
-                        child: _Field(
-                          label: 'Capacity Cases',
-                          child: PillTextField(
-                            controller: _capacityQt,
-                            hint: '160',
-                            keyboardType: TextInputType.number,
-                            textAlign: TextAlign.start,
-                          ),
+                      _Field(
+                        label: l.tpCapacityCases,
+                        child: PillTextField(
+                          controller: _capacityQt,
+                          hint: '160',
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.start,
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _Field(
-                          label: 'Metric Ton',
-                          child: PillTextField(
-                            controller: _capacityWeight,
-                            hint: '28',
-                            keyboardType: TextInputType.number,
-                            textAlign: TextAlign.start,
-                          ),
+                      _Field(
+                        label: l.tpMetricMt,
+                        child: PillTextField(
+                          controller: _capacityWeight,
+                          hint: '28',
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.start,
                         ),
                       ),
                     ],
                   ),
-                  _Field(
-                    label: 'RC number',
-                    child: PillTextField(
-                      controller: _rc,
-                      hint: 'RC-2026-4455',
-                      textAlign: TextAlign.start,
-                    ),
-                  ),
-                  _Field(
-                    label: 'Insurance number',
-                    child: PillTextField(
-                      controller: _insurance,
-                      hint: 'INS-2026-44321',
-                      textAlign: TextAlign.start,
+                  Material(
+                    color: Colors.transparent,
+                    child: ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: Text(
+                        tpText(
+                          context,
+                          'Registration & insurance (optional)',
+                          'रजिस्ट्रेशन और बीमा (वैकल्पिक)',
+                        ),
+                      ),
+                      children: [
+                        _Field(
+                          label: l.tpRcNumber,
+                          child: PillTextField(
+                            controller: _rc,
+                            hint: 'RC-2026-4455',
+                            textAlign: TextAlign.start,
+                          ),
+                        ),
+                        _Field(
+                          label: l.tpInsuranceNumber,
+                          child: PillTextField(
+                            controller: _insurance,
+                            hint: 'INS-2026-44321',
+                            textAlign: TextAlign.start,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 10),
                   PrimaryButton(
-                    label: _saving ? 'Saving...' : 'Save vehicle',
+                    label: _saving ? l.tpSaving : l.tpSaveVehicle,
                     onPressed: _saving ? null : _save,
                   ),
                 ],

@@ -34,27 +34,55 @@ class RouteTimeline extends StatelessWidget {
         border: Border.all(color: const Color(0xFFE1DAE8)),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var i = 0; i < visible.length; i++) ...[
-              _RoutePointView(point: visible[i], index: i),
-              if (i != visible.length - 1) const _Connector(),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Narrow forms must show every stop without a hidden sideways scroll.
+          if (constraints.maxWidth < visible.length * 180) {
+            return Column(
+              children: [
+                for (var i = 0; i < visible.length; i++) ...[
+                  _RoutePointView(point: visible[i], index: i, vertical: true),
+                  if (i != visible.length - 1)
+                    Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Icon(
+                          Icons.arrow_downward,
+                          size: 18,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                ],
+              ],
+            );
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (var i = 0; i < visible.length; i++) ...[
+                Expanded(child: _RoutePointView(point: visible[i], index: i)),
+                if (i != visible.length - 1) const _Connector(),
+              ],
             ],
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 }
 
 class _RoutePointView extends StatelessWidget {
-  const _RoutePointView({required this.point, required this.index});
+  const _RoutePointView({
+    required this.point,
+    required this.index,
+    this.vertical = false,
+  });
 
   final RoutePoint point;
   final int index;
+  final bool vertical;
 
   @override
   Widget build(BuildContext context) {
@@ -68,61 +96,63 @@ class _RoutePointView extends StatelessWidget {
       RoutePointKind.stop => Icons.location_on_outlined,
       RoutePointKind.destination => Icons.flag_outlined,
     };
+    final hindi = Localizations.maybeLocaleOf(context)?.languageCode == 'hi';
     final label = switch (point.kind) {
-      RoutePointKind.origin => 'From',
-      RoutePointKind.stop => 'Stop $index',
-      RoutePointKind.destination => 'To',
+      RoutePointKind.origin => hindi ? 'माल उठाने का स्थान' : 'Pickup',
+      RoutePointKind.stop => hindi ? 'पड़ाव $index' : 'Stop $index',
+      RoutePointKind.destination => hindi ? 'अंतिम डिलीवरी' : 'Final delivery',
     };
-
-    return SizedBox(
-      width: 136,
-      child: Column(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              border: Border.all(color: color, width: 2),
-            ),
-            child: Icon(icon, size: 22, color: color),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF49454F),
-            ),
-          ),
+    final marker = Container(
+      width: 42,
+      height: 42,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: color, width: 2),
+      ),
+      child: Icon(icon, size: 22, color: color),
+    );
+    final details = Column(
+      crossAxisAlignment:
+          vertical ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+      children: [
+        Text(
+          label,
+          style: Theme.of(
+            context,
+          ).textTheme.labelLarge?.copyWith(color: const Color(0xFF49454F)),
+          textAlign: vertical ? TextAlign.start : TextAlign.center,
+        ),
+        const SizedBox(height: 3),
+        Text(
+          point.label,
+          textAlign: vertical ? TextAlign.start : TextAlign.center,
+          style: Theme.of(context).textTheme.titleSmall,
+        ),
+        if (point.meta != null && point.meta!.trim().isNotEmpty) ...[
           const SizedBox(height: 3),
           Text(
-            point.label,
-            textAlign: TextAlign.center,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 16,
-              height: 1.15,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF1D1B20),
-            ),
+            point.meta!,
+            textAlign: vertical ? TextAlign.start : TextAlign.center,
+            style: Theme.of(context).textTheme.bodySmall,
           ),
-          if (point.meta != null && point.meta!.trim().isNotEmpty) ...[
-            const SizedBox(height: 3),
-            Text(
-              point.meta!,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, color: Color(0xFF49454F)),
-            ),
-          ],
         ],
-      ),
+      ],
     );
+    if (vertical) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            marker,
+            const SizedBox(width: 14),
+            Expanded(child: details),
+          ],
+        ),
+      );
+    }
+    return Column(children: [marker, const SizedBox(height: 8), details]);
   }
 }
 
@@ -132,7 +162,7 @@ class _Connector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 64,
+      width: 48,
       margin: const EdgeInsets.only(top: 20),
       child: Row(
         children: [

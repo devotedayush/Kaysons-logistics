@@ -1,0 +1,286 @@
+{
+  "capture_date": "2026-10-02",
+  "source": "Actual Flutter role widgets rendered by flutter_test at mobile width; in-memory sample data only. These are not browser screenshots or live-account evidence.",
+  "test_file": "docs/guides/source/2026-10-02/operations_capture_test.dart",
+  "command": "/Users/ayushmansingh/.codex-toolcache/flutter/bin/flutter test docs/guides/source/2026-10-02/operations_capture_test.dart --update-goldens --reporter expanded",
+  "locales": [
+    "en",
+    "hi"
+  ],
+  "sample_data_banner": true,
+  "business_mutations": false,
+  "notes": [
+    "Current application controls and translations are rendered unchanged. Some Hindi screens retain English labels where the application has no Hindi translation.",
+    "Sample routes, people, vehicle numbers, document references, offers and stage records are supplied by MockClient.",
+    "Dialog screenshots include the actual Navigator overlay; no fabricated or retyped interface is used.",
+    "No live account, SMS, vehicle arrival, invoice lock, role assignment, delivery submission or payment was changed."
+  ],
+  "screenshots": [
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/dispatch-deliveries-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "0481b04679563d68014d68bec2d386a093e01cfb2b864fd05ad8fcc32d39f0db"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/dispatch-deliveries-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "0481b04679563d68014d68bec2d386a093e01cfb2b864fd05ad8fcc32d39f0db"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/dispatch-multi-stop-tracking-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 1100,
+      "sha256": "e393fbe49405088827d4ab6e88a7798d85542d6ce8e36138ce041bcd444a184e"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/dispatch-multi-stop-tracking-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 1100,
+      "sha256": "d209caeec9029159d828398ea63db805ca337818ae9e3435be558c7d596b5d25"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/dispatch-stage-delivered-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "e63d1f8928bb92c4f09c97e909bb4fc769d36ac83d038378a9aa8092ae186b0d"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/dispatch-stage-delivered-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "24a62784ed51ccbfd42ffdbccb2bffdc7f6f85933ef5ae69c186bce4398280f9"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/dispatch-today-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "d6070b7374ca39257ff856f375ba32e230d619864dd3fc4934b0d6d8172e9fc6"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/dispatch-today-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "d6070b7374ca39257ff856f375ba32e230d619864dd3fc4934b0d6d8172e9fc6"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/dispatch-tracking-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "25e8446f21992cc155e8892bcf54c96ce67fb56c0fac23bfd9e211eb9ce9516b"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/dispatch-tracking-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "cefe5e98fc306bb0119a599e3d9cea891ffa9c4cae5e3fade03d46697868d4a4"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-bid-audience-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "3f1538dc98e46e6ce72fa5c423d4f5aeba68be629cf9be35bb85a7b902554805"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-bid-audience-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "2eddf5c991a89762b900e41d5d961d1647fcd0c66cc3dedc2216ae4d9fc36abe"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-bid-detail-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "effa322d65d2e92e2b9461a438c25feae1fd7e3cd211c92ccbfb170c6dac0e45"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-bid-detail-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "342e5a594df514b34c88e42abb73f4dd1ff05794cf78ac06542b683018b53405"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-bids-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "89597537b11add28b766b8f18a62e13f4aae316894f49c11c2b466ab958583fd"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-bids-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "99100db28f9501bc3de1e04cf82c120b34ac601900828b512c0773db297efd98"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-dashboard-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "ea6cf3c164a66f285302f4dfde722f4abe1ace3ba646dab7905180540103c88c"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-dashboard-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "9d4fae9d6ac063780009e041bea2aeee54a9b16ed50f4d6e699f70104364fc88"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-dispatch-team-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "6e10245d5a522f0345e9a359d3d5927e22e5b119ac54a33ffeee1cdb5a8318f4"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-dispatch-team-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "305625982920a650f5bc461ab5270ea534ec803f6c3d83f675ab72a4fd1c9601"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-fleet-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "bffe9afb3301e927b857fdcd2012245bcecc132e63c72558a044d600d63bde7a"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-fleet-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "94be7e26e8664cb7301d832d4bfb8371de5eb9073c1191fa04c957084b52ed30"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-invoice-charges-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "b579675c8f19857e8e6dae2e393f1f0d8c0d773a023348370dfd1ddfefc8edde"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-invoice-charges-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "a9c859717ea197b8de3bd382a7e0f3a20ee26b89e07dfef8b594ce43da7877ef"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-invoice-lock-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "1bdb7722e67151e3a16e08368c509d00ce790e4bec696275de957d46329eb3e4"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-invoice-lock-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "aebf03bac7f36c71a35a9e75d12e579bd964c82f320638bbf2c0b2e883941a90"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-ledger-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "97593626bf758f5474a1bd0ac1e6b54588824d8d7e138f087947b6f076c2aba8"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-ledger-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "0bfe3c07dbda55fe8eecaa2e2cc780ca613cf0a7de82fd11bacc6483c65337eb"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-multi-invoice-saved-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "153affbfea3d1029d84fcd70e5f4fc3585ea566b03d283208d55d8d553c04f96"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-multi-invoice-saved-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "23d36b4fc1f4f8c374b3796fc814b75e17d42994267f64431fe11974ef28695e"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-multi-stop-tracking-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 1100,
+      "sha256": "e393fbe49405088827d4ab6e88a7798d85542d6ce8e36138ce041bcd444a184e"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-multi-stop-tracking-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 1100,
+      "sha256": "d209caeec9029159d828398ea63db805ca337818ae9e3435be558c7d596b5d25"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-new-bid-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "1d49eb4b7b916e79aac66672cc23e1ff1d724919a32768307ebee7ece327cd69"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-new-bid-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "29422c2b280001a5e3f17158bc716a0315acde30853467db7bb229e8be464c96"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-stage-delivered-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "f459c7a9740ff04dbd06ec47bad1d91ae0571db631eda57a34b749757a33988a"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-stage-delivered-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "44b91391584eb9287350bbaac2573d685a92de87863ea0c478a546d830d0277d"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-tracking-en.png",
+      "locale": "en",
+      "width": 390,
+      "height": 844,
+      "sha256": "25e8446f21992cc155e8892bcf54c96ce67fb56c0fac23bfd9e211eb9ce9516b"
+    },
+    {
+      "path": "docs/guides/screenshots/2026-10-02/operations/logistics-tracking-hi.png",
+      "locale": "hi",
+      "width": 390,
+      "height": 844,
+      "sha256": "cefe5e98fc306bb0119a599e3d9cea891ffa9c4cae5e3fade03d46697868d4a4"
+    }
+  ]
+}

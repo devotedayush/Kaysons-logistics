@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../l10n/app_language.dart';
+import '../../l10n/app_localizations.dart';
 
 class CompactMobileDestination {
   const CompactMobileDestination({
@@ -33,6 +35,8 @@ class CompactMobileNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final currentLanguage = Localizations.localeOf(context).languageCode;
     final secondaryIndices = [
       for (var index = 0; index < destinations.length; index++)
         if (!primaryIndices.contains(index)) index,
@@ -48,7 +52,10 @@ class CompactMobileNavigation extends StatelessWidget {
         shadowColor: const Color(0x24000000),
         borderRadius: BorderRadius.circular(24),
         child: Container(
-          height: 68,
+          constraints: BoxConstraints(
+            minHeight:
+                80 + (MediaQuery.textScalerOf(context).scale(12) - 12) * 2,
+          ),
           padding: const EdgeInsets.symmetric(horizontal: 6),
           decoration: BoxDecoration(
             border: Border.all(color: const Color(0xFFE9E1F1)),
@@ -66,7 +73,7 @@ class CompactMobileNavigation extends StatelessWidget {
                 ),
               Expanded(
                 child: PopupMenuButton<String>(
-                  tooltip: 'More options',
+                  tooltip: l.moreOptions,
                   onSelected: (value) async {
                     if (value.startsWith('page:')) {
                       onSelect(int.parse(value.substring(5)));
@@ -76,6 +83,8 @@ class CompactMobileNavigation extends StatelessWidget {
                       context.push('/account/privacy');
                     } else if (value == 'logout') {
                       await onLogout();
+                    } else if (value == 'en' || value == 'hi') {
+                      await AppLanguage.instance.select(value);
                     }
                   },
                   itemBuilder:
@@ -90,30 +99,40 @@ class CompactMobileNavigation extends StatelessWidget {
                           ),
                         if (secondaryIndices.isNotEmpty)
                           const PopupMenuDivider(),
-                        const PopupMenuItem(
+                        PopupMenuItem(
                           value: 'profile',
                           child: _MenuRow(
                             icon: Icons.person_outline,
-                            label: 'Profile',
+                            label: l.profile,
                           ),
                         ),
-                        const PopupMenuItem(
+                        PopupMenuItem(
                           value: 'privacy',
                           child: _MenuRow(
                             icon: Icons.privacy_tip_outlined,
-                            label: 'Account & privacy',
+                            label: l.accountPrivacy,
                           ),
                         ),
-                        const PopupMenuItem(
+                        CheckedPopupMenuItem<String>(
+                          value: 'en',
+                          checked: currentLanguage == 'en',
+                          child: Text('${l.language}: ${l.english}'),
+                        ),
+                        CheckedPopupMenuItem<String>(
+                          value: 'hi',
+                          checked: currentLanguage == 'hi',
+                          child: Text('${l.language}: ${l.hindi}'),
+                        ),
+                        PopupMenuItem(
                           value: 'logout',
-                          child: _MenuRow(icon: Icons.logout, label: 'Log out'),
+                          child: _MenuRow(icon: Icons.logout, label: l.logout),
                         ),
                       ],
                   child: _NavigationItem(
-                    destination: const CompactMobileDestination(
+                    destination: CompactMobileDestination(
                       icon: Icons.more_horiz,
                       selectedIcon: Icons.more_horiz,
-                      label: 'More',
+                      label: l.more,
                     ),
                     selected: moreSelected,
                   ),
@@ -158,24 +177,27 @@ class _NavigationItem extends StatelessWidget {
                 height: 30,
                 decoration: BoxDecoration(
                   color:
-                      selected ? const Color(0xFFE8DEF8) : Colors.transparent,
+                      selected ? const Color(0xFF51318A) : Colors.transparent,
                   borderRadius: BorderRadius.circular(100),
                 ),
                 child: Icon(
                   selected ? destination.selectedIcon : destination.icon,
                   size: 22,
-                  color: const Color(0xFF49454F),
+                  color: selected ? Colors.white : const Color(0xFF49454F),
                 ),
               ),
               const SizedBox(height: 2),
               Text(
                 destination.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+                textAlign: TextAlign.center,
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 12,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: const Color(0xFF49454F),
+                  color:
+                      selected
+                          ? const Color(0xFF51318A)
+                          : const Color(0xFF49454F),
                 ),
               ),
             ],

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../core/widgets/workspace_widgets.dart';
+import 'widgets/office_widgets.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/supabase_bootstrap.dart';
 import '../../core/widgets/date_window_bar.dart';
+import '../../l10n/app_localizations.dart';
 
 const _onSurface = Color(0xFF1D1B20);
 const _onSurfaceVariant = Color(0xFF49454F);
@@ -21,7 +24,7 @@ class AnalyticsScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back),
           onPressed: () => context.pop(),
         ),
-        title: const Text('Analytics'),
+        title: Text(AppLocalizations.of(context)!.analytics),
       ),
       body: const AnalyticsBody(),
     );
@@ -115,6 +118,7 @@ class _AnalyticsBodyState extends State<AnalyticsBody> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final rows = _filtered;
     final totalFreight = _sum(rows, 'total_freight');
     final totalCases = _sum(rows, 'cases');
@@ -139,7 +143,7 @@ class _AnalyticsBodyState extends State<AnalyticsBody> {
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Text(
-                      'Error: $_error',
+                      '${l.adminError}: $_error',
                       style: const TextStyle(color: Colors.red),
                     ),
                   ),
@@ -149,23 +153,19 @@ class _AnalyticsBodyState extends State<AnalyticsBody> {
                   child: ListView(
                     padding: const EdgeInsets.all(16),
                     children: [
-                      Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Analytics',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Refresh',
-                            icon: const Icon(Icons.refresh),
-                            onPressed: _loading ? null : _load,
-                          ),
-                        ],
+                      WorkspaceHeader(
+                        title: l.analytics,
+                        description: officeCopy(
+                          context,
+                          'See where freight money goes, which transporters carry your loads and which deliveries are delayed.',
+                          'भाड़े का खर्च, माल ढोने वाले ट्रांसपोर्टर और देर वाली डिलीवरी देखें।',
+                        ),
+                        icon: Icons.insights_outlined,
+                        action: OutlinedButton.icon(
+                          onPressed: _loading ? null : _load,
+                          icon: const Icon(Icons.refresh),
+                          label: Text(l.adminRefresh),
+                        ),
                       ),
                       const SizedBox(height: 8),
                       DateWindowBar(
@@ -192,46 +192,69 @@ class _AnalyticsBodyState extends State<AnalyticsBody> {
                         runSpacing: 8,
                         children: [
                           _StatCard(
-                            label: 'Total freight',
+                            label: l.adminTotalFreight,
                             value: _money(totalFreight),
                           ),
                           _StatCard(
-                            label: 'Cases',
+                            label: l.adminCases,
                             value: totalCases.toStringAsFixed(0),
                           ),
                           _StatCard(
-                            label: 'Metric Ton',
+                            label: l.adminMetricMt,
                             value: totalWeight.toStringAsFixed(2),
                           ),
                           _StatCard(
-                            label: 'PMT',
+                            label: l.adminFreightPerMt,
                             value: _money(pmt),
                             positive: true,
                           ),
                           _StatCard(
-                            label: 'Pending acknowledgements',
+                            label: l.adminPendingAcknowledgements,
                             value: '$pendingAck',
                             warning: pendingAck > 0,
                           ),
                         ],
                       ),
                       const SizedBox(height: 24),
+                      SectionHeading(
+                        title: officeCopy(
+                          context,
+                          'Where the work and cost come from',
+                          'काम और खर्च का विवरण',
+                        ),
+                        description: officeCopy(
+                          context,
+                          'Compare the same date range across each breakdown.',
+                          'हर विवरण में उसी तारीख की अवधि की तुलना करें।',
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      if (rows.isEmpty)
+                        WorkspaceEmptyState(
+                          title: l.adminNoDataRange,
+                          message: officeCopy(
+                            context,
+                            'Choose a wider date range to see your records.',
+                            'रिकॉर्ड देखने के लिए बड़ी तारीख की अवधि चुनें।',
+                          ),
+                          icon: Icons.date_range_outlined,
+                        ),
                       LayoutBuilder(
                         builder: (context, constraints) {
                           final wide = constraints.maxWidth >= 820;
                           final sections = [
                             _SummarySection(
-                              title: 'Transporter business volume',
+                              title: l.adminTransporterVolume,
                               rows: transporters,
                               total: totalFreight,
                             ),
                             _SummarySection(
-                              title: 'Company-wise freight',
+                              title: l.adminCompanyFreight,
                               rows: companies,
                               total: totalFreight,
                             ),
                             _SummarySection(
-                              title: 'Town-wise freight',
+                              title: l.adminTownFreight,
                               rows: towns,
                               total: totalFreight,
                             ),
@@ -298,12 +321,19 @@ class _StatCard extends StatelessWidget {
             ? const Color(0xFF146C2E)
             : _onSurface;
     return ConstrainedBox(
-      constraints: const BoxConstraints(minWidth: 180, maxWidth: 230),
+      constraints: BoxConstraints(
+        minWidth: 140,
+        maxWidth:
+            MediaQuery.sizeOf(context).width < 600
+                ? (MediaQuery.sizeOf(context).width - 40) / 2
+                : 230,
+      ),
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFFECE6F0),
-          borderRadius: BorderRadius.circular(8),
+          color: Colors.white,
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          borderRadius: BorderRadius.circular(18),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -341,24 +371,30 @@ class _SummarySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _SectionTitle(title),
-        if (rows.isEmpty)
-          const Text(
-            'No data in range',
-            style: TextStyle(color: _onSurfaceVariant),
-          )
-        else
-          ...rows.map(
-            (row) => _BarRow(
-              label: row.$1,
-              value: _money(row.$2),
-              percent: total <= 0 ? 0 : row.$2 / total,
-            ),
-          ),
-      ],
+    final l = AppLocalizations.of(context)!;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SectionTitle(title),
+            if (rows.isEmpty)
+              Text(
+                l.adminNoDataRange,
+                style: const TextStyle(color: _onSurfaceVariant),
+              )
+            else
+              ...rows.map(
+                (row) => _BarRow(
+                  label: row.$1,
+                  value: _money(row.$2),
+                  percent: total <= 0 ? 0 : row.$2 / total,
+                ),
+              ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -370,23 +406,24 @@ class _DelaySection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final top = rows.take(5).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _SectionTitle('Delay and acknowledgement alerts'),
+        _SectionTitle(l.adminDelayAlerts),
         if (top.isEmpty)
-          const Text(
-            'No delayed dispatch rows in this window.',
-            style: TextStyle(color: _onSurfaceVariant),
+          Text(
+            l.adminNoDelayedRows,
+            style: const TextStyle(color: _onSurfaceVariant),
           )
         else
           ...top.map(
             (row) => _AlertTile(
               title:
-                  '${_text(row['company_name'])} · ${_text(row['town'])} delayed ${_num(row['delay_days'])?.toStringAsFixed(0) ?? '0'} day(s)',
+                  '${_text(row['company_name'])} · ${_text(row['town'])} ${l.adminDelayed} ${_num(row['delay_days'])?.toStringAsFixed(0) ?? '0'} ${l.adminDays}',
               subtitle:
-                  'Invoice ${_text(row['invoice_number'])}, ack ${_text(row['ack_status'])}',
+                  '${l.adminInvoice} ${_text(row['invoice_number'])}, ${l.adminAck} ${_text(row['ack_status'])}',
             ),
           ),
       ],

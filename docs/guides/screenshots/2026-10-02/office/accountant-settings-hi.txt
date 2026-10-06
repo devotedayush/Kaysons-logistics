@@ -1,0 +1,9 @@
+- document:
+  - group "मेन्यू खारिज करें":
+    - menu:
+      - group:
+        - menuitem "प्रोफ़ाइल" [ref=e1]
+        - menuitem "खाता और गोपनीयता" [ref=e2]
+        - 'menuitemcheckbox "भाषा: English"'
+        - 'menuitemcheckbox "भाषा: हिंदी" [checked]'
+        - menuitem "लॉग आउट करें" [ref=e3]

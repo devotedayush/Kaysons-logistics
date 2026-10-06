@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-02",
+  "method": "Current Flutter widgets rendered with isolated in-memory sample freight streams, no production mutations",
+  "source": "docs/guides/source/2026-10-02/transporter_capture_test.dart",
+  "files": [
+    "transit-hi.png",
+    "transit-en.png",
+    "delivery-en.png",
+    "delivery-hi.png",
+    "multi-stop-documents-hi.png",
+    "multi-stop-documents-en.png",
+    "pickup-hi.png",
+    "pickup-en.png"
+  ],
+  "other_assets": "Existing Android reviewer captures and current transporter widget golden screenshots in docs/guides/screenshots/transporter; original provenance there in manifest.json"
+}

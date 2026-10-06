@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../l10n/app_localizations.dart';
 
 class TransporterBottomNav extends StatelessWidget {
   const TransporterBottomNav({
@@ -16,6 +17,7 @@ class TransporterBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final compact = MediaQuery.sizeOf(context).width < 390;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -29,21 +31,21 @@ class TransporterBottomNav extends StatelessWidget {
         children: [
           _NavItem(
             icon: Icons.dashboard_outlined,
-            label: 'Dashboard',
+            label: l.dashboard,
             selected: currentIndex == 0,
             onTap: () => onTap(0),
             compact: compact,
           ),
           _NavItem(
             icon: Icons.gavel_outlined,
-            label: 'Bids',
+            label: l.bids,
             selected: currentIndex == 1,
             onTap: () => onTap(1),
             compact: compact,
           ),
           _NavItem(
             icon: Icons.local_shipping_outlined,
-            label: 'Fleet',
+            label: l.fleet,
             selected: currentIndex == 2,
             onTap: () => onTap(2),
             compact: compact,
@@ -69,9 +71,10 @@ class _MoreNavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return Expanded(
       child: PopupMenuButton<String>(
-        tooltip: 'Profile and logout',
+        tooltip: l.tpProfileAndLogout,
         onSelected: (value) async {
           if (value == 'profile') onProfile?.call();
           if (value == 'logout') await onLogout?.call();
@@ -79,24 +82,24 @@ class _MoreNavItem extends StatelessWidget {
         itemBuilder:
             (context) => [
               if (onProfile != null)
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'profile',
                   child: Row(
                     children: [
-                      Icon(Icons.person_outline, size: 18),
-                      SizedBox(width: 10),
-                      Text('Profile'),
+                      const Icon(Icons.person_outline, size: 18),
+                      const SizedBox(width: 10),
+                      Text(l.profile),
                     ],
                   ),
                 ),
               if (onLogout != null)
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'logout',
                   child: Row(
                     children: [
-                      Icon(Icons.logout, size: 18),
-                      SizedBox(width: 10),
-                      Text('Logout'),
+                      const Icon(Icons.logout, size: 18),
+                      const SizedBox(width: 10),
+                      Text(l.logout),
                     ],
                   ),
                 ),
@@ -120,7 +123,7 @@ class _MoreNavItem extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'More',
+                l.more,
                 style: TextStyle(
                   fontSize: compact ? 11 : 12,
                   fontWeight: FontWeight.w500,

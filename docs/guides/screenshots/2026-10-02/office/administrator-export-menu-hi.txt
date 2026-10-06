@@ -1,0 +1,10 @@
+- document:
+  - group "मेन्यू खारिज करें":
+    - menu:
+      - group:
+        - menuitem "ट्रांसपोर्टर मासिक CSV" [ref=e1]
+        - menuitem "स्थान अनुसार CSV" [ref=e2]
+        - menuitem "इनवॉइस अनुसार CSV" [ref=e3]
+        - menuitem "लंबित POD CSV" [ref=e4]
+        - menuitem "वाहन टन भार CSV" [ref=e5]
+        - menuitem "मार्ग अनुसार CSV" [ref=e6]

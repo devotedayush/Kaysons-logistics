@@ -1,0 +1,22 @@
+{
+  "source": "Current Kaysons Flutter Android debug build on API 35 emulator, 23 September 2026",
+  "account": "Dedicated Google Play reviewer/demo transporter account",
+  "method": "Native Android captures for reviewer/demo empty states; isolated Flutter widget renders with in-memory sample data for bid and delivery states; no bids, uploads, saves, or business-record changes",
+  "guideSections": {
+    "home": ["home-en.png", "home-hi.png"],
+    "openBidsAndFilters": ["bids-empty-en.png"],
+    "fleetAndWonBids": ["fleet-empty-en.png", "fleet-empty-hi.png"],
+    "vehicles": ["vehicles-empty-en.png", "vehicles-empty-hi.png", "add-vehicle-en.png", "add-vehicle-hi.png"],
+    "drivers": ["drivers-empty-en.png", "add-driver-en.png"],
+    "bidDetail": ["bid-detail-sample-en.png", "bid-detail-sample-hi.png"],
+    "dispatch": ["dispatch-sample-en.png", "dispatch-sample-hi.png"],
+    "delivery": ["delivery-sample-en.png", "delivery-sample-hi.png"],
+    "profile": ["profile-demo-en.png"]
+  },
+  "missingCaptures": {},
+  "notes": [
+    "The profile capture contains only the dedicated reviewer account's sample identity and form data; it contains no password or token.",
+    "Hindi Bids was viewed but omitted from the guide manifest because the shared date filter still renders English labels.",
+    "Bid detail, dispatch, and delivery renders are genuine Flutter widgets with in-memory sample streams, labeled SAMPLE DATA; no live company or freight records are present."
+  ]
+}

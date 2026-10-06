@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../l10n/app_localizations.dart';
 
 import '../../core/supabase/auth_service.dart';
 import '../../core/widgets/compact_mobile_navigation.dart';
-import '../../core/widgets/mobile_desktop_feature.dart';
 import '../../core/widgets/responsive_tabbed_shell.dart';
 import '../../core/widgets/shell_settings_button.dart';
 import 'admin_ai_body.dart';
@@ -48,10 +48,11 @@ class _AccountantShellState extends State<AccountantShell> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return ResponsiveTabbedShell(
-      title: 'Accountant',
-      subtitle:
-          'Manage ledgers, reports, and Clawd analysis without admin controls.',
+      role: AppRole.accountant,
+      title: l.accountant,
+      subtitle: l.accountantSubtitle,
       icon: Icons.calculate_outlined,
       currentIndex: _index,
       onDestinationSelected: _goto,
@@ -65,21 +66,7 @@ class _AccountantShellState extends State<AccountantShell> {
         controller: _pc,
         onPageChanged: (i) => setState(() => _index = i),
         physics: const NeverScrollableScrollPhysics(),
-        children: const [
-          AdminLedgerBody(),
-          AnalyticsBody(),
-          MobileDesktopFeature(
-            icon: Icons.psychology_alt_outlined,
-            title: 'Clawd works best on the web',
-            description:
-                'The mobile accountant view stays focused on ledger checks and quick business metrics.',
-            desktopFeatures: [
-              'Expanded AI analysis and follow-up questions',
-              'Saved report prompts and structured parameters',
-              'Anomaly detection, review, and resolution',
-            ],
-          ),
-        ],
+        children: const [AdminLedgerBody(), AnalyticsBody(), AdminAiBody()],
       ),
       sidebarFooter: ShellSettingsButton(
         onProfile: () => context.push('/acct/profile'),
@@ -92,21 +79,21 @@ class _AccountantShellState extends State<AccountantShell> {
         currentIndex: _index,
         onSelect: _goto,
         primaryIndices: const [0, 1],
-        destinations: const [
+        destinations: [
           CompactMobileDestination(
             icon: Icons.receipt_long_outlined,
             selectedIcon: Icons.receipt_long,
-            label: 'Ledger',
+            label: l.ledger,
           ),
           CompactMobileDestination(
             icon: Icons.analytics_outlined,
             selectedIcon: Icons.analytics,
-            label: 'Insights',
+            label: l.insights,
           ),
           CompactMobileDestination(
             icon: Icons.psychology_alt_outlined,
             selectedIcon: Icons.psychology_alt,
-            label: 'Clawd',
+            label: l.clawd,
           ),
         ],
         onProfile: () => context.push('/acct/profile'),
@@ -115,21 +102,21 @@ class _AccountantShellState extends State<AccountantShell> {
           if (context.mounted) context.go('/welcome');
         },
       ),
-      destinations: const [
+      destinations: [
         NavigationRailDestination(
           icon: Icon(Icons.receipt_long_outlined),
           selectedIcon: Icon(Icons.receipt_long),
-          label: Text('Ledger'),
+          label: Text(l.ledger),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.analytics_outlined),
           selectedIcon: Icon(Icons.analytics),
-          label: Text('Analytics'),
+          label: Text(l.analytics),
         ),
         NavigationRailDestination(
           icon: Icon(Icons.psychology_alt_outlined),
           selectedIcon: Icon(Icons.psychology_alt),
-          label: Text('Clawd'),
+          label: Text(l.clawd),
         ),
       ],
     );

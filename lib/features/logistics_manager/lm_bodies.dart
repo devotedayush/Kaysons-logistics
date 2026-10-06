@@ -1,9 +1,18 @@
+import 'widgets/operational_workspace.dart';
+import '../../core/widgets/workspace_widgets.dart';
+import '../../core/widgets/logistics_artwork.dart';
+import 'dart:async';
+
+import '../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/auth_service.dart';
 import '../../core/supabase/freights_repo.dart';
 import '../../core/supabase/supabase_bootstrap.dart';
+import '../../core/utils/workflow_formatters.dart';
+import '../../core/utils/bid_window.dart';
+import '../../core/widgets/bid_window_countdown.dart';
 import '../../core/widgets/bid_date_label.dart';
 import '../../core/widgets/date_window_bar.dart';
 
@@ -11,11 +20,18 @@ const _onSurface = Color(0xFF1D1B20);
 const _onSurfaceVariant = Color(0xFF49454F);
 
 bool _isActiveBid(Map<String, dynamic> freight) {
+  return bidWindowPhase(
+        status: (freight['status'] ?? '').toString(),
+        opensAt: bidTimestamp(freight['bid_opens_at']),
+        closesAt: bidTimestamp(freight['bid_closes_at']),
+      ) ==
+      BidWindowPhase.live;
+}
+
+bool _isBiddingOrUpcoming(Map<String, dynamic> freight) {
   if (freight['status'] != 'bidding') return false;
-  final closesAt = DateTime.tryParse(
-    (freight['bid_closes_at'] ?? '').toString(),
-  );
-  return closesAt != null && closesAt.isAfter(DateTime.now());
+  final closesAt = bidTimestamp(freight['bid_closes_at']);
+  return closesAt == null || closesAt.isAfter(DateTime.now());
 }
 
 // =================== DASHBOARD ===================
@@ -29,6 +45,8 @@ class LmDashboardBody extends StatefulWidget {
 
 class _LmDashboardBodyState extends State<LmDashboardBody> {
   String _name = '';
+  late final Stream<List<Map<String, dynamic>>> _freightsStream;
+  late final Timer _clock;
   int _rangeDays = 30;
   DateTime? _customStart;
   DateTime? _customEnd;
@@ -36,7 +54,18 @@ class _LmDashboardBodyState extends State<LmDashboardBody> {
   @override
   void initState() {
     super.initState();
+    _freightsStream = FreightsRepo.instance.streamAllFreights();
+    _clock = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => setState(() {}),
+    );
     _loadName();
+  }
+
+  @override
+  void dispose() {
+    _clock.cancel();
+    super.dispose();
   }
 
   Future<void> _loadName() async {
@@ -92,7 +121,7 @@ class _LmDashboardBodyState extends State<LmDashboardBody> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: FreightsRepo.instance.streamAllFreights(),
+      stream: _freightsStream,
       builder: (context, snap) {
         final all = snap.data ?? const [];
         final filtered =
@@ -139,96 +168,78 @@ class _LmDashboardBodyState extends State<LmDashboardBody> {
           children: [
             _AppBar(name: _name),
             Expanded(
-              child: ListView(
+              child: OperationalListView(
                 padding: const EdgeInsets.only(bottom: 16),
                 children: [
-                  const _Section('Dashboard'),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-                    child: DateWindowBar(
-                      rangeDays: _rangeDays,
-                      customStart: _customStart,
-                      customEnd: _customEnd,
-                      onSelectRange:
-                          (days) => setState(() {
-                            _rangeDays = days;
-                            _customStart = null;
-                            _customEnd = null;
-                          }),
-                      onPickStart: _pickStart,
-                      onPickEnd: _pickEnd,
-                      onClearCustom:
-                          () => setState(() {
-                            _customStart = null;
-                            _customEnd = null;
-                          }),
+                  WorkspaceHeader(
+                    title: operationalCopy(
+                      context,
+                      'Plan today’s transport',
+                      'आज का परिवहन तय करें',
+                    ),
+                    description: operationalCopy(
+                      context,
+                      'Start a request, compare quotes and check the vehicles that need attention.',
+                      'अनुरोध बनाएँ, बोलियों की तुलना करें और ज़रूरी वाहन जाँच पूरी करें।',
+                    ),
+                    icon: Icons.dashboard_outlined,
+                    summary: GuidanceCard(
+                      title: operationalCopy(
+                        context,
+                        '$needsVehicleCheck vehicles need checking',
+                        '$needsVehicleCheck वाहनों की जाँच बाकी',
+                      ),
+                      message: operationalCopy(
+                        context,
+                        'Check the arriving vehicle and driver before approving the next delivery step.',
+                        'अगला डिलीवरी चरण स्वीकार करने से पहले आए वाहन और ड्राइवर की जाँच करें।',
+                      ),
+                      tone:
+                          needsVehicleCheck > 0
+                              ? WorkspaceTone.warning
+                              : WorkspaceTone.success,
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _Kpi(
-                            label: 'Active bids',
-                            value: '${active.length}',
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _Kpi(label: 'In transit', value: '$won'),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: _Kpi(label: 'Locked / done', value: '$locked'),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _Kpi(
-                            label: 'Vehicle checks',
-                            value: '$needsVehicleCheck',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const _Section('Quick links'),
+                  _Section(AppLocalizations.of(context)!.uiQuickLinks),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: LayoutBuilder(
                       builder: (context, constraints) {
-                        final narrow = constraints.maxWidth < 560;
+                        final narrow = constraints.maxWidth < 680;
                         final links = [
                           _QuickLinkData(
                             icon: Icons.add_road_outlined,
-                            title: 'Publish bid',
-                            subtitle: 'Create freight',
+                            title: AppLocalizations.of(context)!.opsPublishBid,
+                            subtitle:
+                                AppLocalizations.of(context)!.opsNewRequirement,
+                            prominent: true,
                             onTap: () => context.push('/lm/bid/new'),
                           ),
                           _QuickLinkData(
                             icon: Icons.fact_check_outlined,
-                            title: 'Confirm arrivals',
-                            subtitle: '$needsVehicleCheck pending',
+                            title:
+                                AppLocalizations.of(
+                                  context,
+                                )!.opsConfirmVehicleArrived,
+                            subtitle:
+                                '${AppLocalizations.of(context)!.opsVehicleChecks}: $needsVehicleCheck',
+                            prominent: true,
                             onTap: () => context.push('/lm/fleet'),
                           ),
                           _QuickLinkData(
                             icon: Icons.business_outlined,
-                            title: 'Transporters',
-                            subtitle: 'View directory',
-                            onTap: () => context.push('/lm/profile'),
+                            title:
+                                AppLocalizations.of(context)!.opsTransporters,
+                            subtitle:
+                                AppLocalizations.of(context)!.uiViewDirectory,
+                            onTap: () => context.push('/lm/transporters'),
                           ),
                           _QuickLinkData(
                             icon: Icons.local_shipping_outlined,
-                            title: 'Vehicles',
-                            subtitle: 'Read-only list',
-                            onTap: () => context.push('/lm/profile'),
+                            title: AppLocalizations.of(context)!.opsVehicles,
+                            subtitle:
+                                AppLocalizations.of(context)!.uiReadOnlyList,
+                            onTap: () => context.push('/lm/vehicles'),
                           ),
                         ];
                         if (narrow) {
@@ -262,6 +273,70 @@ class _LmDashboardBodyState extends State<LmDashboardBody> {
                       },
                     ),
                   ),
+                  const _Section('Dashboard'),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: DateWindowBar(
+                      rangeDays: _rangeDays,
+                      customStart: _customStart,
+                      customEnd: _customEnd,
+                      onSelectRange:
+                          (days) => setState(() {
+                            _rangeDays = days;
+                            _customStart = null;
+                            _customEnd = null;
+                          }),
+                      onPickStart: _pickStart,
+                      onPickEnd: _pickEnd,
+                      onClearCustom:
+                          () => setState(() {
+                            _customStart = null;
+                            _customEnd = null;
+                          }),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _Kpi(
+                            label: AppLocalizations.of(context)!.opsActiveBids,
+                            value: '${active.length}',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _Kpi(
+                            label: AppLocalizations.of(context)!.opsInTransit,
+                            value: '$won',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _Kpi(
+                            label: AppLocalizations.of(context)!.opsLockedDone,
+                            value: '$locked',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _Kpi(
+                            label:
+                                AppLocalizations.of(context)!.opsVehicleChecks,
+                            value: '$needsVehicleCheck',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                   const _Section('Relevant charts'),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -278,17 +353,17 @@ class _LmDashboardBodyState extends State<LmDashboardBody> {
                             (key, value) =>
                                 MapEntry(key, value.round().clamp(0, 999999)),
                           ),
-                          unit: ' Ton',
+                          unit: ' MT',
                         ),
                       ],
                     ),
                   ),
                   const _Section('Latest Bids'),
                   if (active.isEmpty)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
                       child: Text(
-                        'No active bids right now.',
+                        AppLocalizations.of(context)!.opsNoActiveBids,
                         style: TextStyle(color: _onSurfaceVariant),
                       ),
                     )
@@ -297,8 +372,11 @@ class _LmDashboardBodyState extends State<LmDashboardBody> {
                       final v = freightView(f);
                       return _BidPreview(
                         route: v['route'] as String,
-                        summary: '${v['cases']} Cases · ${v['weight_kg']} Ton',
+                        summary:
+                            '${v['cases']} Cases · ${formatMetricTons(v['weight_kg'])} MT',
                         minsLeft: v['minsLeft'] as int,
+                        opensAt: v['opens'] as DateTime?,
+                        closesAt: v['closes'] as DateTime?,
                         date: v['created'] as DateTime?,
                         onTap: () => context.push('/lm/bid/${v['id']}'),
                       );
@@ -323,9 +401,28 @@ class LmBidsBody extends StatefulWidget {
 }
 
 class _LmBidsBodyState extends State<LmBidsBody> {
+  late final Stream<List<Map<String, dynamic>>> _freightsStream;
+  late final Timer _clock;
+  String _query = '';
   int _rangeDays = 30;
   DateTime? _customStart;
   DateTime? _customEnd;
+
+  @override
+  void initState() {
+    super.initState();
+    _freightsStream = FreightsRepo.instance.streamOperationalFreights();
+    _clock = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => setState(() {}),
+    );
+  }
+
+  @override
+  void dispose() {
+    _clock.cancel();
+    super.dispose();
+  }
 
   Future<void> _pickStart() async {
     final picked = await showDatePicker(
@@ -362,24 +459,43 @@ class _LmBidsBodyState extends State<LmBidsBody> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/lm/bid/new'),
         icon: const Icon(Icons.add),
-        label: const Text('Publish bid'),
+        label: Text(AppLocalizations.of(context)!.opsPublishBid),
       ),
       body: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'All bids',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w500,
-                  color: _onSurface,
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: WorkspaceHeader(
+              title: operationalCopy(
+                context,
+                'Transport requests',
+                'परिवहन अनुरोध',
+              ),
+              description: operationalCopy(
+                context,
+                'Find a route, compare live quotes or open the awarded trip.',
+                'मार्ग खोजें, जारी बोलियाँ देखें या सौंपे गए ट्रिप खोलें।',
+              ),
+              icon: Icons.assignment_outlined,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: TextField(
+              onChanged:
+                  (value) =>
+                      setState(() => _query = value.trim().toLowerCase()),
+              decoration: InputDecoration(
+                labelText: operationalCopy(
+                  context,
+                  'Search pickup, destination or truck',
+                  'पिकअप, गंतव्य या ट्रक खोजें',
                 ),
+                prefixIcon: const Icon(Icons.search),
               ),
             ),
           ),
+
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
             child: DateWindowBar(
@@ -403,13 +519,35 @@ class _LmBidsBodyState extends State<LmBidsBody> {
           ),
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: FreightsRepo.instance.streamOperationalFreights(),
+              stream: _freightsStream,
               builder: (context, snap) {
+                if (snap.hasError) {
+                  return WorkspaceEmptyState(
+                    title: operationalCopy(
+                      context,
+                      'Requests could not load',
+                      'अनुरोध लोड नहीं हुए',
+                    ),
+                    message: operationalCopy(
+                      context,
+                      'Check your connection and open this page again.',
+                      'कनेक्शन जाँचें और यह पेज फिर खोलें।',
+                    ),
+                    icon: Icons.wifi_off,
+                  );
+                }
                 if (!snap.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final freights =
                     snap.data!
+                        .where(
+                          (row) =>
+                              _query.isEmpty ||
+                              "${row['origin']} ${row['destination_town']} ${row['vehicle_number']}"
+                                  .toLowerCase()
+                                  .contains(_query),
+                        )
                         .where(
                           (row) => withinDateWindow(
                             DateTime.tryParse(
@@ -421,14 +559,15 @@ class _LmBidsBodyState extends State<LmBidsBody> {
                           ),
                         )
                         .toList();
-                final active = freights.where(_isActiveBid).toList();
-                final past = freights.where((f) => !_isActiveBid(f)).toList();
+                final active = freights.where(_isBiddingOrUpcoming).toList();
+                final past =
+                    freights.where((f) => !_isBiddingOrUpcoming(f)).toList();
                 if (freights.isEmpty) {
-                  return const Center(
+                  return Center(
                     child: Padding(
                       padding: EdgeInsets.all(32),
                       child: Text(
-                        'No bids found for this date window.',
+                        AppLocalizations.of(context)!.opsNoBidsDate,
                         style: TextStyle(color: _onSurfaceVariant),
                       ),
                     ),
@@ -440,7 +579,9 @@ class _LmBidsBodyState extends State<LmBidsBody> {
                   separatorBuilder: (_, __) => const SizedBox(height: 8),
                   itemBuilder: (_, i) {
                     if (i == 0) {
-                      return _ListHeader('Active bids (${active.length})');
+                      return _ListHeader(
+                        'Live & upcoming bids (${active.length})',
+                      );
                     }
                     if (i == active.length + 1) {
                       return _ListHeader('Past bids (${past.length})');
@@ -452,9 +593,12 @@ class _LmBidsBodyState extends State<LmBidsBody> {
                     final v = freightView(row);
                     return _FreightTile(
                       route: v['route'] as String,
-                      summary: '${v['cases']} Cases · ${v['weight_kg']} Ton',
+                      summary:
+                          '${v['cases']} Cases · ${formatMetricTons(v['weight_kg'])} MT',
                       status: v['status'] as String,
                       minsLeft: v['minsLeft'] as int,
+                      opensAt: v['opens'] as DateTime?,
+                      closesAt: v['closes'] as DateTime?,
                       date: v['created'] as DateTime?,
                       onTap: () => context.push('/lm/bid/${v['id']}'),
                     );
@@ -471,24 +615,47 @@ class _LmBidsBodyState extends State<LmBidsBody> {
 
 // =================== FLEET ===================
 
-class LmFleetBody extends StatelessWidget {
+class LmFleetBody extends StatefulWidget {
   const LmFleetBody({super.key});
+  @override
+  State<LmFleetBody> createState() => _LmFleetBodyState();
+}
 
+class _LmFleetBodyState extends State<LmFleetBody> {
+  String _query = '';
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: Text(
-              'Fleet — deliveries',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w500,
-                color: _onSurface,
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: WorkspaceHeader(
+            title: operationalCopy(
+              context,
+              'Follow your deliveries',
+              'अपनी डिलीवरी देखें',
+            ),
+            description: operationalCopy(
+              context,
+              'Open a route to check the truck, review customer proof and resolve missing details.',
+              'ट्रक जाँचने, ग्राहक प्रमाण देखने और अधूरे विवरण ठीक करने के लिए मार्ग खोलें।',
+            ),
+            icon: Icons.local_shipping_outlined,
+          ),
+        ),
+
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: TextField(
+            onChanged:
+                (value) => setState(() => _query = value.trim().toLowerCase()),
+            decoration: InputDecoration(
+              labelText: operationalCopy(
+                context,
+                'Search route or truck',
+                'मार्ग या ट्रक खोजें',
               ),
+              prefixIcon: const Icon(Icons.search),
             ),
           ),
         ),
@@ -502,6 +669,13 @@ class LmFleetBody extends StatelessWidget {
               final active =
                   snap.data!
                       .where(
+                        (row) =>
+                            _query.isEmpty ||
+                            "${row['origin']} ${row['destination_town']} ${row['vehicle_number']}"
+                                .toLowerCase()
+                                .contains(_query),
+                      )
+                      .where(
                         (f) => [
                           'awarded',
                           'dispatched',
@@ -511,11 +685,11 @@ class LmFleetBody extends StatelessWidget {
                       )
                       .toList();
               if (active.isEmpty) {
-                return const Center(
+                return Center(
                   child: Padding(
                     padding: EdgeInsets.all(32),
                     child: Text(
-                      'No awarded freights yet.',
+                      AppLocalizations.of(context)!.opsNoAwardedFreights,
                       style: TextStyle(color: _onSurfaceVariant),
                     ),
                   ),
@@ -553,7 +727,7 @@ class _FleetTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFFF6EDFB),
+          color: const Color(0xFFF3F5FA),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -569,10 +743,38 @@ class _FleetTile extends StatelessWidget {
             ),
             const SizedBox(height: 2),
             Text(
-              '${freight['cases'] ?? 0} Cases · ${freight['weight_kg'] ?? 0} Ton · ${(freight['status'] ?? '').toString().toUpperCase()}',
+              '${freight['cases'] ?? 0} Cases · ${formatMetricTons(freight['weight_kg'])} MT',
               style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
+            StatusBadge(
+              label:
+                  freight['ack_status'] == 'received'
+                      ? operationalCopy(
+                        context,
+                        'Delivery proof accepted',
+                        'डिलीवरी प्रमाण स्वीकृत',
+                      )
+                      : operationalCopy(
+                        context,
+                        'Customer proof needs review',
+                        'ग्राहक प्रमाण की जाँच बाकी',
+                      ),
+              tone:
+                  freight['ack_status'] == 'received'
+                      ? WorkspaceTone.success
+                      : WorkspaceTone.warning,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              operationalCopy(
+                context,
+                'Open delivery details →',
+                'डिलीवरी विवरण खोलें →',
+              ),
+              style: Theme.of(context).textTheme.labelLarge,
+            ),
+            const SizedBox(height: 12),
             Row(
               children: [
                 for (int i = 0; i < steps.length; i++) ...[
@@ -599,13 +801,13 @@ class _FleetTile extends StatelessWidget {
   static String _stepLabel(String k) {
     switch (k) {
       case 'dispatched':
-        return 'Disp.';
+        return 'Dispatch';
       case 'pickup':
         return 'Pickup';
       case 'in_transit':
         return 'Transit';
       case 'delivered':
-        return 'Deliv.';
+        return 'Delivery';
       default:
         return k;
     }
@@ -658,30 +860,38 @@ class _AppBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Row(
-        children: [
-          IconButton(
-            icon: const Icon(Icons.person_outline, color: _onSurface),
-            onPressed: () => context.push('/lm/profile'),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              name.isEmpty ? 'Welcome' : 'Welcome, $name',
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w500,
-                color: _onSurface,
+      child: LogisticsArtwork(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.person_outline, color: _onSurface),
+                onPressed: () => context.push('/lm/profile'),
               ),
-              overflow: TextOverflow.ellipsis,
-            ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  name.isEmpty ? 'Welcome' : 'Welcome, $name',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w500,
+                    color: _onSurface,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                tooltip: AppLocalizations.of(context)!.opsNotifications,
+                icon: const Icon(
+                  Icons.notifications_outlined,
+                  color: _onSurface,
+                ),
+                onPressed: () => context.push('/lm/notifications'),
+              ),
+            ],
           ),
-          IconButton(
-            tooltip: 'Notifications',
-            icon: const Icon(Icons.notifications_outlined, color: _onSurface),
-            onPressed: () => context.push('/lm/notifications'),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -693,12 +903,14 @@ class _QuickLinkData {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.prominent = false,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final bool prominent;
 }
 
 class _QuickLink extends StatelessWidget {
@@ -711,10 +923,15 @@ class _QuickLink extends StatelessWidget {
       onTap: link.onTap,
       borderRadius: BorderRadius.circular(14),
       child: Container(
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(link.prominent ? 16 : 12),
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.all(color: const Color(0xFFE4DCEB)),
+          color: link.prominent ? const Color(0xFFF2EAFA) : Colors.white,
+          border: Border.all(
+            color:
+                link.prominent
+                    ? const Color(0xFFBDA7DB)
+                    : const Color(0xFFE4DCEB),
+          ),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
@@ -723,7 +940,10 @@ class _QuickLink extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: const Color(0xFFF6EDFB),
+                color:
+                    link.prominent
+                        ? const Color(0xFFE4D4F5)
+                        : const Color(0xFFF3F5FA),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(link.icon, color: const Color(0xFF6750A4)),
@@ -735,8 +955,8 @@ class _QuickLink extends StatelessWidget {
                 children: [
                   Text(
                     link.title,
-                    style: const TextStyle(
-                      fontSize: 14,
+                    style: TextStyle(
+                      fontSize: link.prominent ? 16 : 14,
                       fontWeight: FontWeight.w700,
                       color: _onSurface,
                     ),
@@ -796,8 +1016,8 @@ class _MiniChart extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           if (entries.isEmpty)
-            const Text(
-              'No data in this date window.',
+            Text(
+              AppLocalizations.of(context)!.opsNoDataDate,
               style: TextStyle(fontSize: 12, color: _onSurfaceVariant),
             )
           else
@@ -925,20 +1145,18 @@ class _BidPreview extends StatelessWidget {
     required this.route,
     required this.summary,
     required this.minsLeft,
+    required this.opensAt,
+    required this.closesAt,
     required this.date,
     required this.onTap,
   });
   final String route;
   final String summary;
   final int minsLeft;
+  final DateTime? opensAt;
+  final DateTime? closesAt;
   final DateTime? date;
   final VoidCallback onTap;
-
-  String get _label {
-    if (minsLeft <= 0) return 'Closed';
-    if (minsLeft >= 60) return '${minsLeft ~/ 60} hr ${minsLeft % 60} min left';
-    return '$minsLeft min left';
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -954,7 +1172,7 @@ class _BidPreview extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: const Color(0xFFF6EDFB),
+                color: const Color(0xFFF3F5FA),
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -993,8 +1211,10 @@ class _BidPreview extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 2),
-                        Text(
-                          _label,
+                        BidWindowCountdown(
+                          status: 'bidding',
+                          opensAt: opensAt,
+                          closesAt: closesAt,
                           style: TextStyle(
                             fontSize: 11,
                             color:
@@ -1023,6 +1243,8 @@ class _FreightTile extends StatelessWidget {
     required this.summary,
     required this.status,
     required this.minsLeft,
+    required this.opensAt,
+    required this.closesAt,
     required this.date,
     required this.onTap,
   });
@@ -1030,19 +1252,31 @@ class _FreightTile extends StatelessWidget {
   final String summary;
   final String status;
   final int minsLeft;
+  final DateTime? opensAt;
+  final DateTime? closesAt;
   final DateTime? date;
   final VoidCallback onTap;
 
   String get _statusLabel {
     if (status == 'completed') return 'Status: Completed';
-    if (status == 'bidding' && minsLeft > 0) return 'Status: Open';
-    return 'Status: Closed';
+    switch (status) {
+      case 'bidding':
+        return 'Status: Expired';
+      case 'awarded':
+        return 'Status: Awarded';
+      case 'dispatched':
+        return 'Status: Dispatched';
+      case 'locked':
+        return 'Status: Locked';
+      default:
+        return 'Status: Closed';
+    }
   }
 
   Color get _badgeColor {
     switch (status) {
       case 'bidding':
-        return const Color(0xFFF6EDFB);
+        return const Color(0xFFF3F5FA);
       case 'awarded':
       case 'dispatched':
         return const Color(0xFFE1F5E1);
@@ -1105,14 +1339,26 @@ class _FreightTile extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        _statusLabel,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: _onSurfaceVariant,
+                      if (status == 'bidding')
+                        BidWindowCountdown(
+                          status: status,
+                          opensAt: opensAt,
+                          closesAt: closesAt,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _onSurfaceVariant,
+                          ),
+                        )
+                      else
+                        Text(
+                          _statusLabel,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: _onSurfaceVariant,
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),

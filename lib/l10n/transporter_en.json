@@ -1,0 +1,402 @@
+{
+  "tpWelcome": "Welcome",
+  "tpWelcomeName": "Welcome, {name}",
+  "@tpWelcomeName": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "tpLatestBids": "Latest bids",
+  "tpNoOpenBidsSoon": "No open bids right now. Check back soon.",
+  "tpWonBids": "Won bids",
+  "tpQuickOptions": "Quick options",
+  "tpVehicles": "Vehicles",
+  "tpAddOrDelete": "Add or delete",
+  "tpBidHistory": "Bid history",
+  "tpWonAndActive": "Won and active",
+  "tpDrivers": "Drivers",
+  "tpPerVehicle": "Per vehicle",
+  "tpWonBidsEmpty": "Won bids will appear here after a freight is awarded.",
+  "tpAwaitingVehicle": "Awaiting vehicle",
+  "tpClosed": "Closed",
+  "tpTimeHoursLeft": "{hours} hr {minutes} min left",
+  "@tpTimeHoursLeft": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tpTimeMinutesLeft": "{minutes} min left",
+  "@tpTimeMinutesLeft": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tpCasesWeight": "{cases} Cases · {weight} MT",
+  "@tpCasesWeight": {
+    "placeholders": {
+      "cases": {
+        "type": "String"
+      },
+      "weight": {
+        "type": "String"
+      }
+    }
+  },
+  "tpOpenBids": "Open bids",
+  "tpOpenBidsCount": "Open bids ({count})",
+  "@tpOpenBidsCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tpNoOpenBids": "No open bids right now.",
+  "tpBidHistoryCount": "Bid history ({count})",
+  "@tpBidHistoryCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tpStatusCompleted": "Status: Completed",
+  "tpStatusOpen": "Status: Open",
+  "tpStatusExpired": "Status: Expired",
+  "tpStatusAwarded": "Status: Awarded",
+  "tpStatusDispatched": "Status: Dispatched",
+  "tpStatusLocked": "Status: Locked",
+  "tpStatusClosed": "Status: Closed",
+  "tpMyFleet": "My fleet",
+  "tpManageVehicles": "Manage vehicles",
+  "tpManageFleetPrompt": "Add, edit, or delete vehicle and driver details",
+  "tpNoWonBids": "You haven't won any bids yet. Slide over to Bids.",
+  "tpCouldNotLoadDrivers": "Could not load drivers: {error}",
+  "@tpCouldNotLoadDrivers": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tpDeleteDriverQuestion": "Delete driver?",
+  "tpThisDriver": "This driver",
+  "tpDriverWillBeRemoved": "{name} will be removed.",
+  "@tpDriverWillBeRemoved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "tpCancel": "Cancel",
+  "tpDelete": "Delete",
+  "tpAddDriver": "Add driver",
+  "tpDriverNameMissing": "Driver name missing",
+  "tpPhoneLicence": "{phone} · Licence {licence}",
+  "@tpPhoneLicence": {
+    "placeholders": {
+      "phone": {
+        "type": "String"
+      },
+      "licence": {
+        "type": "String"
+      }
+    }
+  },
+  "tpEdit": "Edit",
+  "tpNoDrivers": "No drivers added yet",
+  "tpAddDriversHint": "Add drivers separately, then choose one during dispatch.",
+  "tpEnterDriverName": "Enter driver name",
+  "tpEnterValidPhone": "Enter a valid Indian mobile number",
+  "tpSaveFailed": "Save failed: {error}",
+  "@tpSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tpEditDriver": "Edit driver",
+  "tpDriverName": "Driver name",
+  "tpDriverPhone": "Driver phone",
+  "tpLicenceNumber": "Licence number",
+  "tpSaving": "Saving...",
+  "tpSaveDriver": "Save driver",
+  "tpCouldNotLoadVehicles": "Could not load vehicles: {error}",
+  "@tpCouldNotLoadVehicles": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tpThisVehicle": "this vehicle",
+  "tpDeleteVehicleQuestion": "Delete vehicle?",
+  "tpVehicleWillBeRemoved": "{vehicle} will be removed from your fleet records.",
+  "@tpVehicleWillBeRemoved": {
+    "placeholders": {
+      "vehicle": {
+        "type": "String"
+      }
+    }
+  },
+  "tpVehicleDeleted": "Vehicle deleted",
+  "tpDeleteFailed": "Delete failed: {error}",
+  "@tpDeleteFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tpAddVehicle": "Add vehicle",
+  "tpVehicleNumberMissing": "Vehicle number missing",
+  "tpTruck": "Truck",
+  "tpRc": "RC",
+  "tpInsurance": "Insurance",
+  "tpStatus": "Status",
+  "tpActive": "Active",
+  "tpNoVehicles": "No vehicles added yet",
+  "tpAddVehiclesHint": "Add each truck with RC, insurance, and capacity details.",
+  "tpEnterVehicleNumber": "Enter a vehicle number",
+  "tpEditVehicle": "Edit vehicle",
+  "tpVehicleNumber": "Vehicle number",
+  "tpVehicleType": "Vehicle type",
+  "tpTruckTrailer": "Truck / Trailer",
+  "tpCapacityCases": "Capacity Cases",
+  "tpMetricMt": "Metric MT",
+  "tpRcNumber": "RC number",
+  "tpInsuranceNumber": "Insurance number",
+  "tpSaveVehicle": "Save vehicle",
+  "tpCases": "{cases} Cases",
+  "@tpCases": {
+    "placeholders": {
+      "cases": {
+        "type": "String"
+      }
+    }
+  },
+  "tpProfileAndLogout": "Profile and logout",
+  "tpBidPlaced": "Bid placed: ₹{amount}. You can revise it until bidding closes.",
+  "@tpBidPlaced": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "tpBidFailed": "Bid failed: {error}",
+  "@tpBidFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tpBidClosed": "Bid closed",
+  "tpBidClosedHint": "Only bids you win stay available in your past bids and fleet.",
+  "tpBackToOpenBids": "Back to open bids",
+  "tpLiveBidding": "Live Bidding",
+  "tpNoBidsYet": "No bids yet",
+  "tpAnonymousBidders": "{count} anonymous bidder(s)",
+  "@tpAnonymousBidders": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "tpPlacing": "Placing...",
+  "tpUpdateBid": "Update bid",
+  "tpPlaceBid": "Place bid",
+  "tpYou": "You",
+  "tpAnonymousBidder": "Anonymous bidder",
+  "tpTransporterBrowserHint": "Manage bids, fleet, and delivery updates from the browser.",
+  "tpBiddingOpenHours": "Bidding open · {hours}h {minutes}m left",
+  "@tpBiddingOpenHours": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tpBiddingOpenMinutes": "Bidding open · {minutes}m left",
+  "@tpBiddingOpenMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "tpBiddingOpen": "Bidding open",
+  "tpYouWonBid": "You won this bid",
+  "tpAwardedOther": "Awarded to another transporter",
+  "tpDeliveryStatus": "Delivery {status}",
+  "@tpDeliveryStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "tpTrackArrow": "Track →",
+  "tpProfileUpdated": "Profile updated",
+  "tpUpdateFailed": "Update failed: {error}",
+  "@tpUpdateFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tpAdmin": "Admin",
+  "tpLogisticsManager": "Logistics Manager",
+  "tpDispatchManager": "Dispatch Manager",
+  "tpSignedIn": "Signed in",
+  "tpProfileDetails": "Profile details",
+  "tpProfileDetailsHint": "Keep your contact and compliance information updated for smoother bidding and dispatch.",
+  "tpBusinessInformation": "Business information",
+  "tpFullName": "Full name",
+  "tpBusinessName": "Business name",
+  "tpPhoneNumber": "Phone number",
+  "tpBusinessRegistration": "Business registration no.",
+  "tpSavingEllipsis": "Saving…",
+  "tpSaveChanges": "Save changes",
+  "tpAccountOverview": "Account overview",
+  "tpAccountOverviewHint": "Quick reference for your account status and sign-in details.",
+  "tpNotAvailable": "Not available",
+  "tpRole": "Role",
+  "tpUnknown": "Unknown",
+  "tpPassword": "Password",
+  "tpManagedCredentials": "Managed from login credentials",
+  "tpFleetSetup": "Fleet setup",
+  "tpFleetSetupHint": "Add vehicles and drivers separately for dispatch.",
+  "tpActions": "Actions",
+  "tpActionsHint": "Common account options and quick maintenance tasks.",
+  "tpReloadProfile": "Reload profile data",
+  "tpFetchLatest": "Fetch latest account information",
+  "tpPrivacyDeletion": "Privacy policy and account deletion",
+  "tpSignOutHint": "Sign out and return to welcome screen",
+  "tpProfileSyncHint": "Profile changes reflect across the mobile app and web dashboard.",
+  "tpEditableProfile": "Editable profile",
+  "tpDeliveryProgress": "Delivery progress",
+  "tpDeliveredCaps": "DELIVERED",
+  "tpInTransitCaps": "IN TRANSIT",
+  "tpPickupCaps": "PICKUP",
+  "tpDispatchedCaps": "DISPATCHED",
+  "tpLmConfirmedVehicle": "LM confirmed vehicle",
+  "tpLmRaisedIssue": "LM raised an issue",
+  "tpWaitingVehicleConfirmation": "Waiting for LM vehicle confirmation",
+  "tpVehicleConfirmedHint": "The logistics manager has confirmed the vehicle details.",
+  "tpDispatchUpdateHint": "Update the dispatch details and submit again for confirmation.",
+  "tpDispatchChangeHint": "If you change dispatch details, LM will need to confirm again.",
+  "tpCouldNotReadImage": "Could not read selected image",
+  "tpPhotoUploaded": "Photo uploaded",
+  "tpUploadFailed": "Upload failed: {error}",
+  "@tpUploadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tpUploading": "Uploading...",
+  "tpUploadedPreview": "Uploaded - tap to preview",
+  "tpSaved": "Saved",
+  "tpDispatched": "Dispatched",
+  "tpLorryProof": "Lorry proof",
+  "tpAddLorryPhotograph": "Add Lorry Photograph",
+  "tpUploadLorryPhoto": "Upload a photo of Lorry",
+  "tpDriverProof": "Driver proof",
+  "tpEnterDriverPhotograph": "Enter Driver Photograph",
+  "tpUploadDriverPhoto": "Upload a photo of Driver",
+  "tpDriverAadhaarPhoto": "Enter Driver Aadhaar Card Photograph",
+  "tpUploadDriverAadhaar": "Upload a photo of Driver Aadhaar Card",
+  "tpSubmitLorryDetails": "Submit Lorry details",
+  "tpSelectVehicle": "Select vehicle",
+  "tpNoSavedVehicles": "No saved vehicles yet",
+  "tpChooseSavedFleet": "Choose from your saved fleet",
+  "tpUseSavedVehicle": "Use a vehicle you already added, or add one first.",
+  "tpRcSaved": "RC saved",
+  "tpInsuranceSaved": "Insurance saved",
+  "tpSelectDriver": "Select driver",
+  "tpNoSavedDrivers": "No saved drivers yet",
+  "tpChooseSavedDrivers": "Choose from your saved drivers",
+  "tpUseSavedDriver": "Use a driver you already added, or add one first.",
+  "tpLicenceSaved": "Licence saved",
+  "tpPickup": "Pickup",
+  "tpPickupDetails": "Pickup details",
+  "tpEnterDriverPhone": "Enter Driver Phone Number",
+  "tpEnterSitePhoto": "Enter on site photo",
+  "tpUploadPresence": "Upload a photo of your presence",
+  "tpSubmitPickup": "Submit Pickup details",
+  "tpInTransit": "In Transit",
+  "tpSubcontractors": "Sub-contractors",
+  "tpAddContractor": "Add contractor",
+  "tpVerificationDetails": "Verification details",
+  "tpGrBiltyNumber": "GR / Bilty number",
+  "tpEwayBillNumber": "E-way bill number",
+  "tpCurrentLocation": "Current location",
+  "tpEnterCurrentLocation": "Enter the current location",
+  "tpLocationUpdated": "Location updated",
+  "tpLocationUpdateFailed": "Location update failed: {error}",
+  "@tpLocationUpdateFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "tpUpdating": "Updating...",
+  "tpUpdateLocation": "Update location",
+  "tpTransitSitePhoto": "Transit site photo",
+  "tpShareTransit": "Share transit details",
+  "tpContractorNumber": "Contractor {number}",
+  "@tpContractorNumber": {
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "tpName": "Name",
+  "tpPhone": "Phone",
+  "tpFrom": "From",
+  "tpTo": "To",
+  "tpSelectCity": "Select city",
+  "tpDelivered": "Delivered",
+  "tpDeliverySiteDetails": "Enter Delivery site details",
+  "tpEnterReceiverName": "Enter receiver name",
+  "tpEnterReceiverNumber": "Enter Receiver number",
+  "tpEnterGrNumber": "Enter GR Number",
+  "tpEnterEwayBill": "Enter E-way Bill Number",
+  "tpProofOfDelivery": "Proof of Delivery (GR)",
+  "tpUploadPod": "Upload Proof of Delivery",
+  "tpAdditionalChargesReason": "Additional Charges (if any) — bill reason",
+  "tpLoadingChargesHint": "e.g. loading charges",
+  "tpBillPhoto": "Bill photo",
+  "tpUploadBillPhoto": "Upload a photo of the bill",
+  "tpOnSitePhoto": "On-site photo",
+  "tpShareDelivery": "Share delivery details",
+  "tpLocationHint": "e.g. Ambala bypass",
+  "tpApproved": "Approved",
+  "tpPending": "Pending",
+  "tpRejected": "Rejected",
+  "tpSuspended": "Suspended",
+  "tpCompleted": "Completed",
+  "tpAwarded": "Awarded",
+  "tpLocked": "Locked"
+}

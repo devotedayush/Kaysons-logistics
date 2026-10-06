@@ -1,0 +1,15 @@
+{
+  "date": "2026-10-02",
+  "method": "Actual production web browser at https://kaysons-logistics.vercel.app/#/login",
+  "files": [
+    "login-mobile-en.png",
+    "login-mobile-hi.png",
+    "login-web-hi.png",
+    "login-web-en.png"
+  ],
+  "viewports": {
+    "mobile": "390x844",
+    "web": "1280x900"
+  },
+  "privacy": "No phone, email, password or OTP entered"
+}

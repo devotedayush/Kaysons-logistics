@@ -59,7 +59,17 @@ app.*.map.json
 
 # Local screenshots and smoke-test captures
 *.png
+!assets/branding/kaysons-app-icon.png
+!docs/guides/screenshots/**/*.png
 !web/favicon.png
 !web/icons/*.png
 !android/**/res/**/*.png
 !ios/Runner/Assets.xcassets/**/*.png
+
+# Supabase CLI local cache
+supabase/.temp/
+
+# Python QA caches
+__pycache__/
+.vercel
+.env*

@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+import 'package:file_picker/file_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -5,6 +8,10 @@ import '../../core/supabase/auth_service.dart';
 import '../../core/supabase/supabase_bootstrap.dart';
 import '../../core/widgets/pill_text_field.dart';
 import '../../core/widgets/primary_button.dart';
+import '../../core/widgets/workspace_widgets.dart';
+import '../../core/theme/app_theme.dart';
+import '../../l10n/app_localizations.dart';
+import '../auth/enrollment_strings.dart';
 
 class TransporterProfileScreen extends StatefulWidget {
   const TransporterProfileScreen({super.key});
@@ -18,12 +25,21 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
   Map<String, dynamic>? _profile;
   bool _loading = true;
   bool _saving = false;
+  bool _detailsLoaded = false;
 
   final _fullName = TextEditingController();
   final _businessName = TextEditingController();
   final _phone = TextEditingController();
   final _businessNumber = TextEditingController();
   final _gst = TextEditingController();
+  final _contactEmail = TextEditingController();
+  final _holder = TextEditingController();
+  final _account = TextEditingController();
+  final _ifsc = TextEditingController();
+  String? _bankId, _chequePath, _chequeName;
+  Uint8List? _chequeBytes;
+  String? _chequeExtension;
+  String t(String en, String hi) => enrollmentText(context, en, hi);
 
   @override
   void initState() {
@@ -39,6 +55,10 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
       _phone,
       _businessNumber,
       _gst,
+      _contactEmail,
+      _holder,
+      _account,
+      _ifsc,
     ]) {
       controller.dispose();
     }
@@ -48,7 +68,10 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
   Future<void> _load() async {
     final uid = AuthService.instance.user?.id;
     if (uid == null) return;
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _detailsLoaded = false;
+    });
     try {
       final row =
           await supabase
@@ -65,6 +88,37 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
       _phone.text = (row?['phone'] ?? '').toString();
       _businessNumber.text = (row?['business_number'] ?? '').toString();
       _gst.text = (row?['gst'] ?? '').toString();
+      _contactEmail.text = (row?['email'] ?? '').toString();
+      _phone.text = AuthService.instance.user?.phone ?? '';
+      final banks = await supabase
+          .from('bank_accounts')
+          .select('id,holder_name,account_number,ifsc,cheque_url')
+          .eq('profile_id', uid)
+          .order('created_at')
+          .limit(1);
+      if (!mounted) return;
+      if (banks.isNotEmpty) {
+        final bank = banks.first;
+        _bankId = bank['id'].toString();
+        _holder.text = (bank['holder_name'] ?? '').toString();
+        _account.text = (bank['account_number'] ?? '').toString();
+        _ifsc.text = (bank['ifsc'] ?? '').toString();
+        _chequePath = bank['cheque_url'] as String?;
+      }
+      _detailsLoaded = row != null;
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              t(
+                'Profile details could not be loaded. Try reloading.',
+                'प्रोफ़ाइल जानकारी लोड नहीं हुई। फिर लोड करें।',
+              ),
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -72,7 +126,29 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
 
   Future<void> _save() async {
     final uid = AuthService.instance.user?.id;
-    if (uid == null || _saving) return;
+    if (uid == null || _saving || !_detailsLoaded) return;
+    final hasBank =
+        [
+          _holder.text,
+          _account.text,
+          _ifsc.text,
+        ].any((v) => v.trim().isNotEmpty) ||
+        _chequeBytes != null;
+    if (!isValidContactEmail(_contactEmail.text) ||
+        (hasBank &&
+            !isValidBankDetails(_holder.text, _account.text, _ifsc.text))) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            t(
+              'Use a valid contact email. For bank details enter holder, 9–18 digit account number and valid IFSC.',
+              'सही संपर्क ईमेल भरें। बैंक के लिए धारक, 9–18 अंकों का खाता नंबर और सही IFSC भरें।',
+            ),
+          ),
+        ),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       await supabase
@@ -80,38 +156,145 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
           .update({
             'full_name': _fullName.text.trim(),
             'business_name': _businessName.text.trim(),
-            'phone': _phone.text.trim(),
+            'email':
+                _contactEmail.text.trim().isEmpty
+                    ? null
+                    : _contactEmail.text.trim(),
             'business_number': _businessNumber.text.trim(),
             'gst': _gst.text.trim(),
           })
-          .eq('id', uid);
+          .eq('id', uid)
+          .select('id')
+          .single();
+      if (hasBank) {
+        if (_chequeBytes != null) {
+          final extension = _chequeExtension!;
+          final path =
+              '$uid/registration/bank-cheque/${DateTime.now().microsecondsSinceEpoch}.$extension';
+          await supabase.storage
+              .from('delivery-documents')
+              .uploadBinary(
+                path,
+                _chequeBytes!,
+                fileOptions: FileOptions(
+                  contentType:
+                      extension == 'png'
+                          ? 'image/png'
+                          : extension == 'webp'
+                          ? 'image/webp'
+                          : 'image/jpeg',
+                ),
+              );
+          // Retain the uploaded reference if the row save fails; retry reuses it.
+          _chequePath = path;
+          _chequeBytes = null;
+        }
+        final data = {
+          'holder_name': _holder.text.trim(),
+          'account_number': _account.text.trim(),
+          'ifsc': _ifsc.text.trim().toUpperCase(),
+          'cheque_url': _chequePath,
+        };
+        if (_bankId == null) {
+          final existing = await supabase
+              .from('bank_accounts')
+              .select('id')
+              .eq('profile_id', uid)
+              .order('created_at')
+              .limit(1);
+          if (existing.isNotEmpty) _bankId = existing.first['id'].toString();
+        }
+        if (_bankId != null) {
+          await supabase
+              .from('bank_accounts')
+              .update(data)
+              .eq('id', _bankId!)
+              .eq('profile_id', uid)
+              .select('id')
+              .single();
+        } else {
+          final bank =
+              await supabase
+                  .from('bank_accounts')
+                  .insert({...data, 'profile_id': uid})
+                  .select('id')
+                  .single();
+          _bankId = bank['id'].toString();
+        }
+      }
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Profile updated')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context)!.tpProfileUpdated)),
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Update failed: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(AppLocalizations.of(context)!.tpUpdateFailed('$e')),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _pickCheque() async {
+    try {
+      final picked = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'webp'],
+        withData: true,
+      );
+      if (picked == null || picked.files.isEmpty || !mounted) return;
+      final file = picked.files.single;
+      final extension = file.extension?.toLowerCase();
+      if (file.bytes == null ||
+          file.bytes!.isEmpty ||
+          file.size > 5 * 1024 * 1024 ||
+          !['jpg', 'jpeg', 'png', 'webp'].contains(extension)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              t(
+                'Choose a JPG, PNG or WebP image up to 5 MB.',
+                '5 MB तक की JPG, PNG या WebP तस्वीर चुनें।',
+              ),
+            ),
+          ),
+        );
+        return;
+      }
+      setState(() {
+        _chequeBytes = file.bytes;
+        _chequeName = file.name;
+        _chequeExtension = extension;
+      });
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              t('Could not open the image picker.', 'तस्वीर चयन नहीं खुल सका।'),
+            ),
+          ),
+        );
+      }
     }
   }
 
   String _roleLabel(String role) {
     switch (role) {
       case 'admin':
-        return 'Admin';
+        return AppLocalizations.of(context)!.tpAdmin;
       case 'logistics_manager':
-        return 'Logistics Manager';
+        return AppLocalizations.of(context)!.tpLogisticsManager;
       case 'dispatch_manager':
-        return 'Dispatch Manager';
+        return AppLocalizations.of(context)!.tpDispatchManager;
       case 'accountant':
-        return 'Accountant';
+        return AppLocalizations.of(context)!.accountant;
       case 'transporter':
-        return 'Transporter';
+        return AppLocalizations.of(context)!.transporter;
       default:
         return '';
     }
@@ -120,186 +303,269 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final p = _profile;
-    final name = (p?['full_name'] ?? 'Signed in').toString();
-    final biz = (p?['business_name'] ?? '').toString();
+    final name =
+        (p?['full_name'] ?? AppLocalizations.of(context)!.tpSignedIn)
+            .toString();
     final email = (p?['email'] ?? '').toString();
     final status = (p?['status'] ?? '').toString();
     final role = _roleLabel((p?['role'] ?? '').toString());
-
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F5FB),
+      backgroundColor: AppColors.surface,
+      appBar: AppBar(title: Text(AppLocalizations.of(context)!.profile)),
       body: SafeArea(
         child:
             _loading
                 ? const Center(child: CircularProgressIndicator())
-                : LayoutBuilder(
-                  builder: (context, constraints) {
-                    final compact = constraints.maxWidth < 700;
-                    final wide = constraints.maxWidth >= 960;
-                    final maxWidth = wide ? 1120.0 : 980.0;
-
-                    return Center(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(maxWidth: maxWidth),
-                        child: Column(
-                          children: [
-                            _hero(
-                              context,
-                              compact: compact,
-                              name: name,
-                              biz: biz,
-                              email: email,
-                              status: status,
-                              role: role,
+                : SingleChildScrollView(
+                  padding: const EdgeInsets.all(18),
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1120),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          WorkspaceHeader(
+                            title: name,
+                            description: t(
+                              'Keep your contact details up to date. Fill business and bank sections when you are ready.',
+                              'अपनी संपर्क जानकारी अपडेट रखें। व्यवसाय और बैंक की जानकारी जब तैयार हों तब भरें।',
                             ),
-                            Expanded(
-                              child: ListView(
-                                padding: EdgeInsets.fromLTRB(
-                                  compact ? 14 : 18,
-                                  16,
-                                  compact ? 14 : 18,
-                                  compact ? 28 : 32,
+                            icon: Icons.person_outline,
+                            summary: Wrap(
+                              spacing: 10,
+                              runSpacing: 8,
+                              children: [
+                                StatusBadge(
+                                  label: role,
+                                  tone: WorkspaceTone.info,
                                 ),
-                                children: [
-                                  if (wide)
-                                    Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Expanded(
-                                          flex: 3,
-                                          child: _editableCard(
-                                            compact: compact,
-                                            wide: wide,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 18),
-                                        Expanded(
-                                          flex: 2,
-                                          child: Column(
-                                            children: [
-                                              _accountCard(
-                                                email: email,
-                                                role: role,
-                                                status: status,
-                                              ),
-                                              const SizedBox(height: 18),
-                                              _fleetShortcutsCard(),
-                                              const SizedBox(height: 18),
-                                              _actionsCard(compact: compact),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  else ...[
-                                    _accountCard(
-                                      email: email,
-                                      role: role,
-                                      status: status,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    _fleetShortcutsCard(),
-                                    const SizedBox(height: 16),
-                                    _editableCard(compact: compact, wide: wide),
-                                    const SizedBox(height: 16),
-                                    _actionsCard(compact: compact),
-                                  ],
-                                ],
+                                StatusBadge(
+                                  label: _toTitleCase(status),
+                                  tone:
+                                      status == 'approved'
+                                          ? WorkspaceTone.success
+                                          : WorkspaceTone.warning,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          if (status == 'pending') ...[
+                            GuidanceCard(
+                              title: t(
+                                'Awaiting account approval',
+                                'खाते की स्वीकृति की प्रतीक्षा',
+                              ),
+                              message: t(
+                                'Your registration is submitted. An administrator must approve it before you can use bids and trips.',
+                                'आपका पंजीकरण जमा है। बोलियाँ और सफ़र इस्तेमाल करने से पहले प्रशासक की स्वीकृति आवश्यक है।',
+                              ),
+                              tone: WorkspaceTone.warning,
+                            ),
+                            const SizedBox(height: 18),
+                          ],
+                          if (!_detailsLoaded) ...[
+                            GuidanceCard(
+                              title: t(
+                                'Profile could not be loaded',
+                                'प्रोफ़ाइल नहीं खुल सकी',
+                              ),
+                              message: t(
+                                'Reload your saved details before making changes.',
+                                'बदलाव करने से पहले सहेजी जानकारी फिर खोलें।',
+                              ),
+                              tone: WorkspaceTone.warning,
+                              action: OutlinedButton.icon(
+                                onPressed: _load,
+                                icon: const Icon(Icons.refresh),
+                                label: Text(
+                                  t('Reload profile', 'प्रोफ़ाइल फिर खोलें'),
+                                ),
                               ),
                             ),
+                            const SizedBox(height: 18),
                           ],
-                        ),
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final wide = constraints.maxWidth >= 820;
+                              final details = _editableCard(
+                                compact: !wide,
+                                wide: wide,
+                              );
+                              final account = Column(
+                                children: [
+                                  _accountCard(
+                                    email: email,
+                                    role: role,
+                                    status: status,
+                                  ),
+                                  const SizedBox(height: 18),
+                                  if (status == 'approved') ...[
+                                    _fleetShortcutsCard(),
+                                    const SizedBox(height: 18),
+                                  ],
+                                  _actionsCard(compact: !wide),
+                                ],
+                              );
+                              return wide
+                                  ? Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(flex: 3, child: details),
+                                      const SizedBox(width: 24),
+                                      Expanded(flex: 2, child: account),
+                                    ],
+                                  )
+                                  : Column(
+                                    children: [
+                                      details,
+                                      const SizedBox(height: 18),
+                                      account,
+                                    ],
+                                  );
+                            },
+                          ),
+                        ],
                       ),
-                    );
-                  },
+                    ),
+                  ),
                 ),
       ),
     );
   }
 
-  Widget _editableCard({required bool compact, required bool wide}) {
-    return _sectionCard(
-      title: 'Profile details',
-      subtitle:
-          'Keep your contact and compliance information updated for smoother bidding and dispatch.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _subheading('Business information'),
-          const SizedBox(height: 12),
-          _fieldGrid(
-            compact: compact,
-            wide: wide,
-            children: [
-              _field('Full name', _fullName, hint: 'Naveen Garg'),
-              _field('Business name', _businessName, hint: 'Kayson Logistics'),
-              _field(
-                'Phone number',
-                _phone,
-                hint: '+91 98765 43210',
-                keyboardType: TextInputType.phone,
-              ),
-              _field(
-                'Business registration no.',
-                _businessNumber,
-                hint: 'BRN-1234',
-              ),
-              _field('GSTIN', _gst, hint: '27ABCDE1234F1Z5'),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SizedBox(
-            width: compact ? double.infinity : 220,
-            child: PrimaryButton(
-              label: _saving ? 'Saving…' : 'Save changes',
-              onPressed: _saving ? null : _save,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _fieldGrid({
+  Widget _editableCard({
     required bool compact,
     required bool wide,
-    required List<Widget> children,
-  }) {
-    if (compact) {
-      return Column(children: children);
-    }
-
-    final chunks = <List<Widget>>[];
-    for (var index = 0; index < children.length; index += 2) {
-      chunks.add(
-        children.sublist(
-          index,
-          index + 2 > children.length ? children.length : index + 2,
+  }) => WorkspaceSection(
+    title: t('Your contact details', 'आपकी संपर्क जानकारी'),
+    description: t(
+      'Save after making changes. Optional sections can be completed later.',
+      'बदलाव के बाद सहेजें। वैकल्पिक जानकारी बाद में भर सकते हैं।',
+    ),
+    children: [
+      _field(
+        AppLocalizations.of(context)!.tpFullName,
+        _fullName,
+        hint: t('Your full name', 'आपका पूरा नाम'),
+      ),
+      GuidanceCard(
+        title: t('Verified sign-in phone', 'सत्यापित लॉगिन फोन'),
+        message:
+            _phone.text.isEmpty
+                ? t('No verified phone linked', 'सत्यापित फोन नहीं जुड़ा')
+                : _phone.text,
+        icon: Icons.verified_user_outlined,
+        action: TextButton(
+          onPressed: () => context.push('/account/phone'),
+          child: Text(t('Change verified phone', 'सत्यापित फोन बदलें')),
         ),
-      );
-    }
-
-    return Column(
-      children: [
-        for (final rowChildren in chunks)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 2),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                for (var i = 0; i < rowChildren.length; i++) ...[
-                  Expanded(child: rowChildren[i]),
-                  if (i != rowChildren.length - 1)
-                    SizedBox(width: wide ? 16 : 12),
-                ],
-                if (rowChildren.length == 1) const Expanded(child: SizedBox()),
-              ],
+      ),
+      const SizedBox(height: 18),
+      _field(
+        t('Contact email (optional)', 'संपर्क ईमेल (वैकल्पिक)'),
+        _contactEmail,
+        keyboardType: TextInputType.emailAddress,
+      ),
+      const Divider(),
+      Material(
+        color: Colors.transparent,
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: const EdgeInsets.only(top: 12),
+          title: Text(
+            t('Business details (optional)', 'व्यवसाय की जानकारी (वैकल्पिक)'),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          subtitle: Text(
+            _businessName.text.isEmpty
+                ? t(
+                  'Business name, registration number & GSTIN',
+                  'व्यवसाय का नाम, पंजीकरण नंबर और GSTIN',
+                )
+                : _businessName.text,
+          ),
+          children: [
+            _field(
+              AppLocalizations.of(context)!.tpBusinessName,
+              _businessName,
+              hint: t('Your business name', 'आपके व्यवसाय का नाम'),
+            ),
+            _field(
+              AppLocalizations.of(context)!.tpBusinessRegistration,
+              _businessNumber,
+            ),
+            _field('GSTIN', _gst, hint: '27ABCDE1234F1Z5'),
+          ],
+        ),
+      ),
+      const Divider(),
+      Material(
+        color: Colors.transparent,
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: const EdgeInsets.only(top: 12),
+          title: Text(
+            t('Bank details (optional)', 'बैंक जानकारी (वैकल्पिक)'),
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          subtitle: Text(
+            t(
+              'Add these when you are ready to receive payments.',
+              'भुगतान पाने के लिए जब तैयार हों, तब यह जानकारी भरें।',
             ),
           ),
-      ],
-    );
-  }
+          children: [
+            GuidanceCard(
+              title: t(
+                'Complete the three bank fields together',
+                'बैंक के तीनों खाने एक साथ भरें',
+              ),
+              message: t(
+                'Account holder, account number and IFSC are needed if you add a bank account. A cheque image is optional.',
+                'बैंक खाता जोड़ने पर खाताधारक, खाता नंबर और IFSC आवश्यक हैं। चेक की तस्वीर वैकल्पिक है।',
+              ),
+            ),
+            const SizedBox(height: 16),
+            _field(t('Account holder', 'खाताधारक'), _holder),
+            _field(
+              t('Account number', 'खाता नंबर'),
+              _account,
+              keyboardType: TextInputType.number,
+            ),
+            _field('IFSC', _ifsc),
+            OutlinedButton.icon(
+              onPressed: _saving ? null : _pickCheque,
+              icon: const Icon(Icons.upload_file),
+              label: Text(
+                _chequeName ??
+                    (_chequePath != null
+                        ? t('Replace cheque image', 'चेक की तस्वीर बदलें')
+                        : t(
+                          'Upload cheque image (optional)',
+                          'चेक की तस्वीर अपलोड करें (वैकल्पिक)',
+                        )),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+      const SizedBox(height: 24),
+      SizedBox(
+        width: double.infinity,
+        child: PrimaryButton(
+          label:
+              _saving
+                  ? AppLocalizations.of(context)!.tpSavingEllipsis
+                  : AppLocalizations.of(context)!.tpSaveChanges,
+          onPressed: _saving || !_detailsLoaded ? null : _save,
+        ),
+      ),
+    ],
+  );
 
   Widget _accountCard({
     required String email,
@@ -307,14 +573,35 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
     required String status,
   }) {
     return _sectionCard(
-      title: 'Account overview',
-      subtitle: 'Quick reference for your account status and sign-in details.',
+      title: AppLocalizations.of(context)!.tpAccountOverview,
+      subtitle: AppLocalizations.of(context)!.tpAccountOverviewHint,
       child: Column(
         children: [
-          _metaRow('Email', email.isEmpty ? 'Not available' : email),
-          _metaRow('Role', role.isEmpty ? 'Unknown' : role),
-          _metaRow('Status', status.isEmpty ? 'Unknown' : _toTitleCase(status)),
-          _metaRow('Password', 'Managed from login credentials'),
+          _metaRow(
+            AppLocalizations.of(context)!.email,
+            email.isEmpty
+                ? AppLocalizations.of(context)!.tpNotAvailable
+                : email,
+          ),
+          _metaRow(
+            AppLocalizations.of(context)!.tpRole,
+            role.isEmpty ? AppLocalizations.of(context)!.tpUnknown : role,
+          ),
+          _metaRow(
+            AppLocalizations.of(context)!.tpStatus,
+            status.isEmpty
+                ? AppLocalizations.of(context)!.tpUnknown
+                : _toTitleCase(status),
+          ),
+          _metaRow(
+            t('Sign-in method', 'लॉगिन विधि'),
+            AuthService.instance.user?.phoneConfirmedAt != null
+                ? t('Verified phone and SMS code', 'सत्यापित फोन और SMS कोड')
+                : t(
+                  'Linked account credentials',
+                  'जुड़े खाते की लॉगिन जानकारी',
+                ),
+          ),
         ],
       ),
     );
@@ -322,14 +609,14 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
 
   Widget _fleetShortcutsCard() {
     return _sectionCard(
-      title: 'Fleet setup',
-      subtitle: 'Add vehicles and drivers separately for dispatch.',
+      title: AppLocalizations.of(context)!.tpFleetSetup,
+      subtitle: AppLocalizations.of(context)!.tpFleetSetupHint,
       child: Row(
         children: [
           Expanded(
             child: _miniShortcut(
               icon: Icons.local_shipping_outlined,
-              label: 'Vehicles',
+              label: AppLocalizations.of(context)!.tpVehicles,
               onTap: () => context.push('/vehicles'),
             ),
           ),
@@ -337,7 +624,7 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
           Expanded(
             child: _miniShortcut(
               icon: Icons.badge_outlined,
-              label: 'Drivers',
+              label: AppLocalizations.of(context)!.tpDrivers,
               onTap: () => context.push('/drivers'),
             ),
           ),
@@ -379,28 +666,28 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
 
   Widget _actionsCard({required bool compact}) {
     return _sectionCard(
-      title: 'Actions',
-      subtitle: 'Common account options and quick maintenance tasks.',
+      title: AppLocalizations.of(context)!.tpActions,
+      subtitle: AppLocalizations.of(context)!.tpActionsHint,
       child: Column(
         children: [
           _actionTile(
             icon: Icons.refresh,
-            label: 'Reload profile data',
-            subtitle: 'Fetch latest account information',
+            label: AppLocalizations.of(context)!.tpReloadProfile,
+            subtitle: AppLocalizations.of(context)!.tpFetchLatest,
             onTap: _load,
           ),
           const SizedBox(height: 8),
           _actionTile(
             icon: Icons.privacy_tip_outlined,
-            label: 'Account & privacy',
-            subtitle: 'Privacy policy and account deletion',
+            label: AppLocalizations.of(context)!.accountPrivacy,
+            subtitle: AppLocalizations.of(context)!.tpPrivacyDeletion,
             onTap: () => context.push('/account/privacy'),
           ),
           const SizedBox(height: 8),
           _actionTile(
             icon: Icons.logout,
-            label: 'Logout',
-            subtitle: 'Sign out and return to welcome screen',
+            label: AppLocalizations.of(context)!.logout,
+            subtitle: AppLocalizations.of(context)!.tpSignOutHint,
             onTap: () async {
               await AuthService.instance.signOut();
               if (!mounted) return;
@@ -416,19 +703,19 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
                 color: const Color(0xFFF8F5FB),
                 borderRadius: BorderRadius.circular(18),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.verified_user_outlined,
                     size: 20,
                     color: Color(0xFF625B71),
                   ),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Profile changes reflect across the mobile app and web dashboard.',
-                      style: TextStyle(
-                        fontSize: 12,
+                      AppLocalizations.of(context)!.tpProfileSyncHint,
+                      style: const TextStyle(
+                        fontSize: 14,
                         height: 1.4,
                         color: Color(0xFF6B6176),
                       ),
@@ -447,47 +734,8 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
     required String title,
     required String subtitle,
     required Widget child,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0xFFE9E1F1)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x12000000),
-            blurRadius: 18,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFF1D1B20),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            subtitle,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Color(0xFF6B6176),
-              height: 1.4,
-            ),
-          ),
-          const SizedBox(height: 18),
-          child,
-        ],
-      ),
-    );
-  }
+  }) =>
+      WorkspaceSection(title: title, description: subtitle, children: [child]);
 
   Widget _field(
     String label,
@@ -503,7 +751,7 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
           Text(
             label,
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: 14,
               fontWeight: FontWeight.w600,
               color: Color(0xFF49454F),
             ),
@@ -516,18 +764,6 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
             keyboardType: keyboardType,
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _subheading(String label) {
-    return Text(
-      label,
-      style: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
-        color: Color(0xFF49454F),
-        letterSpacing: 0.2,
       ),
     );
   }
@@ -548,7 +784,7 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
             child: Text(
               label,
               style: const TextStyle(
-                fontSize: 12,
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: Color(0xFF6B6176),
               ),
@@ -558,7 +794,7 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
             child: Text(
               value,
               style: const TextStyle(
-                fontSize: 13,
+                fontSize: 15,
                 fontWeight: FontWeight.w500,
                 color: Color(0xFF1D1B20),
               ),
@@ -612,7 +848,7 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
                   Text(
                     subtitle,
                     style: const TextStyle(
-                      fontSize: 12,
+                      fontSize: 14,
                       color: Color(0xFF6B6176),
                     ),
                   ),
@@ -626,175 +862,26 @@ class _TransporterProfileScreenState extends State<TransporterProfileScreen> {
     );
   }
 
-  Widget _hero(
-    BuildContext context, {
-    required bool compact,
-    required String name,
-    required String biz,
-    required String email,
-    required String status,
-    required String role,
-  }) {
-    final heroHeight = compact ? 224.0 : 250.0;
-    return Stack(
-      children: [
-        Container(
-          height: heroHeight,
-          decoration: const BoxDecoration(
-            color: Color(0xFFECE6F0),
-            borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
-          ),
-        ),
-        Positioned.fill(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(32),
-              ),
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFFCBC3D2),
-                  Colors.black.withValues(alpha: 0.45),
-                ],
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          top: 8,
-          left: 8,
-          child: SafeArea(
-            child: IconButton(
-              style: IconButton.styleFrom(
-                backgroundColor: const Color(0xFFE8DEF8),
-              ),
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => context.pop(),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 24,
-          right: 24,
-          bottom: compact ? 16 : 18,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: compact ? 60 : 68,
-                height: compact ? 60 : 68,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.24),
-                  ),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  _avatarLetters(name, biz, email),
-                  style: TextStyle(
-                    fontSize: compact ? 20 : 22,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                name,
-                style: TextStyle(
-                  fontSize: compact ? 24 : 30,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (biz.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(
-                  biz,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFFF5EFF7),
-                  ),
-                ),
-              ],
-              if (email.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text(
-                  email,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Color(0xFFF5EFF7),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  if (role.isNotEmpty) _chip(role, solid: true),
-                  if (status.isNotEmpty) _chip(_toTitleCase(status)),
-                  _chip('Editable profile'),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _chip(String label, {bool solid = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: solid ? Colors.white : Colors.white.withValues(alpha: 0.18),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          color: solid ? const Color(0xFF1D1B20) : Colors.white,
-          letterSpacing: 0.3,
-        ),
-      ),
-    );
-  }
-
   String _toTitleCase(String value) {
     if (value.isEmpty) return value;
+    final l = AppLocalizations.of(context)!;
+    switch (value.toLowerCase()) {
+      case 'active':
+        return l.tpActive;
+      case 'approved':
+        return l.tpApproved;
+      case 'pending':
+        return l.tpPending;
+      case 'rejected':
+        return l.tpRejected;
+      case 'suspended':
+        return l.tpSuspended;
+    }
     return value
         .replaceAll('_', ' ')
         .split(' ')
         .where((part) => part.isNotEmpty)
         .map((part) => '${part[0].toUpperCase()}${part.substring(1)}')
         .join(' ');
-  }
-
-  String _avatarLetters(String name, String biz, String email) {
-    final source = [
-      name,
-      biz,
-      email,
-    ].firstWhere((value) => value.trim().isNotEmpty, orElse: () => 'A');
-    final parts =
-        source
-            .replaceAll('@', ' ')
-            .replaceAll('.', ' ')
-            .split(' ')
-            .where((part) => part.trim().isNotEmpty)
-            .toList();
-    if (parts.length >= 2) {
-      return '${parts.first[0]}${parts[1][0]}'.toUpperCase();
-    }
-    return source.substring(0, 1).toUpperCase();
   }
 }

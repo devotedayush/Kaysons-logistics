@@ -6,6 +6,24 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:kaysons_logistics/features/admin/admin_ai_service.dart';
 
 void main() {
+  test('keeps Hindi answers in Devanagari', () {
+    final response = ClawdResponse.fromData({
+      'answer': 'तीन POD लंबित हैं। भुगतान से पहले दस्तावेज़ जाँचें।',
+    });
+    expect(response.answer, contains('तीन POD लंबित हैं'));
+  });
+
+  test(
+    'rejects an empty or error response instead of showing a blank bubble',
+    () {
+      expect(() => ClawdResponse.fromData({'answer': '   '}), throwsStateError);
+      expect(
+        () => ClawdResponse.fromData({'error': 'Model unavailable'}),
+        throwsStateError,
+      );
+    },
+  );
+
   test('repairs compact AI markdown tables before rendering', () {
     final response = ClawdResponse.fromData({
       'answer':

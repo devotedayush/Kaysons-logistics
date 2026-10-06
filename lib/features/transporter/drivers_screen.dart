@@ -1,10 +1,14 @@
+import '../../core/widgets/workspace_widgets.dart';
+import 'widgets/transporter_workspace.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/auth_service.dart';
 import '../../core/supabase/supabase_bootstrap.dart';
+import '../../core/utils/workflow_formatters.dart';
 import '../../core/widgets/pill_text_field.dart';
 import '../../core/widgets/primary_button.dart';
+import '../../l10n/app_localizations.dart';
 
 const _surface = Color(0xFFF8F5FB);
 const _onSurface = Color(0xFF1D1B20);
@@ -12,7 +16,8 @@ const _onSurfaceVariant = Color(0xFF49454F);
 const _outline = Color(0xFFCAC4D0);
 
 class DriversScreen extends StatefulWidget {
-  const DriversScreen({super.key});
+  const DriversScreen({super.key, this.loadData});
+  final Future<List<Map<String, dynamic>>> Function()? loadData;
 
   @override
   State<DriversScreen> createState() => _DriversScreenState();
@@ -21,6 +26,8 @@ class DriversScreen extends StatefulWidget {
 class _DriversScreenState extends State<DriversScreen> {
   List<Map<String, dynamic>> _drivers = [];
   bool _loading = true;
+  String _query = '';
+  bool _failed = false;
 
   @override
   void initState() {
@@ -29,9 +36,39 @@ class _DriversScreenState extends State<DriversScreen> {
   }
 
   Future<void> _load() async {
+    if (widget.loadData != null) {
+      setState(() {
+        _loading = true;
+        _failed = false;
+      });
+      try {
+        final rows = await widget.loadData!();
+        if (mounted) {
+          setState(() {
+            _drivers = rows;
+            _loading = false;
+          });
+        }
+      } catch (_) {
+        if (mounted) {
+          setState(() {
+            _loading = false;
+            _failed = true;
+          });
+        }
+      }
+      return;
+    }
+
     final uid = AuthService.instance.user?.id;
-    if (uid == null) return;
-    setState(() => _loading = true);
+    if (uid == null) {
+      if (mounted) setState(() => _loading = false);
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
     try {
       final rows = await supabase
           .from('drivers')
@@ -45,10 +82,17 @@ class _DriversScreenState extends State<DriversScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      setState(() => _loading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not load drivers: $e')));
+      setState(() {
+        _loading = false;
+        _failed = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppLocalizations.of(context)!.tpCouldNotLoadDrivers('$e'),
+          ),
+        ),
+      );
     }
   }
 
@@ -70,18 +114,20 @@ class _DriversScreenState extends State<DriversScreen> {
       context: context,
       builder:
           (context) => AlertDialog(
-            title: const Text('Delete driver?'),
+            title: Text(AppLocalizations.of(context)!.tpDeleteDriverQuestion),
             content: Text(
-              '${driver['name'] ?? 'This driver'} will be removed.',
+              AppLocalizations.of(context)!.tpDriverWillBeRemoved(
+                '${driver['name'] ?? AppLocalizations.of(context)!.tpThisDriver}',
+              ),
             ),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
+                child: Text(AppLocalizations.of(context)!.tpCancel),
               ),
               TextButton(
                 onPressed: () => Navigator.pop(context, true),
-                child: const Text('Delete'),
+                child: Text(AppLocalizations.of(context)!.tpDelete),
               ),
             ],
           ),
@@ -93,70 +139,129 @@ class _DriversScreenState extends State<DriversScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
+    final visible =
+        _drivers
+            .where(
+              (row) => '${row['name'] ?? ''} ${row['phone'] ?? ''}'
+                  .toLowerCase()
+                  .contains(_query.toLowerCase()),
+            )
+            .toList();
     return Scaffold(
       backgroundColor: _surface,
       body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 16, 6),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () => context.pop(),
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: () => context.pop(),
+                  icon: const Icon(Icons.arrow_back),
+                  label: Text(tpText(context, 'Back', 'वापस')),
+                ),
+              ),
+              WorkspaceHeader(
+                title: l.tpDrivers,
+                description: tpText(
+                  context,
+                  'Your drivers, easy to find. Add or update details before assigning a trip.',
+                  'अपने ड्राइवर आसानी से खोजें। यात्रा से पहले जानकारी जोड़ें या बदलें।',
+                ),
+                icon: Icons.badge_outlined,
+                action: FilledButton.icon(
+                  style: FilledButton.styleFrom(minimumSize: const Size(0, 50)),
+                  onPressed: () => _openSheet(),
+                  icon: const Icon(Icons.add),
+                  label: Text(l.tpAddDriver),
+                ),
+              ),
+              const SizedBox(height: 20),
+              TransporterSearch(
+                label: tpText(
+                  context,
+                  'Search drivers by name or phone',
+                  'नाम या फोन से ड्राइवर खोजें',
+                ),
+                onChanged: (v) => setState(() => _query = v),
+              ),
+              const SizedBox(height: 20),
+              if (_loading)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(36),
+                    child: CircularProgressIndicator(),
                   ),
-                  const Expanded(
+                )
+              else if (_failed)
+                WorkspaceEmptyState(
+                  title: tpText(
+                    context,
+                    'Could not load drivers',
+                    'जानकारी लोड नहीं हुई',
+                  ),
+                  message: tpText(
+                    context,
+                    'Check your connection and try again.',
+                    'इंटरनेट जाँचकर फिर प्रयास करें।',
+                  ),
+                  icon: Icons.wifi_off,
+                  action: FilledButton(
+                    onPressed: _load,
                     child: Text(
-                      'Drivers',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w500,
-                        color: _onSurface,
-                      ),
+                      tpText(context, 'Try again', 'फिर प्रयास करें'),
                     ),
                   ),
-                  IconButton.filledTonal(
-                    tooltip: 'Add driver',
-                    onPressed: () => _openSheet(),
-                    icon: const Icon(Icons.add),
+                )
+              else if (_drivers.isEmpty)
+                _EmptyDrivers(onAdd: () => _openSheet())
+              else if (visible.isEmpty)
+                WorkspaceEmptyState(
+                  title: tpText(
+                    context,
+                    'No matching drivers',
+                    'कोई मेल नहीं मिला',
                   ),
-                ],
-              ),
-            ),
-            Expanded(
-              child:
-                  _loading
-                      ? const Center(child: CircularProgressIndicator())
-                      : _drivers.isEmpty
-                      ? _EmptyDrivers(onAdd: () => _openSheet())
-                      : RefreshIndicator(
-                        onRefresh: _load,
-                        child: ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-                          itemCount: _drivers.length,
-                          separatorBuilder:
-                              (_, __) => const SizedBox(height: 12),
-                          itemBuilder:
-                              (_, i) => _DriverCard(
-                                driver: _drivers[i],
-                                onEdit: () => _openSheet(_drivers[i]),
-                                onDelete: () => _delete(_drivers[i]),
-                              ),
-                        ),
+                  message: tpText(
+                    context,
+                    'Try another name or number in the search above.',
+                    'ऊपर खोज में दूसरा नाम या नंबर भरें।',
+                  ),
+                  icon: Icons.search_off,
+                )
+              else ...[
+                SectionHeading(
+                  title: tpText(
+                    context,
+                    '${visible.length} drivers',
+                    '${visible.length} ड्राइवर',
+                  ),
+                  description: tpText(
+                    context,
+                    'Choose Edit to update details. Remove is in the more menu.',
+                    'जानकारी बदलने के लिए संपादित करें चुनें। हटाना अधिक मेनू में है।',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TransporterCardGrid(
+                  children: [
+                    for (final row in visible)
+                      _DriverCard(
+                        driver: row,
+                        onEdit: () => _openSheet(row),
+                        onDelete: () => _delete(row),
                       ),
-            ),
-          ],
+                  ],
+                ),
+              ],
+              const SizedBox(height: 32),
+            ],
+          ),
         ),
       ),
-      floatingActionButton:
-          _drivers.isEmpty
-              ? null
-              : FloatingActionButton.extended(
-                onPressed: () => _openSheet(),
-                icon: const Icon(Icons.add),
-                label: const Text('Add driver'),
-              ),
     );
   }
 }
@@ -180,6 +285,7 @@ class _DriverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -204,7 +310,7 @@ class _DriverCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _value('name', 'Driver name missing'),
+                  _value('name', l.tpDriverNameMissing),
                   style: const TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
@@ -212,7 +318,7 @@ class _DriverCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${_value('phone')} · Licence ${_value('licence_number')}',
+                  l.tpPhoneLicence(_value('phone'), _value('licence_number')),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: _onSurfaceVariant),
@@ -220,16 +326,27 @@ class _DriverCard extends StatelessWidget {
               ],
             ),
           ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'edit') onEdit();
-              if (value == 'delete') onDelete();
-            },
-            itemBuilder:
-                (context) => const [
-                  PopupMenuItem(value: 'edit', child: Text('Edit')),
-                  PopupMenuItem(value: 'delete', child: Text('Delete')),
-                ],
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton.icon(
+                style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+                onPressed: onEdit,
+                icon: const Icon(Icons.edit_outlined),
+                label: Text(l.tpEdit),
+              ),
+              PopupMenuButton<String>(
+                onSelected: (value) {
+                  if (value == 'edit') onEdit();
+                  if (value == 'delete') onDelete();
+                },
+                itemBuilder:
+                    (context) => [
+                      PopupMenuItem(value: 'edit', child: Text(l.tpEdit)),
+                      PopupMenuItem(value: 'delete', child: Text(l.tpDelete)),
+                    ],
+              ),
+            ],
           ),
         ],
       ),
@@ -243,6 +360,7 @@ class _EmptyDrivers extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
@@ -255,24 +373,24 @@ class _EmptyDrivers extends StatelessWidget {
               color: Color(0xFF6750A4),
             ),
             const SizedBox(height: 14),
-            const Text(
-              'No drivers added yet',
-              style: TextStyle(
+            Text(
+              l.tpNoDrivers,
+              style: const TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
                 color: _onSurface,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Add drivers separately, then choose one during dispatch.',
+            Text(
+              l.tpAddDriversHint,
               textAlign: TextAlign.center,
-              style: TextStyle(color: _onSurfaceVariant),
+              style: const TextStyle(color: _onSurfaceVariant),
             ),
             const SizedBox(height: 20),
             SizedBox(
               width: 220,
-              child: PrimaryButton(label: 'Add driver', onPressed: onAdd),
+              child: PrimaryButton(label: l.tpAddDriver, onPressed: onAdd),
             ),
           ],
         ),
@@ -294,6 +412,7 @@ class _DriverFormSheetState extends State<_DriverFormSheet> {
   late final TextEditingController _phone;
   late final TextEditingController _licence;
   bool _saving = false;
+  String? _error;
 
   @override
   void initState() {
@@ -316,19 +435,37 @@ class _DriverFormSheetState extends State<_DriverFormSheet> {
 
   Future<void> _save() async {
     if (_saving) return;
+    final l = AppLocalizations.of(context)!;
     final uid = AuthService.instance.user?.id;
-    if (uid == null) return;
-    if (_name.text.trim().isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Enter driver name')));
+    if (uid == null) {
+      setState(
+        () =>
+            _error = tpText(
+              context,
+              'Your session has expired. Sign in again to save the driver.',
+              'आपका सत्र समाप्त हो गया है। ड्राइवर सहेजने के लिए फिर लॉग इन करें।',
+            ),
+      );
       return;
     }
-    setState(() => _saving = true);
+    if (_name.text.trim().isEmpty) {
+      setState(() => _error = l.tpEnterDriverName);
+      return;
+    }
+    final phone = _phone.text.trim();
+    if (phone.isNotEmpty && !isValidIndianPhone(phone)) {
+      setState(() => _error = l.tpEnterValidPhone);
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     final payload = {
       'transporter_id': uid,
       'name': _name.text.trim(),
-      'phone': _phone.text.trim().isEmpty ? null : _phone.text.trim(),
+      'phone': phone.isEmpty ? null : normalizeIndianPhone(phone),
       'licence_number':
           _licence.text.trim().isEmpty ? null : _licence.text.trim(),
       'status': 'active',
@@ -346,9 +483,7 @@ class _DriverFormSheetState extends State<_DriverFormSheet> {
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Save failed: $e')));
+      setState(() => _error = l.tpSaveFailed('$e'));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -356,6 +491,7 @@ class _DriverFormSheetState extends State<_DriverFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context)!;
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     return SafeArea(
       child: Center(
@@ -372,7 +508,9 @@ class _DriverFormSheetState extends State<_DriverFormSheet> {
                     children: [
                       Expanded(
                         child: Text(
-                          widget.driver == null ? 'Add driver' : 'Edit driver',
+                          widget.driver == null
+                              ? l.tpAddDriver
+                              : l.tpEditDriver,
                           style: const TextStyle(
                             fontSize: 22,
                             fontWeight: FontWeight.w600,
@@ -387,8 +525,21 @@ class _DriverFormSheetState extends State<_DriverFormSheet> {
                     ],
                   ),
                   const SizedBox(height: 12),
+                  GuidanceCard(
+                    title: tpText(
+                      context,
+                      'Start with the essential details',
+                      'पहले ज़रूरी जानकारी भरें',
+                    ),
+                    message: tpText(
+                      context,
+                      'Review the details before saving. You can edit them later.',
+                      'सहेजने से पहले जानकारी जाँचें। बाद में इसे बदल सकते हैं।',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   _Field(
-                    label: 'Driver name',
+                    label: l.tpDriverName,
                     child: PillTextField(
                       controller: _name,
                       hint: 'Ramdeen Sharma',
@@ -396,7 +547,7 @@ class _DriverFormSheetState extends State<_DriverFormSheet> {
                     ),
                   ),
                   _Field(
-                    label: 'Driver phone',
+                    label: l.tpDriverPhone,
                     child: PillTextField(
                       controller: _phone,
                       hint: '9876543210',
@@ -404,17 +555,45 @@ class _DriverFormSheetState extends State<_DriverFormSheet> {
                       textAlign: TextAlign.start,
                     ),
                   ),
-                  _Field(
-                    label: 'Licence number',
-                    child: PillTextField(
-                      controller: _licence,
-                      hint: 'DL-0420260011223',
-                      textAlign: TextAlign.start,
+                  Material(
+                    color: Colors.transparent,
+                    child: ExpansionTile(
+                      tilePadding: EdgeInsets.zero,
+                      title: Text(
+                        tpText(
+                          context,
+                          'Licence details (optional)',
+                          'लाइसेंस की जानकारी (वैकल्पिक)',
+                        ),
+                      ),
+                      children: [
+                        _Field(
+                          label: l.tpLicenceNumber,
+                          child: PillTextField(
+                            controller: _licence,
+                            hint: 'DL-0420260011223',
+                            textAlign: TextAlign.start,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 10),
+                  if (_error != null) ...[
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(
+                        _error!,
+                        key: const ValueKey('driver-save-error'),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   PrimaryButton(
-                    label: _saving ? 'Saving...' : 'Save driver',
+                    label: _saving ? l.tpSaving : l.tpSaveDriver,
                     onPressed: _saving ? null : _save,
                   ),
                 ],

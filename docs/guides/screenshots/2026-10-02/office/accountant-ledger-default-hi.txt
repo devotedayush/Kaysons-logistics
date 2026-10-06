@@ -1,0 +1,62 @@
+- document:
+  - img "Kaysons logo"
+  - text: लेखाकार KAYSONS खाता बही, रिपोर्ट और Clawd विश्लेषण देखें।
+  - group:
+    - button "खाता बही" [ref=e1]
+    - button "विश्लेषण" [ref=e2]
+    - button "Clawd" [ref=e3]
+  - button "प्रोफ़ाइल प्रोफ़ाइल" [ref=e4]
+  - group "भाड़ा लेजर इनवॉइस पंक्तियाँ 0 चक्कर 4 वाहन 1 केस 205 MT 243 भाड़ा ₹25466 लंबित POD 3 सारांश रिपोर्ट ट्रांसपोर्टर अनुसार सारांश ट्रांसपोर्टर अनुसार चक्कर, अलग वाहन, भाड़ा दक्षता और POD स्थिति।":
+    - button "रिपोर्ट निर्यात करें" [ref=e5]
+    - button "CSV अपलोड करें" [ref=e6]
+    - button "रीफ़्रेश करें" [ref=e7]
+    - button "एंट्री" [ref=e8]
+    - button "महीना" [ref=e9]
+    - button "कंपनी सभी" [ref=e10]
+    - button "ट्रांसपोर्टर सभी" [ref=e11]
+    - button "गंतव्य / स्थान सभी" [ref=e12]
+    - textbox "इनवॉइस नंबर" [ref=e13]
+    - button "फ़िल्टर" [ref=e14]
+    - button "फ़िल्टर साफ़ करें" [ref=e15]
+    - button "सारांश" [ref=e16]
+    - button "पंक्तियाँ" [ref=e17]
+    - button "ट्रांसपोर्टर" [ref=e18]
+    - button "स्थान" [ref=e19]
+    - button "मार्ग" [ref=e20]
+    - button "वाहन" [ref=e21]
+    - group:
+      - group:
+        - table:
+          - row "ट्रांसपोर्टर चक्कर वाहन केस MT भाड़ा भाड़ा/MT भाड़ा/केस लंबित POD प्राप्त POD":
+            - columnheader "ट्रांसपोर्टर" [ref=e22]
+            - columnheader "चक्कर" [ref=e23]
+            - columnheader "वाहन" [ref=e24]
+            - columnheader "केस" [ref=e25]
+            - columnheader "MT" [ref=e26]
+            - columnheader "भाड़ा" [ref=e27]
+            - columnheader "भाड़ा/MT" [ref=e28]
+            - columnheader "भाड़ा/केस" [ref=e29]
+            - columnheader "लंबित POD" [ref=e30]
+            - columnheader "प्राप्त POD" [ref=e31]
+          - row "Jagdamba Enterprises 2 1 147 119 ₹20000 ₹168 ₹136 1 1":
+            - cell "Jagdamba Enterprises" [ref=e32]
+            - cell "2" [ref=e33]
+            - cell "1" [ref=e34]
+            - cell "147" [ref=e35]
+            - cell "119" [ref=e36]
+            - cell "₹20000" [ref=e37]
+            - cell "₹168" [ref=e38]
+            - cell "₹136" [ref=e39]
+            - cell "1" [ref=e40] [nth=1]
+            - cell "1" [ref=e41] [nth=2]
+          - row "Unassigned 2 0 58 124 ₹5466 ₹44 ₹94 2 0":
+            - cell "Unassigned" [ref=e42]
+            - cell "2" [ref=e43] [nth=1]
+            - cell "0" [ref=e44]
+            - cell "58" [ref=e45]
+            - cell "124" [ref=e46]
+            - cell "₹5466" [ref=e47]
+            - cell "₹44" [ref=e48]
+            - cell "₹94" [ref=e49]
+            - cell "2" [ref=e50] [nth=2]
+            - cell "0" [ref=e51] [nth=1]

@@ -1,16 +1,27 @@
+import 'widgets/operational_workspace.dart';
+import '../../core/widgets/workspace_widgets.dart';
+import '../../l10n/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../core/supabase/freights_repo.dart';
 import '../../core/supabase/supabase_bootstrap.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/bid_window.dart';
+import '../../core/utils/workflow_formatters.dart';
+import '../../core/widgets/bid_window_countdown.dart';
 import '../../core/widgets/primary_button.dart';
 import '../../core/widgets/route_timeline.dart';
 
 class BidManagementScreen extends StatefulWidget {
-  const BidManagementScreen({super.key, required this.bidId});
+  const BidManagementScreen({
+    super.key,
+    required this.bidId,
+    this.adminMode = false,
+  });
 
   final String bidId;
+  final bool adminMode;
 
   @override
   State<BidManagementScreen> createState() => _BidManagementScreenState();
@@ -45,6 +56,9 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
     final alreadyAwarded = status != 'bidding';
     final routePoints =
         freight == null ? const <RoutePoint>[] : _routePointsFor(freight);
+    final opensAt = bidTimestamp(freight?['bid_opens_at']);
+    final closesAt = bidTimestamp(freight?['bid_closes_at']);
+    final closeAt = closesAt?.toLocal();
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -58,8 +72,11 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.edit_outlined),
-            tooltip: 'Edit stops / extend window',
-            onPressed: () => context.push('/lm/bid/${widget.bidId}/edit'),
+            tooltip: AppLocalizations.of(context)!.opsEditStopsWindow,
+            onPressed:
+                () => context.push(
+                  '${widget.adminMode ? '/admin' : '/lm'}/bid/${widget.bidId}/edit',
+                ),
           ),
         ],
       ),
@@ -69,13 +86,27 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
               : Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 980),
-                  child: ListView(
+                  child: OperationalListView(
                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
                     children: [
+                      WorkspaceHeader(
+                        title: operationalCopy(
+                          context,
+                          'Compare transporter quotes',
+                          'ट्रांसपोर्टर बोलियों की तुलना करें',
+                        ),
+                        description: operationalCopy(
+                          context,
+                          'Review the route and prices. Select one transporter, then confirm the award.',
+                          'मार्ग और कीमतें जाँचें। एक ट्रांसपोर्टर चुनें और फिर पुष्टि करें।',
+                        ),
+                        icon: Icons.compare_arrows,
+                      ),
+                      const SizedBox(height: 16),
                       Container(
                         padding: const EdgeInsets.all(22),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8F5FB),
+                          color: const Color(0xFFF8F9FC),
                           border: Border.all(color: const Color(0xFFE1DAE8)),
                           borderRadius: BorderRadius.circular(20),
                         ),
@@ -85,13 +116,45 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
                             Text(
                               route,
                               style: const TextStyle(
-                                fontSize: 34,
+                                fontSize: 26,
                                 height: 1.15,
                                 fontWeight: FontWeight.w700,
                                 color: Color(0xFF1D1B20),
                               ),
                             ),
                             const SizedBox(height: 10),
+                            if (status == 'bidding') ...[
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF3F5FA),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.schedule,
+                                      color: Color(0xFF4F378A),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: BidWindowCountdown(
+                                        status: status.toString(),
+                                        opensAt: opensAt,
+                                        closesAt: closesAt,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w700,
+                                          color: Color(0xFF4F378A),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                            ],
                             Wrap(
                               spacing: 10,
                               runSpacing: 10,
@@ -102,17 +165,18 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
                                 ),
                                 _InfoPill(
                                   icon: Icons.scale_outlined,
-                                  label: '${freight['weight_kg'] ?? 0} Ton',
+                                  label:
+                                      '${formatMetricTons(freight['weight_kg'])} MT',
                                 ),
                                 _InfoPill(
                                   icon: Icons.circle,
                                   label: status.toString().toUpperCase(),
                                 ),
-                                if (freight['bid_closes_at'] != null)
+                                if (closeAt != null)
                                   _InfoPill(
                                     icon: Icons.schedule,
                                     label:
-                                        'Closes ${DateTime.tryParse(freight['bid_closes_at'].toString())?.toLocal().toString().substring(0, 16) ?? ''}',
+                                        'Closes ${closeAt.day.toString().padLeft(2, '0')}/${closeAt.month.toString().padLeft(2, '0')}/${closeAt.year} · ${format12HourTime(closeAt)}',
                                   ),
                               ],
                             ),
@@ -122,8 +186,21 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
                         ),
                       ),
                       const SizedBox(height: 22),
-                      const Text(
-                        'Bidders (live)',
+                      OperationalStep(
+                        '1',
+                        operationalCopy(
+                          context,
+                          'Choose a quote',
+                          'बोली चुनें',
+                        ),
+                        operationalCopy(
+                          context,
+                          'Compare the quoted freight and transporter details before choosing.',
+                          'चुनने से पहले किराया और ट्रांसपोर्टर विवरण की तुलना करें।',
+                        ),
+                      ),
+                      Text(
+                        AppLocalizations.of(context)!.opsBiddersLive,
                         style: TextStyle(
                           fontSize: 28,
                           fontWeight: FontWeight.w700,
@@ -153,8 +230,8 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
                                 ),
                                 borderRadius: BorderRadius.circular(16),
                               ),
-                              child: const Text(
-                                'No bids received yet.',
+                              child: Text(
+                                AppLocalizations.of(context)!.opsNoBidsReceived,
                                 style: TextStyle(
                                   fontSize: 18,
                                   color: Color(0xFF49454F),
@@ -196,22 +273,42 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
                                 freightId: widget.bidId,
                                 winnerProfileId: _selectedTransporterId!,
                               );
-                              if (!context.mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Winner confirmed. Transporter will now dispatch.',
-                                  ),
-                                ),
-                              );
-                              context.pop();
                             } catch (e) {
                               if (!context.mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(content: Text('Award failed: $e')),
                               );
-                            } finally {
                               if (mounted) setState(() => _awarding = false);
+                              return;
+                            }
+                            if (!context.mounted) return;
+                            setState(() => _awarding = false);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  AppLocalizations.of(
+                                    context,
+                                  )!.opsWinnerConfirmed,
+                                ),
+                              ),
+                            );
+                            // A direct URL can render this page without a
+                            // navigator entry. Treat navigation separately so
+                            // a successful award is never reported as failed.
+                            try {
+                              if (context.canPop()) {
+                                context.pop();
+                              } else {
+                                context.go(
+                                  widget.adminMode ? '/admin/bids' : '/lm/bids',
+                                );
+                              }
+                            } catch (_) {
+                              if (context.mounted) {
+                                context.go(
+                                  widget.adminMode ? '/admin/bids' : '/lm/bids',
+                                );
+                              }
                             }
                           },
                         ),
@@ -222,24 +319,54 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
                             color: const Color(0xFFE7F6EC),
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          child: Row(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  'This bid is $status.',
-                                  style: const TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                              Text(
+                                'This bid is $status.',
+                                style: const TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              TextButton.icon(
-                                onPressed:
-                                    () => context.push(
-                                      '/lm/track/${widget.bidId}',
+                              const SizedBox(height: 6),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  TextButton.icon(
+                                    onPressed:
+                                        () => context.push(
+                                          '${widget.adminMode ? '/admin' : '/lm'}/track/${widget.bidId}',
+                                        ),
+                                    icon: const Icon(
+                                      Icons.local_shipping_outlined,
                                     ),
-                                icon: const Icon(Icons.local_shipping_outlined),
-                                label: const Text('Track'),
+                                    label: Text(
+                                      AppLocalizations.of(context)!.opsTrack,
+                                    ),
+                                  ),
+                                  if (const {
+                                    'awarded',
+                                    'dispatched',
+                                    'locked',
+                                    'completed',
+                                  }.contains(status))
+                                    TextButton.icon(
+                                      onPressed:
+                                          () => context.push(
+                                            '${widget.adminMode ? '/admin' : '/lm'}/bid/${widget.bidId}/invoice',
+                                          ),
+                                      icon: const Icon(
+                                        Icons.receipt_long_outlined,
+                                      ),
+                                      label: Text(
+                                        AppLocalizations.of(
+                                          context,
+                                        )!.opsLockInvoices,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ],
                           ),
@@ -321,7 +448,7 @@ class _BidManagementScreenState extends State<BidManagementScreen> {
     final weightText = (weight ?? '').toString();
     final parts = [
       if (caseText.isNotEmpty && caseText != 'null') '$caseText Cases',
-      if (weightText.isNotEmpty && weightText != 'null') '$weightText Ton',
+      if (weightText.isNotEmpty && weightText != 'null') '$weightText MT',
     ];
     return parts.isEmpty ? null : parts.join(' · ');
   }
@@ -438,13 +565,26 @@ class _AwardPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          OperationalStep(
+            '2',
+            operationalCopy(
+              context,
+              'Confirm assignment',
+              'सौंपने की पुष्टि करें',
+            ),
+            operationalCopy(
+              context,
+              'This transporter will arrange the truck and delivery updates.',
+              'यह ट्रांसपोर्टर ट्रक और डिलीवरी अपडेट की व्यवस्था करेगा।',
+            ),
+          ),
           Text(
             'Award to ${selectedLabel ?? "this transporter"}?',
             style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'The transporter will fill in vehicle, driver and pickup details themselves from their Fleet tab.',
+          Text(
+            AppLocalizations.of(context)!.opsTransporterFillDetails,
             style: TextStyle(fontSize: 16, color: Color(0xFF49454F)),
           ),
           const SizedBox(height: 14),

@@ -1,0 +1,51 @@
+- document:
+  - group "खारिज करें":
+    - dialog:
+      - button [ref=e1]
+      - group:
+        - textbox "कंपनी *" [ref=e2]
+        - textbox "पार्टी" [ref=e3]
+        - textbox "आरंभ स्थान" [ref=e4]
+        - textbox "शाखा" [ref=e5]
+        - textbox "वाहन" [ref=e6]
+        - textbox "वाहन प्रकार" [ref=e7]
+        - textbox "डिस्पैच GR/बिल्टी" [ref=e8]
+        - button "वाहन क्षमता Up to 1 MT" [ref=e9]
+        - button "ट्रांसपोर्टर" [ref=e10]
+        - button "पावती की स्थिति लंबित" [ref=e11]
+        - textbox "POD प्राप्त yyyy-mm-dd" [ref=e12]
+        - textbox "POD टिप्पणी" [ref=e13]
+        - button "POD फ़ाइल" [ref=e14]
+        - group "इनवॉइस पंक्तियाँ":
+          - button "जोड़ें" [ref=e15]
+        - textbox "इनवॉइस" [ref=e16]
+        - textbox "पार्टी" [ref=e17] [nth=1]
+        - textbox "ई-वे बिल" [ref=e18]
+        - button "एक और ई-वे बिल जोड़ें" [ref=e19]
+        - textbox "DEL संदर्भ" [ref=e20]
+        - textbox "LR/GR" [ref=e21]
+        - button "एक और GR / बिल्टी जोड़ें" [ref=e22]
+        - textbox "शहर *" [ref=e23]
+        - textbox "बिल तारीख yyyy-mm-dd" [ref=e24]
+        - textbox "डिस्पैच तारीख yyyy-mm-dd" [ref=e25]
+        - textbox "केस" [ref=e26]
+        - textbox "मेट्रिक MT" [ref=e27]
+        - textbox "भाड़ा हिस्सा" [ref=e28]
+        - button "इनवॉइस हटाएँ" [ref=e29] [disabled]
+        - group "शुल्क":
+          - button "जोड़ें" [ref=e30] [nth=1]
+        - button "प्रकार freight" [ref=e31]
+        - textbox "राशि" [ref=e32]
+        - textbox "शुल्क टिप्पणी" [ref=e33]
+        - button "शुल्क हटाएँ" [ref=e34] [disabled]
+        - text: हिसाब निपटान
+        - textbox "पिछले महीने की बाकी राशि" [ref=e35]
+        - textbox "भुगतान" [ref=e36]
+        - textbox "हिसाब कटौती" [ref=e37]
+        - textbox "हिसाब टिप्पणी" [ref=e38]
+        - group "उत्पाद":
+          - button "जोड़ें" [ref=e39] [nth=2]
+        - text: करनाल शैली की रिपोर्ट के लिए वैकल्पिक उत्पाद/श्रेणी मात्रा।
+        - textbox "टिप्पणियाँ" [ref=e40]
+      - button "रद्द करें" [ref=e41]
+      - button "एंट्री सहेजें" [ref=e42]

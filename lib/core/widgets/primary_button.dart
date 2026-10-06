@@ -19,30 +19,42 @@ class PrimaryButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (bg, fg, border) = switch (style) {
-      PrimaryButtonStyle.filledBlack => (AppColors.black, Colors.white, null),
-      PrimaryButtonStyle.filledPurple => (AppColors.primary, Colors.white, null),
+      PrimaryButtonStyle.filledBlack => (AppColors.primary, Colors.white, null),
+      PrimaryButtonStyle.filledPurple => (AppColors.accent, Colors.white, null),
       PrimaryButtonStyle.outlined => (
-          Colors.white,
-          AppColors.black,
-          const BorderSide(color: Color(0x33000000)),
-        ),
+        Colors.white,
+        AppColors.primary,
+        const BorderSide(color: AppColors.outline),
+      ),
     };
 
-    return SizedBox(
-      height: 56,
-      child: Material(
-        color: bg,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(28),
-          side: border ?? BorderSide.none,
-        ),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(28),
-          onTap: onPressed,
-          child: Center(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: fg),
+    return Semantics(
+      button: true,
+      enabled: onPressed != null,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 54),
+        child: Material(
+          color: onPressed == null ? AppColors.outline : bg,
+          elevation:
+              onPressed == null || style == PrimaryButtonStyle.outlined ? 0 : 2,
+          shadowColor: AppColors.accent.withValues(alpha: 0.22),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: border ?? BorderSide.none,
+          ),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onPressed,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 15),
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: onPressed == null ? AppColors.onSurfaceVariant : fg,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
         ),
