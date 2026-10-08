@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FLUTTER_VERSION="${FLUTTER_VERSION:-3.29.0}"
-FLUTTER_HOME="$PWD/.vercel/flutter"
+FLUTTER_VERSION="${FLUTTER_VERSION:-3.44.0}"
+# Keep cached SDKs separate so changing the version cannot reuse an older SDK.
+FLUTTER_HOME="$PWD/.vercel/flutter-$FLUTTER_VERSION"
 
 if [ -z "${SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON_KEY:-}" ]; then
   echo "Missing SUPABASE_URL or SUPABASE_ANON_KEY in Vercel environment variables."

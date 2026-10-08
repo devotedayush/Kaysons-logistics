@@ -60,6 +60,7 @@ app.*.map.json
 # Local screenshots and smoke-test captures
 *.png
 !assets/branding/kaysons-app-icon.png
+!assets/branding/logistics-hero.png
 !docs/guides/screenshots/**/*.png
 !web/favicon.png
 !web/icons/*.png
