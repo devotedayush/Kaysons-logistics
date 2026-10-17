@@ -2516,4 +2516,86 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get uiReadOnlyList => 'केवल देखने के लिए सूची';
+
+  @override
+  String get appUpdates => 'ऐप अपडेट';
+
+  @override
+  String get updateReminders => 'अपडेट की याद दिलाएँ';
+
+  @override
+  String get updateRemindersHint =>
+      'Google Play पर आपके लिए नया संस्करण उपलब्ध होने पर याद दिलाएँ।';
+
+  @override
+  String get updatesPlayHint =>
+      'अपडेट Google Play से डाउनलोड होते हैं। आप काम जारी रख सकते हैं और बाद में ऐप दोबारा खोल सकते हैं।';
+
+  @override
+  String get checkForUpdates => 'अपडेट देखें';
+
+  @override
+  String get updatesChecking => 'Google Play पर जाँच हो रही है…';
+
+  @override
+  String get updatesCurrent => 'आपके लिए उपलब्ध नवीनतम संस्करण इंस्टॉल है।';
+
+  @override
+  String get updatesAvailable => 'नया संस्करण उपलब्ध है।';
+
+  @override
+  String get updatesDownloading =>
+      'अपडेट डाउनलोड हो रहा है। आप ऐप का उपयोग जारी रख सकते हैं।';
+
+  @override
+  String get updatesReady =>
+      'अपडेट तैयार है। इंस्टॉल करने के लिए अपनी सुविधा से ऐप दोबारा खोलें।';
+
+  @override
+  String get updatesUnavailable =>
+      'Google Play पर जाँच नहीं हो सकी। बाद में फिर कोशिश करें या स्टोर खोलें।';
+
+  @override
+  String get updateNow => 'अभी अपडेट करें';
+
+  @override
+  String get updateLater => 'बाद में';
+
+  @override
+  String get updateRestart => 'दोबारा खोलें और इंस्टॉल करें';
+
+  @override
+  String get updatePromptTitle => 'अपडेट उपलब्ध है';
+
+  @override
+  String get updatePromptBody =>
+      'Kaysons Logistics का नया संस्करण उपलब्ध है। अभी डाउनलोड करें, या किसी और दिन याद दिलाने के लिए बाद में चुनें।';
+
+  @override
+  String get updateRestartTitle => 'अपडेट इंस्टॉल करने के लिए तैयार है';
+
+  @override
+  String get updateRestartBody =>
+      'डाउनलोड पूरा हो गया है। अपडेट इंस्टॉल करने के लिए ऐप दोबारा खोलने से पहले अपना काम पूरा कर लें।';
+
+  @override
+  String get updatesOpenPlay => 'Google Play खोलें';
+
+  @override
+  String get updatesTestFlightTitle => 'TestFlight से अपने-आप अपडेट';
+
+  @override
+  String get updatesTestFlightBody =>
+      'TestFlight खोलें, Kaysons Logistics चुनें और App Information में Automatic Updates चालू करें। TestFlight नए संस्करणों की सूचना देगा और उन्हें अपने-आप इंस्टॉल कर सकता है। यह सेटिंग आपके iPhone पर नियंत्रित होती है।';
+
+  @override
+  String get updatesTestFlightHelp => 'TestFlight के निर्देश';
+
+  @override
+  String get updatesLinkFailed =>
+      'लिंक नहीं खुल सका। कृपया Google Play या TestFlight सीधे खोलें।';
+
+  @override
+  String get updatesUnsupported =>
+      'यह संस्करण आपके ब्राउज़र से अपडेट होता है। ऐप अपडेट की सेटिंग Android और iPhone ऐप में उपलब्ध है।';
 }

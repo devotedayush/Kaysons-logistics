@@ -2517,4 +2517,86 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get uiReadOnlyList => 'Read-only list';
+
+  @override
+  String get appUpdates => 'App updates';
+
+  @override
+  String get updateReminders => 'Update reminders';
+
+  @override
+  String get updateRemindersHint =>
+      'Show an optional reminder when a newer version is available to you on Google Play.';
+
+  @override
+  String get updatesPlayHint =>
+      'Updates download through Google Play. You can keep working and choose when to restart.';
+
+  @override
+  String get checkForUpdates => 'Check for updates';
+
+  @override
+  String get updatesChecking => 'Checking Google Play…';
+
+  @override
+  String get updatesCurrent => 'You have the latest version available to you.';
+
+  @override
+  String get updatesAvailable => 'A new version is available.';
+
+  @override
+  String get updatesDownloading =>
+      'Downloading update. You can keep using the app.';
+
+  @override
+  String get updatesReady =>
+      'Your update is ready. Restart when you are ready to install it.';
+
+  @override
+  String get updatesUnavailable =>
+      'Could not check Google Play. Try again later or open the store.';
+
+  @override
+  String get updateNow => 'Update now';
+
+  @override
+  String get updateLater => 'Later';
+
+  @override
+  String get updateRestart => 'Restart and install';
+
+  @override
+  String get updatePromptTitle => 'Update available';
+
+  @override
+  String get updatePromptBody =>
+      'A newer version of Kaysons Logistics is available. Download it now, or choose Later to be reminded another day.';
+
+  @override
+  String get updateRestartTitle => 'Update ready to install';
+
+  @override
+  String get updateRestartBody =>
+      'The download is complete. Finish your current work before restarting the app to install the update.';
+
+  @override
+  String get updatesOpenPlay => 'Open Google Play';
+
+  @override
+  String get updatesTestFlightTitle => 'Automatic updates with TestFlight';
+
+  @override
+  String get updatesTestFlightBody =>
+      'Open TestFlight, select Kaysons Logistics, then turn on Automatic Updates under App Information. TestFlight will notify you about new builds and can install them automatically. This setting is managed on your iPhone.';
+
+  @override
+  String get updatesTestFlightHelp => 'TestFlight instructions';
+
+  @override
+  String get updatesLinkFailed =>
+      'Could not open the link. Please open Google Play or TestFlight directly.';
+
+  @override
+  String get updatesUnsupported =>
+      'This version updates through your browser. App update settings are available in the Android and iPhone apps.';
 }

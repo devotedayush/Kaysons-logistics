@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../l10n/app_language.dart';
 import '../../l10n/app_localizations.dart';
+import '../updates/app_updates.dart';
 
 class CompactMobileDestination {
   const CompactMobileDestination({
@@ -76,6 +77,8 @@ class CompactMobileNavigation extends StatelessWidget {
                       onProfile();
                     } else if (value == 'privacy' && context.mounted) {
                       context.push('/account/privacy');
+                    } else if (value == 'updates' && context.mounted) {
+                      context.push('/account/updates');
                     } else if (value == 'logout') {
                       await onLogout();
                     } else if (value == 'en' || value == 'hi') {
@@ -108,6 +111,14 @@ class CompactMobileNavigation extends StatelessWidget {
                             label: l.accountPrivacy,
                           ),
                         ),
+                        if (AppUpdates.instance.supported)
+                          PopupMenuItem(
+                            value: 'updates',
+                            child: _MenuRow(
+                              icon: Icons.system_update,
+                              label: l.appUpdates,
+                            ),
+                          ),
                         CheckedPopupMenuItem<String>(
                           value: 'en',
                           checked: currentLanguage == 'en',

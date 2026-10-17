@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../l10n/app_language.dart';
 import '../../l10n/app_localizations.dart';
+import '../updates/app_updates.dart';
 
 class ShellSettingsButton extends StatelessWidget {
   const ShellSettingsButton({
@@ -25,6 +26,9 @@ class ShellSettingsButton extends StatelessWidget {
         }
         if (value == 'privacy' && context.mounted) {
           context.push('/account/privacy');
+        }
+        if (value == 'updates' && context.mounted) {
+          context.push('/account/updates');
         }
         if (value == 'logout') {
           await onLogout();
@@ -56,6 +60,17 @@ class ShellSettingsButton extends StatelessWidget {
                 ],
               ),
             ),
+            if (AppUpdates.instance.supported)
+              PopupMenuItem<String>(
+                value: 'updates',
+                child: Row(
+                  children: [
+                    const Icon(Icons.system_update, size: 18),
+                    const SizedBox(width: 10),
+                    Text(l.appUpdates),
+                  ],
+                ),
+              ),
             CheckedPopupMenuItem<String>(
               value: 'en',
               checked: currentLanguage == 'en',

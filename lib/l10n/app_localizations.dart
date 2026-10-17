@@ -4819,6 +4819,150 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Read-only list'**
   String get uiReadOnlyList;
+
+  /// No description provided for @appUpdates.
+  ///
+  /// In en, this message translates to:
+  /// **'App updates'**
+  String get appUpdates;
+
+  /// No description provided for @updateReminders.
+  ///
+  /// In en, this message translates to:
+  /// **'Update reminders'**
+  String get updateReminders;
+
+  /// No description provided for @updateRemindersHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Show an optional reminder when a newer version is available to you on Google Play.'**
+  String get updateRemindersHint;
+
+  /// No description provided for @updatesPlayHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Updates download through Google Play. You can keep working and choose when to restart.'**
+  String get updatesPlayHint;
+
+  /// No description provided for @checkForUpdates.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for updates'**
+  String get checkForUpdates;
+
+  /// No description provided for @updatesChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking Google Play…'**
+  String get updatesChecking;
+
+  /// No description provided for @updatesCurrent.
+  ///
+  /// In en, this message translates to:
+  /// **'You have the latest version available to you.'**
+  String get updatesCurrent;
+
+  /// No description provided for @updatesAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'A new version is available.'**
+  String get updatesAvailable;
+
+  /// No description provided for @updatesDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading update. You can keep using the app.'**
+  String get updatesDownloading;
+
+  /// No description provided for @updatesReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Your update is ready. Restart when you are ready to install it.'**
+  String get updatesReady;
+
+  /// No description provided for @updatesUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not check Google Play. Try again later or open the store.'**
+  String get updatesUnavailable;
+
+  /// No description provided for @updateNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Update now'**
+  String get updateNow;
+
+  /// No description provided for @updateLater.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get updateLater;
+
+  /// No description provided for @updateRestart.
+  ///
+  /// In en, this message translates to:
+  /// **'Restart and install'**
+  String get updateRestart;
+
+  /// No description provided for @updatePromptTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update available'**
+  String get updatePromptTitle;
+
+  /// No description provided for @updatePromptBody.
+  ///
+  /// In en, this message translates to:
+  /// **'A newer version of Kaysons Logistics is available. Download it now, or choose Later to be reminded another day.'**
+  String get updatePromptBody;
+
+  /// No description provided for @updateRestartTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update ready to install'**
+  String get updateRestartTitle;
+
+  /// No description provided for @updateRestartBody.
+  ///
+  /// In en, this message translates to:
+  /// **'The download is complete. Finish your current work before restarting the app to install the update.'**
+  String get updateRestartBody;
+
+  /// No description provided for @updatesOpenPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Google Play'**
+  String get updatesOpenPlay;
+
+  /// No description provided for @updatesTestFlightTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic updates with TestFlight'**
+  String get updatesTestFlightTitle;
+
+  /// No description provided for @updatesTestFlightBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Open TestFlight, select Kaysons Logistics, then turn on Automatic Updates under App Information. TestFlight will notify you about new builds and can install them automatically. This setting is managed on your iPhone.'**
+  String get updatesTestFlightBody;
+
+  /// No description provided for @updatesTestFlightHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'TestFlight instructions'**
+  String get updatesTestFlightHelp;
+
+  /// No description provided for @updatesLinkFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the link. Please open Google Play or TestFlight directly.'**
+  String get updatesLinkFailed;
+
+  /// No description provided for @updatesUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'This version updates through your browser. App update settings are available in the Android and iPhone apps.'**
+  String get updatesUnsupported;
 }
 
 class _AppLocalizationsDelegate

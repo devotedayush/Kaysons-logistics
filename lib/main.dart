@@ -6,6 +6,7 @@ import 'l10n/app_localizations.dart';
 import 'core/routing/app_router.dart';
 import 'core/supabase/supabase_bootstrap.dart';
 import 'core/theme/app_theme.dart';
+import 'core/updates/app_update_prompt.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +27,11 @@ class KaysonsApp extends StatelessWidget {
             title: 'Kaysons Logistics',
             debugShowCheckedModeBanner: false,
             theme: buildAppTheme(),
+            builder:
+                (context, child) => AppUpdatePrompt(
+                  navigatorKey: appNavigatorKey,
+                  child: child ?? const SizedBox.shrink(),
+                ),
             locale: AppLanguage.instance.locale,
             supportedLocales: AppLocalizations.supportedLocales,
             localizationsDelegates: const [

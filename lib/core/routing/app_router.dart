@@ -26,6 +26,7 @@ import '../../features/admin/admin_profile_screen.dart';
 import '../../features/admin/analytics_screen.dart';
 import '../../features/admin/notifications_screen.dart';
 import '../../features/account/account_privacy_screen.dart';
+import '../../features/account/app_updates_screen.dart';
 import '../supabase/auth_service.dart';
 import '../supabase/supabase_bootstrap.dart';
 import '../widgets/desktop_role_shell.dart';
@@ -70,7 +71,10 @@ Widget _desktopShell({
   );
 }
 
+final appNavigatorKey = GlobalKey<NavigatorState>();
+
 final GoRouter appRouter = GoRouter(
+  navigatorKey: appNavigatorKey,
   initialLocation: '/',
   refreshListenable: _authNotifier,
   redirect: (context, state) async {
@@ -124,6 +128,10 @@ final GoRouter appRouter = GoRouter(
     GoRoute(path: '/register/name', redirect: (_, __) => '/register'),
     GoRoute(path: '/register/bank', redirect: (_, __) => '/register'),
     GoRoute(path: '/register/contact', redirect: (_, __) => '/register'),
+    GoRoute(
+      path: '/account/updates',
+      builder: (_, __) => const AppUpdatesScreen(),
+    ),
     GoRoute(
       path: '/account/privacy',
       builder: (_, __) => const AccountPrivacyScreen(),
