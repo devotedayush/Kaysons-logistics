@@ -171,22 +171,33 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
         child: RefreshIndicator(
           onRefresh: _load,
           child: ListView(
-            padding: const EdgeInsets.all(20),
+            padding: transporterPagePadding(context),
             children: [
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => context.pop(),
-                  icon: const Icon(Icons.arrow_back),
-                  label: Text(tpText(context, 'Back', 'वापस')),
-                ),
+                child:
+                    MediaQuery.sizeOf(context).width < 600
+                        ? IconButton(
+                          tooltip: tpText(context, 'Back', 'वापस'),
+                          onPressed: () => context.pop(),
+                          icon: const Icon(Icons.arrow_back),
+                        )
+                        : TextButton.icon(
+                          onPressed: () => context.pop(),
+                          icon: const Icon(Icons.arrow_back),
+                          label: Text(tpText(context, 'Back', 'वापस')),
+                        ),
               ),
               WorkspaceHeader(
                 title: l.tpVehicles,
-                description: tpText(
+                description: tpResponsiveText(
                   context,
-                  'Keep your vehicles ready. Add or update details before assigning a trip.',
-                  'अपने वाहन तैयार रखें। यात्रा से पहले जानकारी जोड़ें या बदलें।',
+                  desktopEn:
+                      'Keep your vehicles ready. Add or update details before assigning a trip.',
+                  desktopHi:
+                      'अपने वाहन तैयार रखें। यात्रा से पहले जानकारी जोड़ें या बदलें।',
+                  mobileEn: 'Add or update details before assigning a trip.',
+                  mobileHi: 'यात्रा से पहले जानकारी जोड़ें या बदलें।',
                 ),
                 icon: Icons.local_shipping_outlined,
                 action: FilledButton.icon(
@@ -196,7 +207,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                   label: Text(l.tpAddVehicle),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               TransporterSearch(
                 label: tpText(
                   context,
@@ -205,7 +216,7 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                 ),
                 onChanged: (v) => setState(() => _query = v),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               if (_loading)
                 const Center(
                   child: Padding(
@@ -256,13 +267,13 @@ class _VehiclesScreenState extends State<VehiclesScreen> {
                     '${visible.length} vehicles',
                     '${visible.length} वाहन',
                   ),
-                  description: tpText(
+                  description: tpDesktopOnlyText(
                     context,
                     'Choose Edit to update details. Remove is in the more menu.',
                     'जानकारी बदलने के लिए संपादित करें चुनें। हटाना अधिक मेनू में है।',
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 TransporterCardGrid(
                   children: [
                     for (final row in visible)
@@ -303,6 +314,7 @@ class _VehicleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
+    final compact = MediaQuery.sizeOf(context).width < 600;
     final capacity = [
       if (_value('capacity_qt').trim() != '-') l.tpCases(_value('capacity_qt')),
       if (_value('capacity_weight_kg').trim() != '-')
@@ -323,8 +335,8 @@ class _VehicleCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 52,
-                height: 52,
+                width: compact ? 44 : 52,
+                height: compact ? 44 : 52,
                 decoration: BoxDecoration(
                   color: const Color(0xFFECE6F0),
                   borderRadius: BorderRadius.circular(12),
@@ -359,18 +371,16 @@ class _VehicleCard extends StatelessWidget {
               ),
               PopupMenuButton<String>(
                 onSelected: (value) {
-                  if (value == 'edit') onEdit();
                   if (value == 'delete') onDelete();
                 },
                 itemBuilder:
                     (context) => [
-                      PopupMenuItem(value: 'edit', child: Text(l.tpEdit)),
                       PopupMenuItem(value: 'delete', child: Text(l.tpDelete)),
                     ],
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: compact ? 8 : 12),
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(double.infinity, 48),
@@ -379,10 +389,10 @@ class _VehicleCard extends StatelessWidget {
             icon: const Icon(Icons.edit_outlined),
             label: Text(l.tpEditVehicle),
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: compact ? 8 : 14),
           Wrap(
-            spacing: 10,
-            runSpacing: 10,
+            spacing: compact ? 8 : 10,
+            runSpacing: compact ? 8 : 10,
             children: [
               _DetailChip(label: l.tpRc, value: _value('rc_number')),
               _DetailChip(

@@ -14,6 +14,8 @@ const _onSurface = Color(0xFF1D1B20);
 const _onSurfaceVariant = Color(0xFF49454F);
 const _border = Color(0xFFE4E0E8);
 
+enum _DashboardPeriodAction { month, start, end, latest }
+
 class AdminDashboardBody extends StatefulWidget {
   const AdminDashboardBody({super.key});
 
@@ -158,16 +160,23 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
     final snapshot = _snapshot;
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        padding: EdgeInsets.fromLTRB(
+          compact ? 12 : 16,
+          8,
+          compact ? 12 : 16,
+          24,
+        ),
         children: [
           _AppBar(
             name: _displayName,
             openAlertCount: snapshot?.openAlerts ?? 0,
+            compact: compact,
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: compact ? 4 : 12),
           _PeriodBar(
             label:
                 snapshot?.periodLabel ??
@@ -180,8 +189,9 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
             onPickStart: _pickPeriodStart,
             onPickEnd: _pickPeriodEnd,
             onLatest: _useLatestPeriod,
+            compact: compact,
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: compact ? 10 : 16),
           if (_loading)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 48),
@@ -205,12 +215,12 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
           else if (snapshot == null)
             const _EmptyState()
           else ...[
-            _NeedsAttention(snapshot: snapshot),
-            const SizedBox(height: 16),
-            _KpiStrip(snapshot: snapshot),
-            const SizedBox(height: 16),
-            _SummaryTables(snapshot: snapshot),
-            const SizedBox(height: 16),
+            _NeedsAttention(snapshot: snapshot, compact: compact),
+            SizedBox(height: compact ? 10 : 16),
+            _KpiStrip(snapshot: snapshot, compact: compact),
+            SizedBox(height: compact ? 10 : 16),
+            _SummaryTables(snapshot: snapshot, compact: compact),
+            SizedBox(height: compact ? 10 : 16),
             _TrendSection(
               snapshot: snapshot,
               expanded: _showTrends,
@@ -293,14 +303,45 @@ class _DashboardSnapshot {
 }
 
 class _AppBar extends StatelessWidget {
-  const _AppBar({required this.name, required this.openAlertCount});
+  const _AppBar({
+    required this.name,
+    required this.openAlertCount,
+    this.compact = false,
+  });
 
   final String name;
   final int openAlertCount;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
+    if (compact) {
+      return Row(
+        children: [
+          Expanded(
+            child: Text(
+              name.isEmpty ? l.adminDashboard : '${l.adminWelcome}, $name',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: _onSurface,
+              ),
+            ),
+          ),
+          IconButton(
+            tooltip: l.adminNotifications,
+            onPressed: () => context.push('/admin/notifications'),
+            icon: Badge(
+              isLabelVisible: openAlertCount > 0,
+              label: Text(openAlertCount.toString()),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+          ),
+        ],
+      );
+    }
     return WorkspaceHeader(
       title: name.isEmpty ? l.adminDashboard : '${l.adminWelcome}, $name',
       description: officeCopy(
@@ -331,6 +372,7 @@ class _PeriodBar extends StatelessWidget {
     required this.onPickStart,
     required this.onPickEnd,
     required this.onLatest,
+    this.compact = false,
   });
 
   final String label;
@@ -342,10 +384,88 @@ class _PeriodBar extends StatelessWidget {
   final VoidCallback onPickStart;
   final VoidCallback onPickEnd;
   final VoidCallback onLatest;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
+    if (compact) {
+      return Row(
+        children: [
+          const Icon(Icons.calendar_month_outlined, size: 19),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: _onSurface,
+                  ),
+                ),
+                Text(
+                  '${l.today} · ${_dateKey(todayDate)} · $todayDispatches ${l.adminTrips}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: _onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          PopupMenuButton<_DashboardPeriodAction>(
+            tooltip: officeCopy(context, 'Change period', 'अवधि बदलें'),
+            onSelected: (action) {
+              switch (action) {
+                case _DashboardPeriodAction.month:
+                  onPickMonth();
+                case _DashboardPeriodAction.start:
+                  onPickStart();
+                case _DashboardPeriodAction.end:
+                  onPickEnd();
+                case _DashboardPeriodAction.latest:
+                  onLatest();
+              }
+            },
+            itemBuilder:
+                (context) => [
+                  PopupMenuItem(
+                    value: _DashboardPeriodAction.month,
+                    child: Text(l.adminMonth),
+                  ),
+                  PopupMenuItem(
+                    value: _DashboardPeriodAction.start,
+                    child: Text(
+                      periodStart == null
+                          ? l.adminFrom
+                          : '${l.adminFrom} ${_dateKey(periodStart!)}',
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _DashboardPeriodAction.end,
+                    child: Text(
+                      periodEnd == null
+                          ? l.adminTo
+                          : '${l.adminTo} ${_dateKey(periodEnd!)}',
+                    ),
+                  ),
+                  PopupMenuItem(
+                    value: _DashboardPeriodAction.latest,
+                    child: Text(l.adminLatest),
+                  ),
+                ],
+            icon: const Icon(Icons.tune),
+          ),
+        ],
+      );
+    }
     return Wrap(
       spacing: 8,
       runSpacing: 8,
@@ -391,9 +511,10 @@ class _PeriodBar extends StatelessWidget {
 }
 
 class _KpiStrip extends StatelessWidget {
-  const _KpiStrip({required this.snapshot});
+  const _KpiStrip({required this.snapshot, this.compact = false});
 
   final _DashboardSnapshot snapshot;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -435,8 +556,13 @@ class _KpiStrip extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final scale = MediaQuery.textScalerOf(context).scale(1);
         final columns =
-            constraints.maxWidth >= 1120
+            compact
+                ? constraints.maxWidth < 360 || scale >= 1.3
+                    ? 1
+                    : 2
+                : constraints.maxWidth >= 1120
                 ? 6
                 : constraints.maxWidth >= 760
                 ? 3
@@ -448,8 +574,10 @@ class _KpiStrip extends StatelessWidget {
           children:
               cards
                   .map(
-                    (card) =>
-                        SizedBox(width: width, child: _KpiCard(data: card)),
+                    (card) => SizedBox(
+                      width: width,
+                      child: _KpiCard(data: card, compact: compact),
+                    ),
                   )
                   .toList(),
         );
@@ -459,9 +587,10 @@ class _KpiStrip extends StatelessWidget {
 }
 
 class _NeedsAttention extends StatelessWidget {
-  const _NeedsAttention({required this.snapshot});
+  const _NeedsAttention({required this.snapshot, this.compact = false});
 
   final _DashboardSnapshot snapshot;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -517,6 +646,54 @@ class _NeedsAttention extends StatelessWidget {
     }
 
     final visible = items.take(3).toList();
+    if (compact) {
+      return _Panel(
+        title: l.adminNeedsAttention,
+        trailing: IconButton(
+          tooltip: l.adminAskClawd,
+          onPressed: () => context.push('/admin/clawd'),
+          icon: const Icon(Icons.psychology_alt_outlined),
+        ),
+        child:
+            visible.isEmpty
+                ? Text(
+                  l.adminNoPriorityItems,
+                  style: const TextStyle(color: _onSurfaceVariant),
+                )
+                : Column(
+                  children: [
+                    _AttentionRow(item: visible.first, compact: true),
+                    if (visible.length > 1)
+                      Material(
+                        color: Colors.transparent,
+                        child: ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          childrenPadding: EdgeInsets.zero,
+                          minTileHeight: 48,
+                          title: Text(
+                            officeCopy(
+                              context,
+                              'More priorities (${visible.length - 1})',
+                              'अन्य ज़रूरतें (${visible.length - 1})',
+                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          children:
+                              visible
+                                  .skip(1)
+                                  .map(
+                                    (item) => _AttentionRow(
+                                      item: item,
+                                      compact: true,
+                                    ),
+                                  )
+                                  .toList(),
+                        ),
+                      ),
+                  ],
+                ),
+      );
+    }
     return _Panel(
       title: l.adminNeedsAttention,
       trailing: TextButton.icon(
@@ -539,9 +716,10 @@ class _NeedsAttention extends StatelessWidget {
 }
 
 class _SummaryTables extends StatelessWidget {
-  const _SummaryTables({required this.snapshot});
+  const _SummaryTables({required this.snapshot, this.compact = false});
 
   final _DashboardSnapshot snapshot;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -552,6 +730,7 @@ class _SummaryTables extends StatelessWidget {
         final left = _Panel(
           title: l.adminTransporterPerformance,
           child: _MiniTable(
+            compact: compact,
             rows: snapshot.transporters.take(6).toList(),
             columns: [l.transporter, l.adminTrips, 'MT', l.adminFreight, 'POD'],
             cells:
@@ -569,6 +748,7 @@ class _SummaryTables extends StatelessWidget {
           child: Column(
             children: [
               _MiniTable(
+                compact: compact,
                 rows: snapshot.routes.take(5).toList(),
                 columns: [l.adminRoute, l.adminTrips, l.adminFreightPerMt],
                 cells:
@@ -580,6 +760,7 @@ class _SummaryTables extends StatelessWidget {
               ),
               const Divider(height: 18),
               _MiniTable(
+                compact: compact,
                 rows: snapshot.destinations.take(5).toList(),
                 columns: [l.adminPlace, l.adminTrips, 'POD'],
                 cells:
@@ -698,15 +879,16 @@ class _Panel extends StatelessWidget {
 }
 
 class _KpiCard extends StatelessWidget {
-  const _KpiCard({required this.data});
+  const _KpiCard({required this.data, this.compact = false});
 
   final _KpiData data;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 112,
-      padding: const EdgeInsets.all(14),
+      constraints: BoxConstraints(minHeight: compact ? 76 : 112),
+      padding: EdgeInsets.all(compact ? 10 : 14),
       decoration: BoxDecoration(
         color: data.warning ? const Color(0xFFFFF7E8) : Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -714,47 +896,126 @@ class _KpiCard extends StatelessWidget {
           color: data.warning ? const Color(0xFFE9C46A) : _border,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            data.icon,
-            size: 22,
-            color:
-                data.warning
-                    ? const Color(0xFF8A5A00)
-                    : const Color(0xFF6750A4),
-          ),
-          const Spacer(),
-          Text(
-            data.value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-              color: _onSurface,
-            ),
-          ),
-          Text(
-            data.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
-          ),
-        ],
-      ),
+      child:
+          compact
+              ? Row(
+                children: [
+                  Icon(
+                    data.icon,
+                    size: 20,
+                    color:
+                        data.warning
+                            ? const Color(0xFF8A5A00)
+                            : const Color(0xFF6750A4),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          data.label,
+                          softWrap: true,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: _onSurfaceVariant,
+                          ),
+                        ),
+                        Text(
+                          data.value,
+                          softWrap: true,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            color: _onSurface,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              )
+              : Row(
+                children: [
+                  Icon(
+                    data.icon,
+                    size: 22,
+                    color:
+                        data.warning
+                            ? const Color(0xFF8A5A00)
+                            : const Color(0xFF6750A4),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          data.value,
+                          softWrap: true,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: _onSurface,
+                          ),
+                        ),
+                        Text(
+                          data.label,
+                          softWrap: true,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: _onSurfaceVariant,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
     );
   }
 }
 
 class _AttentionRow extends StatelessWidget {
-  const _AttentionRow({required this.item});
+  const _AttentionRow({required this.item, this.compact = false});
 
   final _AttentionItem item;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      return Material(
+        color: Colors.transparent,
+        child: ListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          minLeadingWidth: 26,
+          horizontalTitleGap: 8,
+          leading: Icon(item.icon, color: const Color(0xFF86530D), size: 20),
+          title: Text(
+            item.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          subtitle: Text(
+            item.detail,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          trailing: IconButton(
+            tooltip: item.action,
+            onPressed: () => context.push(item.route),
+            icon: const Icon(Icons.arrow_forward, size: 19),
+          ),
+          onTap: () => context.push(item.route),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: GuidanceCard(
@@ -773,11 +1034,13 @@ class _AttentionRow extends StatelessWidget {
 
 class _MiniTable extends StatelessWidget {
   const _MiniTable({
+    this.compact = false,
     required this.rows,
     required this.columns,
     required this.cells,
   });
 
+  final bool compact;
   final List<Map<String, dynamic>> rows;
   final List<String> columns;
   final List<String> Function(Map<String, dynamic> row) cells;
@@ -790,17 +1053,58 @@ class _MiniTable extends StatelessWidget {
         style: const TextStyle(color: _onSurfaceVariant),
       );
     }
-    if (MediaQuery.sizeOf(context).width < 700) {
+    if (compact || MediaQuery.sizeOf(context).width < 700) {
       return Column(
         children:
             rows.map((row) {
               final values = cells(row);
-              return OfficeRecordCard(
-                title: values.first,
-                values: {
-                  for (var i = 1; i < columns.length && i < values.length; i++)
-                    columns[i]: values[i],
-                },
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      values.first,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: _onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Wrap(
+                      spacing: 9,
+                      runSpacing: 1,
+                      children: [
+                        for (
+                          var i = 1;
+                          i < columns.length && i < values.length;
+                          i++
+                        )
+                          Text.rich(
+                            TextSpan(
+                              children: [
+                                TextSpan(text: '${columns[i]} '),
+                                TextSpan(
+                                  text: values[i],
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: _onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const Divider(height: 14),
+                  ],
+                ),
               );
             }).toList(),
       );

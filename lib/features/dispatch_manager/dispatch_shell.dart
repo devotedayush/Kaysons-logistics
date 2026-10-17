@@ -172,6 +172,7 @@ class _DispatchDashboardBodyState extends State<DispatchDashboardBody> {
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: FreightsRepo.instance.streamAcceptedDispatchFreights(),
       builder: (context, snap) {
+        final compact = MediaQuery.sizeOf(context).width < 600;
         final freights = snap.data ?? const [];
         final vehicleChecks =
             freights.where((f) {
@@ -196,44 +197,55 @@ class _DispatchDashboardBodyState extends State<DispatchDashboardBody> {
                 padding: const EdgeInsets.only(bottom: 16),
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    padding: EdgeInsets.fromLTRB(
+                      0,
+                      compact ? 0 : 12,
+                      0,
+                      compact ? 8 : 0,
+                    ),
                     child: Text(
-                      'Today — ${DateTime.now().toLocal().toIso8601String().substring(0, 10)}',
-                      style: const TextStyle(color: _onSurfaceVariant),
+                      '${operationalCopy(context, 'Today', 'आज')} · ${DateTime.now().toLocal().toIso8601String().substring(0, 10)}',
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: _onSurfaceVariant,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
-                  WorkspaceHeader(
-                    title: operationalCopy(
-                      context,
-                      'Your dispatch checklist',
-                      'आपकी डिस्पैच जाँच सूची',
-                    ),
-                    description: operationalCopy(
-                      context,
-                      'Check arriving trucks, follow active routes and report delivery issues to your manager.',
-                      'आए ट्रक जाँचें, जारी यात्रा देखें और डिलीवरी की समस्या मैनेजर को बताएँ।',
-                    ),
-                    icon: Icons.fact_check_outlined,
-                    summary: GuidanceCard(
+                  if (compact)
+                    _DispatchAttention(count: vehicleChecks)
+                  else
+                    WorkspaceHeader(
                       title: operationalCopy(
                         context,
-                        '$vehicleChecks vehicle checks waiting',
-                        '$vehicleChecks वाहन जाँच बाकी',
+                        'Your dispatch checklist',
+                        'आपकी डिस्पैच जाँच सूची',
                       ),
-                      message: operationalCopy(
+                      description: operationalCopy(
                         context,
-                        'Open an assigned delivery to confirm the truck and driver details.',
-                        'ट्रक और ड्राइवर की पुष्टि करने के लिए सौंपा गया ट्रिप खोलें।',
+                        'Check arriving trucks, follow active routes and report delivery issues to your manager.',
+                        'आए ट्रक जाँचें, जारी यात्रा देखें और डिलीवरी की समस्या मैनेजर को बताएँ।',
                       ),
-                      tone:
-                          vehicleChecks > 0
-                              ? WorkspaceTone.warning
-                              : WorkspaceTone.success,
+                      icon: Icons.fact_check_outlined,
+                      summary: GuidanceCard(
+                        title: operationalCopy(
+                          context,
+                          '$vehicleChecks vehicle checks waiting',
+                          '$vehicleChecks वाहन जाँच बाकी',
+                        ),
+                        message: operationalCopy(
+                          context,
+                          'Open an assigned delivery to confirm the truck and driver details.',
+                          'ट्रक और ड्राइवर की पुष्टि करने के लिए सौंपा गया ट्रिप खोलें।',
+                        ),
+                        tone:
+                            vehicleChecks > 0
+                                ? WorkspaceTone.warning
+                                : WorkspaceTone.success,
+                      ),
                     ),
-                  ),
-                  const _Section('Dashboard'),
+                  if (!compact) const _Section('Dashboard'),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 16),
                     child: Row(
                       children: [
                         Expanded(
@@ -254,7 +266,7 @@ class _DispatchDashboardBodyState extends State<DispatchDashboardBody> {
                   ),
                   const SizedBox(height: 8),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: EdgeInsets.symmetric(horizontal: compact ? 0 : 16),
                     child: Row(
                       children: [
                         Expanded(
@@ -272,9 +284,14 @@ class _DispatchDashboardBodyState extends State<DispatchDashboardBody> {
                   ),
                   const _Section('Needs attention'),
                   if (freights.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
-                      child: Text(
+                    Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        compact ? 0 : 16,
+                        8,
+                        compact ? 0 : 16,
+                        16,
+                      ),
+                      child: const Text(
                         'No deliveries match the selected filters.',
                         style: TextStyle(color: _onSurfaceVariant),
                       ),
@@ -324,54 +341,73 @@ class _DispatchFleetBodyState extends State<DispatchFleetBody> {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
+    final filters = <Widget>[
+      OutlinedButton.icon(
+        onPressed: _pickDates,
+        style: OutlinedButton.styleFrom(minimumSize: const Size(0, 48)),
+        icon: const Icon(Icons.date_range),
+        label: Text(
+          _dateRange == null
+              ? operationalCopy(context, 'All dates', 'सभी तारीखें')
+              : '${_dateRange!.start.toIso8601String().substring(0, 10)} — ${_dateRange!.end.toIso8601String().substring(0, 10)}',
+        ),
+      ),
+      if (_dateRange != null)
+        TextButton(
+          onPressed: () => setState(() => _dateRange = null),
+          style: TextButton.styleFrom(minimumSize: const Size(0, 48)),
+          child: Text(operationalCopy(context, 'Clear dates', 'तारीख हटाएँ')),
+        ),
+      FilterChip(
+        label: Text(operationalCopy(context, 'POD pending', 'POD बाकी')),
+        selected: _pendingPodOnly,
+        onSelected: (value) => setState(() => _pendingPodOnly = value),
+      ),
+    ];
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: WorkspaceHeader(
-            title: operationalCopy(
-              context,
-              'Your assigned deliveries',
-              'आपको सौंपे गए ट्रिप',
-            ),
-            description: operationalCopy(
-              context,
-              'Filter by date or missing proof, then open a route to complete your checks.',
-              'तारीख या बाकी प्रमाण से छाँटें और जाँच पूरी करने के लिए मार्ग खोलें।',
-            ),
-            icon: Icons.route_outlined,
+        _DispatchPageHeading(
+          title: operationalCopy(
+            context,
+            'Your assigned deliveries',
+            'आपको सौंपे गए ट्रिप',
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: [
-              OutlinedButton.icon(
-                onPressed: _pickDates,
-                icon: const Icon(Icons.date_range),
-                label: Text(
-                  _dateRange == null
-                      ? 'All dates'
-                      : '${_dateRange!.start.toIso8601String().substring(0, 10)} — ${_dateRange!.end.toIso8601String().substring(0, 10)}',
-                ),
-              ),
-              if (_dateRange != null)
-                TextButton(
-                  onPressed: () => setState(() => _dateRange = null),
-                  child: const Text('Clear dates'),
-                ),
-              FilterChip(
-                label: const Text('POD pending'),
-                selected: _pendingPodOnly,
-                onSelected: (value) => setState(() => _pendingPodOnly = value),
-              ),
-            ],
+          description: operationalCopy(
+            context,
+            'Filter by date or missing proof, then open a route to complete your checks.',
+            'तारीख या बाकी प्रमाण से छाँटें और जाँच पूरी करने के लिए मार्ग खोलें।',
           ),
+          icon: Icons.route_outlined,
         ),
+        if (compact)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                for (var i = 0; i < filters.length; i++) ...[
+                  if (i > 0) const SizedBox(width: 8),
+                  filters[i],
+                ],
+              ],
+            ),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Wrap(spacing: 8, runSpacing: 4, children: filters),
+            ),
+          ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+          padding: EdgeInsets.fromLTRB(
+            compact ? 12 : 16,
+            8,
+            compact ? 12 : 16,
+            8,
+          ),
           child: TextField(
             onChanged:
                 (value) => setState(() => _query = value.trim().toLowerCase()),
@@ -415,10 +451,10 @@ class _DispatchFleetBodyState extends State<DispatchFleetBody> {
                         !day.isAfter(_dateRange!.end);
                   }).toList();
               if (freights.isEmpty) {
-                return const Center(
+                return Center(
                   child: Padding(
-                    padding: EdgeInsets.all(32),
-                    child: Text(
+                    padding: EdgeInsets.all(compact ? 16 : 32),
+                    child: const Text(
                       'No deliveries match the selected filters.',
                       style: TextStyle(color: _onSurfaceVariant),
                     ),
@@ -426,7 +462,12 @@ class _DispatchFleetBodyState extends State<DispatchFleetBody> {
                 );
               }
               return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                padding: EdgeInsets.fromLTRB(
+                  compact ? 12 : 16,
+                  8,
+                  compact ? 12 : 16,
+                  16,
+                ),
                 itemCount: freights.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (_, i) => _DeliveryTile(freight: freights[i]),
@@ -445,6 +486,7 @@ class _DeliveryTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
     final stages = Map<String, dynamic>.from(
       freight['delivery_stages'] as Map? ?? const {},
     );
@@ -457,7 +499,7 @@ class _DeliveryTile extends StatelessWidget {
       onTap: () => context.push('/dm/track/${freight['id']}'),
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(compact ? 10 : 14),
         decoration: BoxDecoration(
           color: const Color(0xFFF3F5FA),
           borderRadius: BorderRadius.circular(16),
@@ -465,41 +507,57 @@ class _DeliveryTile extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              route,
-              style: const TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w500,
-                color: _onSurface,
-              ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    route,
+                    style: TextStyle(
+                      fontSize: compact ? 15 : 17,
+                      fontWeight: FontWeight.w500,
+                      color: _onSurface,
+                    ),
+                  ),
+                ),
+                if (compact)
+                  const Icon(Icons.chevron_right, color: _onSurfaceVariant),
+              ],
             ),
             const SizedBox(height: 3),
             Text(
               '${freight['cases'] ?? 0} Cases · ${freight['weight_kg'] ?? 0} MT · ${(freight['status'] ?? '').toString().toUpperCase()}',
               style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
             ),
-            const SizedBox(height: 12),
-            Text(
-              operationalCopy(
-                context,
-                'Open truck checks and delivery details →',
-                'ट्रक जाँच और डिलीवरी विवरण खोलें →',
+            SizedBox(height: compact ? 8 : 12),
+            if (!compact) ...[
+              Text(
+                operationalCopy(
+                  context,
+                  'Open truck checks and delivery details →',
+                  'ट्रक जाँच और डिलीवरी विवरण खोलें →',
+                ),
+                style: Theme.of(context).textTheme.labelLarge,
               ),
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
+            ],
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: compact ? 6 : 8,
+              runSpacing: compact ? 4 : 8,
               children: [
                 _StatusChip(
                   icon: Icons.fact_check_outlined,
-                  label: 'Vehicle $vehicleStatus',
+                  label: operationalCopy(
+                    context,
+                    'Vehicle $vehicleStatus',
+                    'वाहन $vehicleStatus',
+                  ),
                 ),
                 _StatusChip(
                   icon: Icons.receipt_long_outlined,
                   label:
-                      _hasReceivedPod(freight) ? 'POD received' : 'POD pending',
+                      _hasReceivedPod(freight)
+                          ? operationalCopy(context, 'POD received', 'POD मिला')
+                          : operationalCopy(context, 'POD pending', 'POD बाकी'),
                 ),
                 if ((stages['in_transit'] as Map?)?['last_location'] != null)
                   _StatusChip(
@@ -517,6 +575,95 @@ class _DeliveryTile extends StatelessWidget {
   }
 }
 
+class _DispatchAttention extends StatelessWidget {
+  const _DispatchAttention({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = count > 0 ? const Color(0xFF86530D) : const Color(0xFF146C4B);
+    return Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(minHeight: 48),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .07),
+        border: Border.all(color: color.withValues(alpha: .2)),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            count > 0 ? Icons.fact_check_outlined : Icons.check_circle_outline,
+            color: color,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              operationalCopy(
+                context,
+                count > 0
+                    ? '$count vehicle checks waiting'
+                    : 'All vehicle checks complete',
+                count > 0 ? '$count वाहनों की जाँच बाकी' : 'सभी वाहन जाँच पूरी',
+              ),
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DispatchPageHeading extends StatelessWidget {
+  const _DispatchPageHeading({
+    required this.title,
+    required this.description,
+    required this.icon,
+  });
+
+  final String title;
+  final String description;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width >= 600) {
+      return Padding(
+        padding: const EdgeInsets.all(16),
+        child: WorkspaceHeader(
+          title: title,
+          description: description,
+          icon: icon,
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      child: Row(
+        children: [
+          Icon(icon, color: Theme.of(context).colorScheme.primary, size: 22),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              title,
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DispatchHeader extends StatelessWidget {
   const _DispatchHeader({required this.name, required this.manager});
   final String name;
@@ -524,6 +671,43 @@ class _DispatchHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: manager.isEmpty ? 44 : 54),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name.isEmpty ? 'Welcome' : 'Welcome, $name',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: _onSurface,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+                if (manager.isNotEmpty)
+                  Text(
+                    '${operationalCopy(context, 'Reporting to', 'रिपोर्टिंग मैनेजर')}: $manager',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: _onSurfaceVariant,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
       child: LogisticsArtwork(
@@ -574,12 +758,18 @@ class _Section extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+      padding: EdgeInsets.fromLTRB(
+        compact ? 0 : 16,
+        compact ? 12 : 20,
+        compact ? 0 : 16,
+        compact ? 6 : 8,
+      ),
       child: Text(
         title,
-        style: const TextStyle(
-          fontSize: 18,
+        style: TextStyle(
+          fontSize: compact ? 16 : 18,
           fontWeight: FontWeight.w700,
           color: _onSurface,
         ),
@@ -595,8 +785,9 @@ class _Kpi extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(compact ? 10 : 14),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: const Color(0xFFE4DCEB)),
@@ -612,8 +803,8 @@ class _Kpi extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             value,
-            style: const TextStyle(
-              fontSize: 26,
+            style: TextStyle(
+              fontSize: compact ? 22 : 26,
               fontWeight: FontWeight.w700,
               color: _onSurface,
             ),

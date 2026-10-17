@@ -154,22 +154,33 @@ class _DriversScreenState extends State<DriversScreen> {
         child: RefreshIndicator(
           onRefresh: _load,
           child: ListView(
-            padding: const EdgeInsets.all(20),
+            padding: transporterPagePadding(context),
             children: [
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: () => context.pop(),
-                  icon: const Icon(Icons.arrow_back),
-                  label: Text(tpText(context, 'Back', 'वापस')),
-                ),
+                child:
+                    MediaQuery.sizeOf(context).width < 600
+                        ? IconButton(
+                          tooltip: tpText(context, 'Back', 'वापस'),
+                          onPressed: () => context.pop(),
+                          icon: const Icon(Icons.arrow_back),
+                        )
+                        : TextButton.icon(
+                          onPressed: () => context.pop(),
+                          icon: const Icon(Icons.arrow_back),
+                          label: Text(tpText(context, 'Back', 'वापस')),
+                        ),
               ),
               WorkspaceHeader(
                 title: l.tpDrivers,
-                description: tpText(
+                description: tpResponsiveText(
                   context,
-                  'Your drivers, easy to find. Add or update details before assigning a trip.',
-                  'अपने ड्राइवर आसानी से खोजें। यात्रा से पहले जानकारी जोड़ें या बदलें।',
+                  desktopEn:
+                      'Your drivers, easy to find. Add or update details before assigning a trip.',
+                  desktopHi:
+                      'अपने ड्राइवर आसानी से खोजें। यात्रा से पहले जानकारी जोड़ें या बदलें।',
+                  mobileEn: 'Add or update details before assigning a trip.',
+                  mobileHi: 'यात्रा से पहले जानकारी जोड़ें या बदलें।',
                 ),
                 icon: Icons.badge_outlined,
                 action: FilledButton.icon(
@@ -179,7 +190,7 @@ class _DriversScreenState extends State<DriversScreen> {
                   label: Text(l.tpAddDriver),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               TransporterSearch(
                 label: tpText(
                   context,
@@ -188,7 +199,7 @@ class _DriversScreenState extends State<DriversScreen> {
                 ),
                 onChanged: (v) => setState(() => _query = v),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 12),
               if (_loading)
                 const Center(
                   child: Padding(
@@ -239,13 +250,13 @@ class _DriversScreenState extends State<DriversScreen> {
                     '${visible.length} drivers',
                     '${visible.length} ड्राइवर',
                   ),
-                  description: tpText(
+                  description: tpDesktopOnlyText(
                     context,
                     'Choose Edit to update details. Remove is in the more menu.',
                     'जानकारी बदलने के लिए संपादित करें चुनें। हटाना अधिक मेनू में है।',
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
                 TransporterCardGrid(
                   children: [
                     for (final row in visible)
@@ -286,6 +297,7 @@ class _DriverCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -296,23 +308,23 @@ class _DriverCard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 52,
-            height: 52,
+            width: compact ? 44 : 52,
+            height: compact ? 44 : 52,
             decoration: BoxDecoration(
               color: const Color(0xFFECE6F0),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(Icons.badge_outlined, color: Color(0xFF6750A4)),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: compact ? 8 : 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   _value('name', l.tpDriverNameMissing),
-                  style: const TextStyle(
-                    fontSize: 18,
+                  style: TextStyle(
+                    fontSize: compact ? 17 : 18,
                     fontWeight: FontWeight.w600,
                     color: _onSurface,
                   ),
@@ -337,12 +349,10 @@ class _DriverCard extends StatelessWidget {
               ),
               PopupMenuButton<String>(
                 onSelected: (value) {
-                  if (value == 'edit') onEdit();
                   if (value == 'delete') onDelete();
                 },
                 itemBuilder:
                     (context) => [
-                      PopupMenuItem(value: 'edit', child: Text(l.tpEdit)),
                       PopupMenuItem(value: 'delete', child: Text(l.tpDelete)),
                     ],
               ),

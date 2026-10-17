@@ -18,7 +18,7 @@ flutter build web
 
 ## iOS simulator
 
-The iOS project targets iOS 13 or newer. On a Mac, install Flutter, Xcode,
+The iOS project targets iOS 15 or newer. On a Mac, install Flutter, Xcode,
 CocoaPods, and an iOS simulator runtime. Review the Xcode license and finish its
 initial setup:
 

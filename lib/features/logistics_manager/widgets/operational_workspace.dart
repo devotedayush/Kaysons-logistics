@@ -18,13 +18,21 @@ class OperationalListView extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, size) {
-      final gutter = size.maxWidth < 600 ? 16.0 : 32.0;
+      final compact = size.maxWidth < 600;
+      final gutter = compact ? 12.0 : 32.0;
       final side = ((size.maxWidth - 1120) / 2).clamp(gutter, double.infinity);
+      final requested = padding?.resolve(Directionality.of(context));
       return ListView(
         controller: controller,
         physics: physics,
         shrinkWrap: shrinkWrap,
-        padding: EdgeInsets.fromLTRB(side, 24, side, 96),
+        // Operational pages already place their controls inside the scroll
+        // area. Keep phone gutters small and let each page request a little
+        // more room at the end when it has a floating action.
+        padding:
+            compact
+                ? EdgeInsets.fromLTRB(12, 12, 12, requested?.bottom ?? 20)
+                : EdgeInsets.fromLTRB(side, 24, side, 96),
         children: children,
       );
     },

@@ -82,35 +82,51 @@ class _TransporterHomeBodyState extends State<TransporterHomeBody> {
     return RefreshIndicator(
       onRefresh: _loadName,
       child: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: transporterPagePadding(context),
         children: [
           WorkspaceHeader(
             title:
                 _displayName.isEmpty
                     ? l.tpWelcome
                     : l.tpWelcomeName(_displayName),
-            description: tpText(
+            description: tpResponsiveText(
               context,
-              'Choose your next job or continue a trip. Keep your vehicle and driver details ready before dispatch.',
-              'अगला काम चुनें या चल रही यात्रा जारी रखें। रवाना होने से पहले वाहन और ड्राइवर की जानकारी तैयार रखें।',
+              desktopEn:
+                  'Choose your next job or continue a trip. Keep your vehicle and driver details ready before dispatch.',
+              desktopHi:
+                  'अगला काम चुनें या चल रही यात्रा जारी रखें। रवाना होने से पहले वाहन और ड्राइवर की जानकारी तैयार रखें।',
+              mobileEn: 'Find a load or continue a trip.',
+              mobileHi: 'माल खोजें या यात्रा जारी रखें।',
             ),
             icon: Icons.local_shipping_outlined,
             eyebrow: l.transporter,
-            action: FilledButton.icon(
-              style: FilledButton.styleFrom(minimumSize: const Size(0, 50)),
-              onPressed: () => context.go('/bids'),
-              icon: const Icon(Icons.search),
-              label: Text(l.tpLatestBids),
-            ),
+            action:
+                MediaQuery.sizeOf(context).width < 600
+                    ? IconButton.filledTonal(
+                      tooltip: l.tpLatestBids,
+                      style: IconButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                      ),
+                      onPressed: () => context.go('/bids'),
+                      icon: const Icon(Icons.search),
+                    )
+                    : FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        minimumSize: const Size(0, 50),
+                      ),
+                      onPressed: () => context.go('/bids'),
+                      icon: const Icon(Icons.search),
+                      label: Text(l.tpLatestBids),
+                    ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           SectionHeading(
             title: tpText(
               context,
               'Continue your trips',
               'अपनी यात्रा जारी रखें',
             ),
-            description: tpText(
+            description: tpDesktopOnlyText(
               context,
               'Awarded work and delivery updates in one place.',
               'मिली हुई यात्राएँ और डिलीवरी अपडेट एक जगह।',
@@ -122,10 +138,10 @@ class _TransporterHomeBodyState extends State<TransporterHomeBody> {
           ),
           const SizedBox(height: 12),
           _WonBidsStrip(future: widget.wonFreightsFuture),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           SectionHeading(
             title: l.tpLatestBids,
-            description: tpText(
+            description: tpDesktopOnlyText(
               context,
               'Read the route and load, then quote your freight.',
               'मार्ग और माल का विवरण पढ़कर अपना भाड़ा दें।',
@@ -203,10 +219,10 @@ class _TransporterHomeBodyState extends State<TransporterHomeBody> {
               );
             },
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
           SectionHeading(
             title: l.tpQuickOptions,
-            description: tpText(
+            description: tpDesktopOnlyText(
               context,
               'Prepare your team before the next trip.',
               'अगली यात्रा से पहले अपनी टीम तैयार रखें।',
@@ -309,33 +325,138 @@ class _WonBidsStrip extends StatelessWidget {
         return TransporterCardGrid(
           children: [
             for (final row in rows.take(4))
-              TransporterTaskCard(
-                title: '${row['origin']} → ${row['destination_town']}',
-                description:
-                    (row['vehicle_number'] ?? '').toString().isEmpty
-                        ? tpText(
-                          context,
-                          'Vehicle and driver need to be confirmed before dispatch.',
-                          'रवाना होने से पहले वाहन और ड्राइवर तय करें।',
-                        )
-                        : '${tpText(context, 'Vehicle', 'वाहन')}: ${row['vehicle_number']}',
-                actionLabel: tpText(
-                  context,
-                  row['status'] == 'completed'
-                      ? 'View delivery record'
-                      : 'Open trip & next step',
-                  row['status'] == 'completed'
-                      ? 'डिलीवरी विवरण देखें'
-                      : 'यात्रा और अगला काम देखें',
-                ),
-                icon: Icons.route_outlined,
-                onTap: () => context.push('/bid/${row['id']}/after'),
+              Builder(
+                builder: (context) {
+                  final route = '${row['origin']} → ${row['destination_town']}';
+                  final description =
+                      (row['vehicle_number'] ?? '').toString().isEmpty
+                          ? tpText(
+                            context,
+                            'Vehicle and driver need to be confirmed before dispatch.',
+                            'रवाना होने से पहले वाहन और ड्राइवर तय करें।',
+                          )
+                          : '${tpText(context, 'Vehicle', 'वाहन')}: ${row['vehicle_number']}';
+                  final actionLabel = tpText(
+                    context,
+                    row['status'] == 'completed'
+                        ? 'View delivery record'
+                        : 'Open trip & next step',
+                    row['status'] == 'completed'
+                        ? 'डिलीवरी विवरण देखें'
+                        : 'यात्रा और अगला काम देखें',
+                  );
+                  void openTrip() => context.push('/bid/${row['id']}/after');
+
+                  if (MediaQuery.sizeOf(context).width >= 600) {
+                    return TransporterTaskCard(
+                      title: route,
+                      description: description,
+                      actionLabel: actionLabel,
+                      icon: Icons.route_outlined,
+                      onTap: openTrip,
+                    );
+                  }
+                  return _WonTripTile(
+                    title: route,
+                    description: description,
+                    actionLabel: actionLabel,
+                    onTap: openTrip,
+                  );
+                },
               ),
           ],
         );
       },
     );
   }
+}
+
+class _WonTripTile extends StatelessWidget {
+  const _WonTripTile({
+    required this.title,
+    required this.description,
+    required this.actionLabel,
+    required this.onTap,
+  });
+
+  final String title;
+  final String description;
+  final String actionLabel;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Card(
+    margin: EdgeInsets.zero,
+    child: Semantics(
+      button: true,
+      label: '$actionLabel: $title. $description',
+      onTap: onTap,
+      child: ExcludeSemantics(
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primaryContainer,
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Icon(
+                    Icons.route_outlined,
+                    size: 20,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        actionLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.chevron_right,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _BidTile extends StatelessWidget {

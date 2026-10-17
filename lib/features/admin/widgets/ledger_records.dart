@@ -249,6 +249,63 @@ class LedgerRecordTile extends StatelessWidget {
             : officeCopy(context, 'Details', 'विवरण'),
       ),
     );
+    if (compact && MediaQuery.sizeOf(context).width < 600) {
+      return Card(
+        margin: const EdgeInsets.only(bottom: 8),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(flex: 3, child: invoice),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    flex: 2,
+                    child: Text(
+                      freightLabel,
+                      textAlign: TextAlign.end,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text('${text('origin')} → ${text('town')}'),
+              Wrap(
+                spacing: 8,
+                children: [
+                  Text(
+                    hasValue('vehicle_number')
+                        ? text('vehicle_number')
+                        : officeCopy(
+                          context,
+                          'Vehicle not assigned',
+                          'वाहन नहीं चुना गया',
+                        ),
+                    style: Theme.of(context).textTheme.labelMedium,
+                  ),
+                  Text(
+                    text('transporter_name'),
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(child: proof),
+                  const SizedBox(width: 8),
+                  action,
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     if (compact) {
       return Card(
         margin: const EdgeInsets.only(bottom: 12),

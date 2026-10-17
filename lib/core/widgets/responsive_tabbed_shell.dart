@@ -50,21 +50,25 @@ class ResponsiveTabbedShell extends StatelessWidget {
         return Scaffold(
           backgroundColor: backgroundColor,
           body: SafeArea(
-            child: isWide ? _buildDesktopLayout(context) : _buildMobileLayout(),
+            bottom: isWide,
+            child:
+                isWide
+                    ? _buildDesktopLayout(context)
+                    : _buildMobileLayout(context),
           ),
         );
       },
     );
   }
 
-  Widget _buildMobileLayout() {
+  Widget _buildMobileLayout(BuildContext context) {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 900),
         child: Column(
           children: [
             Expanded(child: mobilePageView ?? pageView),
-            mobileNavigation,
+            if (MediaQuery.viewInsetsOf(context).bottom == 0) mobileNavigation,
           ],
         ),
       ),

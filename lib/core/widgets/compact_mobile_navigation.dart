@@ -43,23 +43,18 @@ class CompactMobileNavigation extends StatelessWidget {
     ];
     final moreSelected = secondaryIndices.contains(currentIndex);
 
-    return SafeArea(
-      top: false,
-      minimum: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-      child: Material(
-        color: Colors.white,
-        elevation: 3,
-        shadowColor: const Color(0x24000000),
-        borderRadius: BorderRadius.circular(24),
+    return Material(
+      color: Colors.white,
+      child: SafeArea(
+        top: false,
         child: Container(
           constraints: BoxConstraints(
             minHeight:
-                80 + (MediaQuery.textScalerOf(context).scale(12) - 12) * 2,
+                64 + (MediaQuery.textScalerOf(context).scale(12) - 12) * 2,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 6),
-          decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xFFE9E1F1)),
-            borderRadius: BorderRadius.circular(24),
+          decoration: const BoxDecoration(
+            border: Border(top: BorderSide(color: Color(0xFFE9E1F1))),
           ),
           child: Row(
             children: [
@@ -167,14 +162,15 @@ class _NavigationItem extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(20),
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
+          padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 2),
           child: Column(
+            mainAxisSize: MainAxisSize.min,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 180),
                 width: 48,
-                height: 30,
+                height: 28,
                 decoration: BoxDecoration(
                   color:
                       selected ? const Color(0xFF51318A) : Colors.transparent,
@@ -193,6 +189,7 @@ class _NavigationItem extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 12,
+                  height: 1.25,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
                   color:
                       selected
@@ -217,7 +214,11 @@ class _MenuRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      children: [Icon(icon, size: 20), const SizedBox(width: 12), Text(label)],
+      children: [
+        Icon(icon, size: 20),
+        const SizedBox(width: 12),
+        Expanded(child: Text(label)),
+      ],
     );
   }
 }

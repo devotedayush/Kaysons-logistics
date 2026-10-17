@@ -926,6 +926,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
     final rows = _filtered;
+    final mobile = MediaQuery.sizeOf(context).width < 600;
     final compact =
         MediaQuery.sizeOf(context).width < 1050 ||
         MediaQuery.textScalerOf(context).scale(14) > 19;
@@ -963,6 +964,11 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
           child: TextField(
             controller: _invoiceSearch,
             decoration: InputDecoration(
+              isDense: mobile,
+              contentPadding:
+                  mobile
+                      ? const EdgeInsets.symmetric(horizontal: 12, vertical: 12)
+                      : null,
               labelText: officeCopy(context, 'Search ledger', 'लेजर खोजें'),
               hintText: officeCopy(
                 context,
@@ -1025,6 +1031,12 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
           child: _toolbarLabel(Icons.calendar_month_outlined, period),
         ),
         OutlinedButton.icon(
+          style:
+              mobile
+                  ? OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  )
+                  : null,
           onPressed:
               () =>
                   setState(() => _showAdvancedFilters = !_showAdvancedFilters),
@@ -1085,7 +1097,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
               ],
           child: _toolbarLabel(
             Icons.more_horiz,
-            officeCopy(context, 'More', 'अधिक'),
+            mobile ? '' : officeCopy(context, 'More', 'अधिक'),
           ),
         ),
       ],
@@ -1097,9 +1109,15 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
         ),
       ),
       child: CustomScrollView(
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         slivers: [
           SliverPadding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+            padding: EdgeInsets.fromLTRB(
+              mobile ? 12 : 16,
+              mobile ? 8 : 16,
+              mobile ? 12 : 16,
+              12,
+            ),
             sliver: SliverToBoxAdapter(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1110,11 +1128,22 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
                       Expanded(
                         child: Text(
                           l.adminFreightLedger,
-                          style: Theme.of(context).textTheme.headlineSmall,
+                          style:
+                              mobile
+                                  ? Theme.of(context).textTheme.titleLarge
+                                  : Theme.of(context).textTheme.headlineSmall,
                         ),
                       ),
                       const SizedBox(width: 12),
                       FilledButton.icon(
+                        style:
+                            mobile
+                                ? FilledButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                )
+                                : null,
                         onPressed: _openEntryForm,
                         icon: const Icon(Icons.add),
                         label: Text(
@@ -1123,16 +1152,18 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    officeCopy(
-                      context,
-                      'Find an invoice and see what needs attention.',
-                      'इनवॉइस खोजें और बाकी काम देखें.',
+                  if (!mobile) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      officeCopy(
+                        context,
+                        'Find an invoice and see what needs attention.',
+                        'इनवॉइस खोजें और बाकी काम देखें.',
+                      ),
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                  const SizedBox(height: 16),
+                  ],
+                  SizedBox(height: mobile ? 8 : 16),
                   SegmentedButton<LedgerPresentation>(
                     showSelectedIcon: false,
                     segments: [
@@ -1154,13 +1185,13 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
                           _fullColumns = false;
                         }),
                   ),
-                  const SizedBox(height: 16),
+                  SizedBox(height: mobile ? 8 : 16),
                   toolbar,
                   if (_showAdvancedFilters) ...[
                     const SizedBox(height: 12),
                     _advancedFilters(),
                   ],
-                  const SizedBox(height: 12),
+                  SizedBox(height: mobile ? 4 : 12),
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,
@@ -1200,7 +1231,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 10),
+                  SizedBox(height: mobile ? 4 : 10),
                   if (!_loading && _error == null)
                     Text(
                       officeCopy(
@@ -1208,7 +1239,10 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
                         '${rows.length} records · ${_money(rows.fold<num>(0, (sum, row) => sum + (_num(row['total_freight']) ?? 0)))} freight · ${countDistinctFreightRows(rows, where: ledgerProofNeedsReview)} trips need proof',
                         '${rows.length} रिकॉर्ड · ${_money(rows.fold<num>(0, (sum, row) => sum + (_num(row['total_freight']) ?? 0)))} भाड़ा · ${countDistinctFreightRows(rows, where: ledgerProofNeedsReview)} चक्करों का प्रमाण बाकी',
                       ),
-                      style: Theme.of(context).textTheme.labelLarge,
+                      style:
+                          mobile
+                              ? Theme.of(context).textTheme.bodySmall
+                              : Theme.of(context).textTheme.labelLarge,
                     ),
                 ],
               ),
@@ -1357,7 +1391,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
                 ),
               ),
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: EdgeInsets.symmetric(horizontal: mobile ? 12 : 16),
               sliver: SliverList.builder(
                 itemCount: visible.length,
                 itemBuilder:
@@ -1389,8 +1423,10 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 20),
-        const SizedBox(width: 8),
-        Flexible(child: Text(label)),
+        if (label.isNotEmpty) ...[
+          const SizedBox(width: 8),
+          Flexible(child: Text(label)),
+        ],
       ],
     ),
   );
@@ -2297,10 +2333,8 @@ class _TransporterSummary {
   double get freightPerMetricTon =>
       totalMetricTons == 0 ? 0 : totalFreight / totalMetricTons;
   double get freightPerCase => totalCases == 0 ? 0 : totalFreight / totalCases;
-  int get podPending => countDistinctFreightRows(
-    _podRows,
-    where: ledgerProofNeedsReview,
-  );
+  int get podPending =>
+      countDistinctFreightRows(_podRows, where: ledgerProofNeedsReview);
   int get podReceived => countDistinctFreightRows(
     _podRows,
     where: (row) => !ledgerProofNeedsReview(row),

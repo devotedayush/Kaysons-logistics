@@ -112,14 +112,20 @@ class _BidsBodyState extends State<BidsBody> {
                     .toList();
             final rows = _showHistory ? past : live;
             return ListView(
-              padding: const EdgeInsets.all(20),
+              padding: transporterPagePadding(context),
               children: [
                 WorkspaceHeader(
                   title: l.tpOpenBids,
-                  description: tpText(
+                  description: tpResponsiveText(
                     context,
-                    'Find a suitable load, check the route and quote the total freight. A quote is only confirmed when the office awards the trip.',
-                    'सही माल चुनें, मार्ग जाँचें और कुल भाड़ा दें। कार्यालय के यात्रा देने पर ही काम पक्का होता है।',
+                    desktopEn:
+                        'Find a suitable load, check the route and quote the total freight. A quote is only confirmed when the office awards the trip.',
+                    desktopHi:
+                        'सही माल चुनें, मार्ग जाँचें और कुल भाड़ा दें। कार्यालय के यात्रा देने पर ही काम पक्का होता है।',
+                    mobileEn:
+                        'Check the route and quote the total freight. The office confirms a trip when it is awarded.',
+                    mobileHi:
+                        'मार्ग देखकर कुल भाड़ा दें। कार्यालय के यात्रा देने पर काम पक्का होता है।',
                   ),
                   icon: Icons.gavel_outlined,
                   summary: Wrap(
@@ -130,11 +136,12 @@ class _BidsBodyState extends State<BidsBody> {
                         label: l.tpOpenBidsCount(live.length),
                         tone: WorkspaceTone.info,
                       ),
-                      StatusBadge(label: l.tpBidHistoryCount(past.length)),
+                      if (MediaQuery.sizeOf(context).width >= 600)
+                        StatusBadge(label: l.tpBidHistoryCount(past.length)),
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 TransporterSearch(
                   label: tpText(
                     context,
@@ -149,12 +156,22 @@ class _BidsBodyState extends State<BidsBody> {
                   runSpacing: 8,
                   children: [
                     ChoiceChip(
-                      label: Text(tpText(context, 'Open now', 'अभी खुली')),
+                      label: Text(
+                        tpText(context, 'Open now', 'अभी खुली'),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
                       selected: !_showHistory,
                       onSelected: (_) => setState(() => _showHistory = false),
                     ),
                     ChoiceChip(
-                      label: Text(l.tpBidHistory),
+                      label: Text(
+                        l.tpBidHistory,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                        ),
+                      ),
                       selected: _showHistory,
                       onSelected: (_) => setState(() => _showHistory = true),
                     ),
@@ -200,7 +217,7 @@ class _BidsBodyState extends State<BidsBody> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 14),
                 if (snap.hasError || (_showHistory && historySnap.hasError))
                   WorkspaceEmptyState(
                     title: tpText(

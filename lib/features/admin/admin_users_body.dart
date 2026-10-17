@@ -245,6 +245,7 @@ class _AdminUsersBodyState extends State<AdminUsersBody>
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
+    final compact = MediaQuery.sizeOf(context).width < 600;
     final matching = _users.where(
       (u) => '${u.name} ${_roleLabel(l, u.role)}'.toLowerCase().contains(
         _search.toLowerCase(),
@@ -256,25 +257,54 @@ class _AdminUsersBodyState extends State<AdminUsersBody>
 
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.all(16),
-          child: WorkspaceHeader(
-            title: l.adminUserManagement,
-            description: officeCopy(
-              context,
-              'Review new registrations first. Choose the job role and reporting manager before approving access.',
-              'पहले नए पंजीकरण देखें। स्वीकृति से पहले काम की भूमिका और रिपोर्टिंग प्रबंधक चुनें।',
+        if (compact)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l.adminUserManagement,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  tooltip: l.adminRefresh,
+                  onPressed: _loading ? null : _load,
+                  icon: const Icon(Icons.refresh),
+                ),
+              ],
             ),
-            icon: Icons.people_outline,
-            action: OutlinedButton.icon(
-              onPressed: _loading ? null : _load,
-              icon: const Icon(Icons.refresh),
-              label: Text(l.adminRefresh),
+          )
+        else
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: WorkspaceHeader(
+              title: l.adminUserManagement,
+              description: officeCopy(
+                context,
+                'Review new registrations first. Choose the job role and reporting manager before approving access.',
+                'पहले नए पंजीकरण देखें। स्वीकृति से पहले काम की भूमिका और रिपोर्टिंग प्रबंधक चुनें।',
+              ),
+              icon: Icons.people_outline,
+              action: OutlinedButton.icon(
+                onPressed: _loading ? null : _load,
+                icon: const Icon(Icons.refresh),
+                label: Text(l.adminRefresh),
+              ),
             ),
           ),
-        ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          padding: EdgeInsets.fromLTRB(
+            compact ? 12 : 16,
+            0,
+            compact ? 12 : 16,
+            compact ? 6 : 12,
+          ),
           child: TextField(
             onChanged: (value) => setState(() => _search = value),
             decoration: InputDecoration(
@@ -284,11 +314,18 @@ class _AdminUsersBodyState extends State<AdminUsersBody>
                 'व्यक्ति या भूमिका खोजें',
               ),
               prefixIcon: const Icon(Icons.search),
+              isDense: compact,
+              contentPadding: EdgeInsets.symmetric(
+                vertical: compact ? 12 : 16,
+                horizontal: 12,
+              ),
             ),
           ),
         ),
         TabBar(
           controller: _tab,
+          isScrollable: compact,
+          labelPadding: EdgeInsets.symmetric(horizontal: compact ? 14 : 12),
           tabs: [
             Tab(text: '${l.users} (${approved.length})'),
             Tab(text: '${l.adminPending} (${pending.length})'),
@@ -428,6 +465,92 @@ class _AdminUsersBodyState extends State<AdminUsersBody>
             ),
           );
         }
+        if (constraints.maxWidth < 600) {
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+            itemCount: users.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 6),
+            itemBuilder: (context, index) {
+              final user = users[index];
+              final role = _roleLabel(l, user.role);
+              final manager =
+                  user.role == 'dispatch_manager' && user.managerId != null
+                      ? _logisticsManagers[user.managerId]
+                      : null;
+              return Card(
+                margin: EdgeInsets.zero,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: () => _reviewUser(user, pending: pending),
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Row(
+                      children: [
+                        const CircleAvatar(
+                          radius: 19,
+                          backgroundColor: Color(0xFFEADDFF),
+                          child: Icon(
+                            Icons.person,
+                            color: Color(0xFF4F378A),
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                user.name.isEmpty ? l.adminUnnamed : user.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                manager == null ? role : '$role · $manager',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 7),
+                              StatusBadge(
+                                label:
+                                    user.status == 'pending'
+                                        ? l.adminPending
+                                        : user.status == 'approved'
+                                        ? officeCopy(
+                                          context,
+                                          'Approved',
+                                          'स्वीकृत',
+                                        )
+                                        : officeCopy(
+                                          context,
+                                          'Rejected',
+                                          'अस्वीकृत',
+                                        ),
+                                tone:
+                                    pending
+                                        ? WorkspaceTone.warning
+                                        : user.status == 'approved'
+                                        ? WorkspaceTone.success
+                                        : WorkspaceTone.danger,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        }
         return ListView.separated(
           padding: const EdgeInsets.all(16),
           itemCount: users.length,
@@ -488,31 +611,58 @@ class _AdminUsersBodyState extends State<AdminUsersBody>
     final l = AppLocalizations.of(context)!;
     return ExpansionTile(
       initiallyExpanded: expanded,
-      leading: const CircleAvatar(
-        backgroundColor: Color(0xFFEADDFF),
-        child: Icon(Icons.person, color: Color(0xFF4F378A)),
-      ),
+      leading:
+          expanded
+              ? null
+              : const CircleAvatar(
+                backgroundColor: Color(0xFFEADDFF),
+                child: Icon(Icons.person, color: Color(0xFF4F378A)),
+              ),
       title: Text(u.name.isEmpty ? l.adminUnnamed : u.name),
-      trailing: StatusBadge(
-        label:
-            u.status == 'pending'
-                ? l.adminPending
-                : u.status == 'approved'
-                ? officeCopy(context, 'Approved', 'स्वीकृत')
-                : officeCopy(context, 'Rejected', 'अस्वीकृत'),
-        tone:
-            pending
-                ? WorkspaceTone.warning
-                : u.status == 'approved'
-                ? WorkspaceTone.success
-                : WorkspaceTone.danger,
-      ),
+      trailing:
+          expanded
+              ? null
+              : StatusBadge(
+                label:
+                    u.status == 'pending'
+                        ? l.adminPending
+                        : u.status == 'approved'
+                        ? officeCopy(context, 'Approved', 'स्वीकृत')
+                        : officeCopy(context, 'Rejected', 'अस्वीकृत'),
+                tone:
+                    pending
+                        ? WorkspaceTone.warning
+                        : u.status == 'approved'
+                        ? WorkspaceTone.success
+                        : WorkspaceTone.danger,
+              ),
       subtitle: Text(
         u.role == 'dispatch_manager' && u.managerId != null
             ? '${_roleLabel(l, u.role)} · ${_logisticsManagers[u.managerId] ?? l.adminNoManager}'
             : _roleLabel(l, u.role),
       ),
       children: [
+        if (expanded)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: StatusBadge(
+                label:
+                    u.status == 'pending'
+                        ? l.adminPending
+                        : u.status == 'approved'
+                        ? officeCopy(context, 'Approved', 'स्वीकृत')
+                        : officeCopy(context, 'Rejected', 'अस्वीकृत'),
+                tone:
+                    pending
+                        ? WorkspaceTone.warning
+                        : u.status == 'approved'
+                        ? WorkspaceTone.success
+                        : WorkspaceTone.danger,
+              ),
+            ),
+          ),
         if (u.phone.isNotEmpty || u.email.isNotEmpty)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -537,6 +687,8 @@ class _AdminUsersBodyState extends State<AdminUsersBody>
               final narrow = constraints.maxWidth < 560;
               final roleField = DropdownButtonFormField<String>(
                 initialValue: u.role,
+                isExpanded: true,
+                itemHeight: null,
                 decoration: InputDecoration(
                   labelText: l.adminRole,
                   border: const OutlineInputBorder(),
@@ -561,6 +713,8 @@ class _AdminUsersBodyState extends State<AdminUsersBody>
                     _logisticsManagers.containsKey(u.managerId)
                         ? u.managerId
                         : null,
+                isExpanded: true,
+                itemHeight: null,
                 decoration: InputDecoration(
                   labelText: l.adminReportsTo,
                   border: const OutlineInputBorder(),

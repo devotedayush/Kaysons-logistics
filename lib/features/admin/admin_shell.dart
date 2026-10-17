@@ -91,7 +91,7 @@ class _AdminShellState extends State<AdminShell> {
       mobileNavigation: CompactMobileNavigation(
         currentIndex: _index,
         onSelect: _goto,
-        primaryIndices: const [0, 1, 2],
+        primaryIndices: const [0, 2, 3],
         destinations: [
           CompactMobileDestination(
             icon: Icons.dashboard_outlined,

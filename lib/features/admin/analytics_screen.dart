@@ -119,6 +119,7 @@ class _AnalyticsBodyState extends State<AnalyticsBody> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
+    final mobile = MediaQuery.sizeOf(context).width < 600;
     final rows = _filtered;
     final totalFreight = _sum(rows, 'total_freight');
     final totalCases = _sum(rows, 'cases');
@@ -151,7 +152,7 @@ class _AnalyticsBodyState extends State<AnalyticsBody> {
                 : RefreshIndicator(
                   onRefresh: _load,
                   child: ListView(
-                    padding: const EdgeInsets.all(16),
+                    padding: EdgeInsets.all(mobile ? 12 : 16),
                     children: [
                       WorkspaceHeader(
                         title: l.analytics,
@@ -169,6 +170,7 @@ class _AnalyticsBodyState extends State<AnalyticsBody> {
                       ),
                       const SizedBox(height: 8),
                       DateWindowBar(
+                        compact: mobile,
                         rangeDays: _rangeDays,
                         customStart: _customStart,
                         customEnd: _customEnd,
@@ -215,7 +217,7 @@ class _AnalyticsBodyState extends State<AnalyticsBody> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: mobile ? 16 : 24),
                       SectionHeading(
                         title: officeCopy(
                           context,

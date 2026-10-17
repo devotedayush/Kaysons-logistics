@@ -11,6 +11,7 @@ class DateWindowBar extends StatelessWidget {
     required this.onPickStart,
     required this.onPickEnd,
     required this.onClearCustom,
+    this.compact = false,
   });
 
   final int rangeDays;
@@ -20,6 +21,7 @@ class DateWindowBar extends StatelessWidget {
   final Future<void> Function() onPickStart;
   final Future<void> Function() onPickEnd;
   final VoidCallback onClearCustom;
+  final bool compact;
 
   String _customLabel(AppLocalizations l) {
     if (customStart == null || customEnd == null) {
@@ -34,6 +36,91 @@ class DateWindowBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context)!;
     final hasCustom = customStart != null && customEnd != null;
+    if (compact) {
+      return Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: PopupMenuButton<int>(
+                  initialValue: hasCustom ? null : rangeDays,
+                  onSelected: onSelectRange,
+                  itemBuilder:
+                      (_) => [
+                        for (final days in [7, 15, 30, 90])
+                          CheckedPopupMenuItem(
+                            value: days,
+                            checked: !hasCustom && rangeDays == days,
+                            child: Text(l.dateWindowDays(days)),
+                          ),
+                      ],
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outline,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            hasCustom
+                                ? _customLabel(l)
+                                : l.dateWindowDays(rangeDays),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
+                            ),
+                          ),
+                        ),
+                        const Icon(Icons.expand_more),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: OutlinedButton.icon(
+                  onPressed: onPickStart,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                  ),
+                  icon: const Icon(Icons.calendar_month_outlined, size: 18),
+                  label: Text(l.dateWindowCustomDates),
+                ),
+              ),
+            ],
+          ),
+          if (hasCustom)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  TextButton(
+                    onPressed: onPickStart,
+                    child: Text(l.dateWindowFrom),
+                  ),
+                  TextButton(onPressed: onPickEnd, child: Text(l.dateWindowTo)),
+                  TextButton(
+                    onPressed: onClearCustom,
+                    child: Text(l.dateWindowUsePreset),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

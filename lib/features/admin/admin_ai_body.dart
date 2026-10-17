@@ -9,6 +9,8 @@ const _onSurface = Color(0xFF1D1B20);
 const _onSurfaceVariant = Color(0xFF49454F);
 const _border = Color(0xFFE4E0E8);
 
+enum _AssistantAction { scanRisks, dailyReport, monthlyReport }
+
 String _copy(BuildContext context, String english, String hindi) =>
     context.mounted && Localizations.localeOf(context).languageCode == 'hi'
         ? hindi
@@ -419,18 +421,25 @@ class _AdminAiBodyState extends State<AdminAiBody> {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Column(
       children: [
         _Header(
           reporting: _reporting,
           detecting: _detecting,
+          compact: compact,
           onDaily: () => _runReport(monthly: false),
           onMonthly: () => _runReport(monthly: true),
           onDetect: _detectAnomalies,
         ),
         if (_latestReport != null)
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            padding: EdgeInsets.fromLTRB(
+              compact ? 12 : 16,
+              0,
+              compact ? 12 : 16,
+              8,
+            ),
             child: _ReportNotice(report: _latestReport!),
           ),
         Expanded(
@@ -515,6 +524,62 @@ class _Workspace extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 1100;
+        final compact = constraints.maxWidth < 600;
+        if (compact) {
+          final chatHeight =
+              (MediaQuery.sizeOf(context).height * .52)
+                  .clamp(360.0, 460.0)
+                  .toDouble();
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+            children: [
+              _RiskSummary(snapshot: snapshot, compact: true),
+              const SizedBox(height: 8),
+              _QuickPrompts(onPrompt: onQuickPrompt, compact: true),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: chatHeight,
+                child: _ChatPane(
+                  messages: messages,
+                  question: question,
+                  asking: asking,
+                  onAsk: onAsk,
+                  onExpand: onExpandChat,
+                  compact: true,
+                ),
+              ),
+              const SizedBox(height: 8),
+              _ReviewQueue(
+                anomalies: anomalies,
+                onUpdate: onUpdateAnomaly,
+                compact: true,
+              ),
+              const SizedBox(height: 4),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: Text(
+                  _copy(
+                    context,
+                    'Reports & saved prompts',
+                    'रिपोर्ट और सहेजे गए प्रश्न',
+                  ),
+                ),
+                children: [
+                  _ToolsPanel(
+                    templates: templates,
+                    selectedTemplate: selectedTemplate,
+                    variables: variables,
+                    reports: reports,
+                    onTemplateChanged: onTemplateChanged,
+                    onRunTemplate: onRunTemplate,
+                    onAddPrompt: onAddPrompt,
+                    compactHeader: true,
+                  ),
+                ],
+              ),
+            ],
+          );
+        }
         if (!wide) {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -616,6 +681,7 @@ class _Header extends StatelessWidget {
   const _Header({
     required this.reporting,
     required this.detecting,
+    required this.compact,
     required this.onDaily,
     required this.onMonthly,
     required this.onDetect,
@@ -623,12 +689,98 @@ class _Header extends StatelessWidget {
 
   final bool reporting;
   final bool detecting;
+  final bool compact;
   final VoidCallback onDaily;
   final VoidCallback onMonthly;
   final VoidCallback onDetect;
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 4, 8, 4),
+        child: Row(
+          children: [
+            const Icon(Icons.psychology_alt_outlined, size: 24),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _copy(context, 'Clawd', 'Clawd'),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    _copy(
+                      context,
+                      'Ask about today’s operations',
+                      'आज के कामकाज के बारे में पूछें',
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: _onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            if (detecting || reporting)
+              const Padding(
+                padding: EdgeInsets.only(right: 4),
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            PopupMenuButton<_AssistantAction>(
+              tooltip: _copy(context, 'Clawd actions', 'Clawd के काम'),
+              onSelected: (action) {
+                switch (action) {
+                  case _AssistantAction.scanRisks:
+                    onDetect();
+                  case _AssistantAction.dailyReport:
+                    onDaily();
+                  case _AssistantAction.monthlyReport:
+                    onMonthly();
+                }
+              },
+              itemBuilder:
+                  (context) => [
+                    PopupMenuItem(
+                      value: _AssistantAction.scanRisks,
+                      enabled: !detecting,
+                      child: Text(
+                        detecting
+                            ? _copy(context, 'Scanning…', 'जाँच जारी है…')
+                            : _copy(context, 'Scan risks', 'जोखिम जाँचें'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: _AssistantAction.dailyReport,
+                      enabled: !reporting,
+                      child: Text(
+                        _copy(context, 'Daily report', 'दैनिक रिपोर्ट'),
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: _AssistantAction.monthlyReport,
+                      enabled: !reporting,
+                      child: Text(
+                        _copy(context, 'Monthly report', 'मासिक रिपोर्ट'),
+                      ),
+                    ),
+                  ],
+            ),
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Wrap(
@@ -682,18 +834,114 @@ class _Header extends StatelessWidget {
 }
 
 class _RiskSummary extends StatelessWidget {
-  const _RiskSummary({required this.snapshot});
+  const _RiskSummary({required this.snapshot, this.compact = false});
 
   final ClawdSnapshot? snapshot;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final s = snapshot;
+    final title =
+        s == null
+            ? _copy(context, 'Current Risk Summary', 'मौजूदा जोखिम सारांश')
+            : '${_copy(context, 'Current Risk Summary', 'मौजूदा जोखिम सारांश')} · ${s.periodLabel}';
+    if (compact && s != null) {
+      final primary = [
+        _MetricPill(
+          _copy(context, 'Dispatches', 'डिस्पैच'),
+          s.dispatches.toString(),
+          compact: true,
+        ),
+        _MetricPill(
+          _copy(context, 'Freight', 'भाड़ा'),
+          _fmtMoney(s.freight),
+          compact: true,
+        ),
+        _MetricPill(
+          _copy(context, 'POD pending', 'POD लंबित'),
+          s.podPending.toString(),
+          warning: s.podPending > 0,
+          compact: true,
+        ),
+        _MetricPill(
+          _copy(context, 'Review value', 'समीक्षा राशि'),
+          _fmtMoney(s.reviewValue),
+          warning: s.reviewValue > 0,
+          compact: true,
+        ),
+      ];
+      final signals = [
+        _MetricPill(
+          _copy(context, 'Duplicate e-way', 'डुप्लिकेट ई-वे'),
+          s.duplicateEwayRisks.toString(),
+          warning: s.duplicateEwayRisks > 0,
+          compact: true,
+        ),
+        _MetricPill(
+          _copy(context, 'Route spikes', 'मार्ग लागत वृद्धि'),
+          s.routeCostSpikeRisks.toString(),
+          warning: s.routeCostSpikeRisks > 0,
+          compact: true,
+        ),
+        _MetricPill(
+          _copy(context, 'Extra charges', 'अतिरिक्त शुल्क'),
+          s.highExtraChargeRisks.toString(),
+          warning: s.highExtraChargeRisks > 0,
+          compact: true,
+        ),
+      ];
+      return _Panel(
+        title: title,
+        dense: true,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = (constraints.maxWidth - 8) / 2;
+            return Column(
+              children: [
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children:
+                      primary
+                          .map(
+                            (metric) => SizedBox(width: width, child: metric),
+                          )
+                          .toList(),
+                ),
+                Material(
+                  color: Colors.transparent,
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    childrenPadding: EdgeInsets.zero,
+                    minTileHeight: 44,
+                    title: Text(
+                      _copy(context, 'More risk signals', 'अन्य जोखिम संकेत'),
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    children: [
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children:
+                            signals
+                                .map(
+                                  (metric) =>
+                                      SizedBox(width: width, child: metric),
+                                )
+                                .toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
     return _Panel(
-      title:
-          s == null
-              ? _copy(context, 'Current Risk Summary', 'मौजूदा जोखिम सारांश')
-              : '${_copy(context, 'Current Risk Summary', 'मौजूदा जोखिम सारांश')} · ${s.periodLabel}',
+      title: title,
       child:
           s == null
               ? Text(
@@ -744,9 +992,10 @@ class _RiskSummary extends StatelessWidget {
 }
 
 class _QuickPrompts extends StatelessWidget {
-  const _QuickPrompts({required this.onPrompt});
+  const _QuickPrompts({required this.onPrompt, this.compact = false});
 
   final ValueChanged<String> onPrompt;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -777,6 +1026,45 @@ class _QuickPrompts extends StatelessWidget {
         'इस महीने के भाड़े का खर्च समझाएँ',
       ),
     ];
+    if (compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _copy(context, 'Try asking', 'यह पूछें'),
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: _onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 2),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children:
+                  prompts
+                      .map(
+                        (prompt) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ActionChip(
+                            avatar: const Icon(Icons.bolt_outlined, size: 16),
+                            label: Text(
+                              prompt,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            onPressed: () => onPrompt(prompt),
+                          ),
+                        ),
+                      )
+                      .toList(),
+            ),
+          ),
+        ],
+      );
+    }
     return _Panel(
       title: _copy(
         context,
@@ -809,6 +1097,7 @@ class _ChatPane extends StatelessWidget {
     required this.onAsk,
     this.onExpand,
     this.expanded = false,
+    this.compact = false,
   });
 
   final List<_ClawdMessage> messages;
@@ -817,12 +1106,14 @@ class _ChatPane extends StatelessWidget {
   final Future<void> Function([String? prompt]) onAsk;
   final VoidCallback? onExpand;
   final bool expanded;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return _Panel(
       title: _copy(context, 'Ask Clawd', 'Clawd से पूछें'),
       fill: true,
+      dense: compact,
       trailing:
           onExpand == null
               ? null
@@ -888,14 +1179,63 @@ class _MessageList extends StatelessWidget {
 }
 
 class _ReviewQueue extends StatelessWidget {
-  const _ReviewQueue({required this.anomalies, required this.onUpdate});
+  const _ReviewQueue({
+    required this.anomalies,
+    required this.onUpdate,
+    this.compact = false,
+  });
 
   final List<ClawdAnomaly> anomalies;
   final Future<void> Function(ClawdAnomaly anomaly, String status) onUpdate;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final open = anomalies.where((a) => a.status == 'open').take(8).toList();
+    if (compact) {
+      return Material(
+        color: Colors.white,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+          side: const BorderSide(color: _border),
+        ),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 12),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          minTileHeight: 58,
+          leading: const Icon(Icons.fact_check_outlined),
+          title: Text(
+            '${_copy(context, 'Open review queue', 'खुली समीक्षा सूची')} (${open.length})',
+            style: const TextStyle(fontWeight: FontWeight.w800),
+          ),
+          subtitle:
+              open.isEmpty
+                  ? Text(
+                    _copy(context, 'No items yet', 'अभी कोई आइटम नहीं'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                  : Text(
+                    _copy(
+                      context,
+                      'Tap to review items',
+                      'आइटम देखने के लिए खोलें',
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+          children:
+              open.isEmpty
+                  ? const []
+                  : open
+                      .map(
+                        (anomaly) =>
+                            _AnomalyTile(anomaly: anomaly, onUpdate: onUpdate),
+                      )
+                      .toList(),
+        ),
+      );
+    }
     return _Panel(
       title: _copy(context, 'Open Review Queue', 'खुली समीक्षा सूची'),
       child:
@@ -932,6 +1272,7 @@ class _ToolsPanel extends StatelessWidget {
     required this.onTemplateChanged,
     required this.onRunTemplate,
     required this.onAddPrompt,
+    this.compactHeader = false,
   });
 
   final List<ClawdPromptTemplate> templates;
@@ -941,9 +1282,91 @@ class _ToolsPanel extends StatelessWidget {
   final ValueChanged<ClawdPromptTemplate?> onTemplateChanged;
   final VoidCallback onRunTemplate;
   final VoidCallback onAddPrompt;
+  final bool compactHeader;
 
   @override
   Widget build(BuildContext context) {
+    final content = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (compactHeader)
+          Align(
+            alignment: Alignment.centerRight,
+            child: IconButton(
+              tooltip: _copy(context, 'Add prompt', 'प्रश्न जोड़ें'),
+              onPressed: onAddPrompt,
+              icon: const Icon(Icons.add),
+            ),
+          ),
+        DropdownButtonFormField<ClawdPromptTemplate>(
+          initialValue: selectedTemplate,
+          items:
+              templates
+                  .map(
+                    (template) => DropdownMenuItem(
+                      value: template,
+                      child: Text(template.name),
+                    ),
+                  )
+                  .toList(),
+          onChanged: onTemplateChanged,
+          decoration: InputDecoration(
+            labelText: _copy(context, 'Saved prompt', 'सहेजा गया प्रश्न'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (selectedTemplate != null)
+          SavedQuestionInputs(
+            key: ValueKey(selectedTemplate!.id),
+            template: selectedTemplate!,
+            variables: variables,
+          ),
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: Text(
+            _copy(
+              context,
+              'Advanced question settings',
+              'सवाल की अतिरिक्त सेटिंग',
+            ),
+          ),
+          children: [
+            TextField(
+              controller: variables,
+              minLines: 2,
+              maxLines: 4,
+              decoration: InputDecoration(
+                labelText: _copy(
+                  context,
+                  'Saved question inputs (JSON)',
+                  'सहेजे सवाल की जानकारी (JSON)',
+                ),
+                hintText: '{"route":"Ludhiana to Amritsar"}',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        FilledButton.icon(
+          onPressed: selectedTemplate == null ? null : onRunTemplate,
+          icon: const Icon(Icons.play_arrow),
+          label: Text(_copy(context, 'Run prompt', 'प्रश्न चलाएँ')),
+        ),
+        const Divider(height: 24),
+        if (reports.isEmpty)
+          Text(
+            _copy(
+              context,
+              'Reports will appear after Clawd runs.',
+              'Clawd चलने के बाद रिपोर्ट यहाँ दिखेंगी।',
+            ),
+            style: const TextStyle(color: _onSurfaceVariant),
+          )
+        else
+          ...reports.take(5).map(_ReportTile.new),
+      ],
+    );
+    if (compactHeader) return content;
     return _Panel(
       title: _copy(
         context,
@@ -955,77 +1378,7 @@ class _ToolsPanel extends StatelessWidget {
         onPressed: onAddPrompt,
         icon: const Icon(Icons.add),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          DropdownButtonFormField<ClawdPromptTemplate>(
-            initialValue: selectedTemplate,
-            items:
-                templates
-                    .map(
-                      (template) => DropdownMenuItem(
-                        value: template,
-                        child: Text(template.name),
-                      ),
-                    )
-                    .toList(),
-            onChanged: onTemplateChanged,
-            decoration: InputDecoration(
-              labelText: _copy(context, 'Saved prompt', 'सहेजा गया प्रश्न'),
-            ),
-          ),
-          const SizedBox(height: 8),
-          if (selectedTemplate != null)
-            SavedQuestionInputs(
-              key: ValueKey(selectedTemplate!.id),
-              template: selectedTemplate!,
-              variables: variables,
-            ),
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            title: Text(
-              _copy(
-                context,
-                'Advanced question settings',
-                'सवाल की अतिरिक्त सेटिंग',
-              ),
-            ),
-            children: [
-              TextField(
-                controller: variables,
-                minLines: 2,
-                maxLines: 4,
-                decoration: InputDecoration(
-                  labelText: _copy(
-                    context,
-                    'Saved question inputs (JSON)',
-                    'सहेजे सवाल की जानकारी (JSON)',
-                  ),
-                  hintText: '{"route":"Ludhiana to Amritsar"}',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          FilledButton.icon(
-            onPressed: selectedTemplate == null ? null : onRunTemplate,
-            icon: const Icon(Icons.play_arrow),
-            label: Text(_copy(context, 'Run prompt', 'प्रश्न चलाएँ')),
-          ),
-          const Divider(height: 24),
-          if (reports.isEmpty)
-            Text(
-              _copy(
-                context,
-                'Reports will appear after Clawd runs.',
-                'Clawd चलने के बाद रिपोर्ट यहाँ दिखेंगी।',
-              ),
-              style: const TextStyle(color: _onSurfaceVariant),
-            )
-          else
-            ...reports.take(5).map(_ReportTile.new),
-        ],
-      ),
+      child: content,
     );
   }
 }
@@ -1104,18 +1457,20 @@ class _Panel extends StatelessWidget {
     required this.child,
     this.trailing,
     this.fill = false,
+    this.dense = false,
   });
 
   final String title;
   final Widget child;
   final Widget? trailing;
   final bool fill;
+  final bool dense;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(dense ? 10 : 14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(8),
@@ -1139,7 +1494,7 @@ class _Panel extends StatelessWidget {
               if (trailing != null) trailing!,
             ],
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: dense ? 6 : 10),
           if (fill) Expanded(child: child) else child,
         ],
       ),
@@ -1148,17 +1503,23 @@ class _Panel extends StatelessWidget {
 }
 
 class _MetricPill extends StatelessWidget {
-  const _MetricPill(this.label, this.value, {this.warning = false});
+  const _MetricPill(
+    this.label,
+    this.value, {
+    this.warning = false,
+    this.compact = false,
+  });
 
   final String label;
   final String value;
   final bool warning;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 150,
-      padding: const EdgeInsets.all(10),
+      width: compact ? double.infinity : 150,
+      padding: EdgeInsets.all(compact ? 7 : 10),
       decoration: BoxDecoration(
         color: warning ? const Color(0xFFFFF7E8) : const Color(0xFFF7F2FA),
         borderRadius: BorderRadius.circular(8),
@@ -1179,7 +1540,10 @@ class _MetricPill extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 12, color: _onSurfaceVariant),
+            style: TextStyle(
+              fontSize: compact ? 11 : 12,
+              color: _onSurfaceVariant,
+            ),
           ),
         ],
       ),

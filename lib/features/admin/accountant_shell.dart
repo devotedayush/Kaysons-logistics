@@ -78,7 +78,7 @@ class _AccountantShellState extends State<AccountantShell> {
       mobileNavigation: CompactMobileNavigation(
         currentIndex: _index,
         onSelect: _goto,
-        primaryIndices: const [0, 1],
+        primaryIndices: const [0, 1, 2],
         destinations: [
           CompactMobileDestination(
             icon: Icons.receipt_long_outlined,

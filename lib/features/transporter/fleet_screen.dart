@@ -100,14 +100,18 @@ class _FleetBodyState extends State<FleetBody> {
     return RefreshIndicator(
       onRefresh: _load,
       child: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: transporterPagePadding(context),
         children: [
           WorkspaceHeader(
             title: tpText(context, 'My trips', 'मेरी यात्राएँ'),
-            description: tpText(
+            description: tpResponsiveText(
               context,
-              'Your awarded trips, from vehicle assignment to delivery. Open a trip to see the next step.',
-              'वाहन तय करने से डिलीवरी तक आपकी यात्राएँ। अगला काम देखने के लिए यात्रा खोलें।',
+              desktopEn:
+                  'Your awarded trips, from vehicle assignment to delivery. Open a trip to see the next step.',
+              desktopHi:
+                  'वाहन तय करने से डिलीवरी तक आपकी यात्राएँ। अगला काम देखने के लिए यात्रा खोलें।',
+              mobileEn: 'Open a trip to see its next step.',
+              mobileHi: 'अगला काम देखने के लिए यात्रा खोलें।',
             ),
             icon: Icons.route_outlined,
             summary: Wrap(
@@ -138,7 +142,7 @@ class _FleetBodyState extends State<FleetBody> {
               label: Text(l.tpManageVehicles),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
           TransporterSearch(
             label: tpText(
               context,
@@ -153,18 +157,28 @@ class _FleetBodyState extends State<FleetBody> {
             runSpacing: 8,
             children: [
               ChoiceChip(
-                label: Text(tpText(context, 'All trips', 'सभी यात्राएँ')),
+                label: Text(
+                  tpText(context, 'All trips', 'सभी यात्राएँ'),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
                 selected: !_completedOnly,
                 onSelected: (_) => setState(() => _completedOnly = false),
               ),
               ChoiceChip(
-                label: Text(tpText(context, 'Finished trips', 'पूरी यात्राएँ')),
+                label: Text(
+                  tpText(context, 'Finished trips', 'पूरी यात्राएँ'),
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
                 selected: _completedOnly,
                 onSelected: (_) => setState(() => _completedOnly = true),
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
           if (_loading)
             const Center(
               child: Padding(

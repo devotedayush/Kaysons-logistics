@@ -194,6 +194,7 @@ ThemeData buildAppTheme() {
         fontFamilyFallback: ['NotoSansDevanagariUI'],
         fontSize: 14,
         fontWeight: FontWeight.w600,
+        color: AppColors.onSurface,
       ),
       side: const BorderSide(color: AppColors.outline),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
