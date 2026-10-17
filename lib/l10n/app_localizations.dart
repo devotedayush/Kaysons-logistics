@@ -4298,6 +4298,12 @@ abstract class AppLocalizations {
   /// **'Use an Excel-exported CSV. Direct .xlsx upload is not enabled in this version.'**
   String get adminCsvHelp;
 
+  /// No description provided for @adminApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply'**
+  String get adminApply;
+
   /// No description provided for @adminCancel.
   ///
   /// In en, this message translates to:

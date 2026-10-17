@@ -150,6 +150,64 @@ void main() {
     );
   });
   setUp(() => activeLedger = ledgerFixtures);
+  testWidgets(
+    'month filter applies only on confirmation and survives cancellation',
+    (tester) async {
+      activeLedger = [
+        for (final (index, date)
+            in [DateTime(2024, 2, 29), DateTime(2025, 1, 1)].indexed)
+          {
+            ...ledgerFixtures[index],
+            'bill_date': date.toIso8601String(),
+            'dispatch_date': date.toIso8601String(),
+            'created_at': date.toIso8601String(),
+          },
+      ];
+      await mountLedger(tester, const Size(390, 844), 'en');
+      Future<void> openMonth() async {
+        await tester.ensureVisible(find.byTooltip('Period'));
+        await tester.tap(find.byTooltip('Period'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Choose month'));
+        await tester.pumpAndSettle();
+      }
+
+      Future<void> choose(String key) async {
+        final target = find.byKey(ValueKey('month-picker-$key'));
+        await tester.ensureVisible(target);
+        await tester.pumpAndSettle();
+        await tester.tap(target);
+        await tester.pumpAndSettle();
+      }
+
+      await openMonth();
+      await tester.tap(find.byKey(const Key('month-picker-year')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('2024').last);
+      await tester.pumpAndSettle();
+      await choose('2');
+      await snapshot(tester, 'month-picker-ledger-390-en');
+      await choose('apply');
+      expect(find.textContaining('1 records'), findsOneWidget);
+      expect(find.text('INV-001'), findsOneWidget);
+      expect(find.text('INV-002'), findsNothing);
+      await openMonth();
+      expect(find.text('February 2024'), findsOneWidget);
+      await choose('next-year');
+      await choose('1');
+      await choose('cancel');
+      expect(find.text('INV-001'), findsOneWidget);
+      expect(find.text('INV-002'), findsNothing);
+      await openMonth();
+      expect(find.text('February 2024'), findsOneWidget);
+      await choose('next-year');
+      await choose('1');
+      await choose('apply');
+      expect(find.text('INV-002'), findsOneWidget);
+      expect(find.text('INV-001'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
   testWidgets('two invoices on one trip remain two pending records', (
     tester,
   ) async {

@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../../core/widgets/workspace_widgets.dart';
+import '../../core/widgets/month_picker_dialog.dart';
 import 'widgets/office_widgets.dart';
 import 'package:go_router/go_router.dart';
 
@@ -107,7 +108,18 @@ class _AdminDashboardBodyState extends State<AdminDashboardBody> {
     final initial = _periodStart ?? DateTime.now();
     final picked = await showDialog<DateTime>(
       context: context,
-      builder: (context) => _MonthPickerDialog(initial: initial),
+      builder:
+          (context) => MonthPickerDialog(
+            initialMonth: initial,
+            years: [
+              for (
+                var year = DateTime.now().year - 2;
+                year <= DateTime.now().year + 1;
+                year++
+              )
+                year,
+            ],
+          ),
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -1186,62 +1198,6 @@ class _Pill extends StatelessWidget {
                 fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
                 color: _onSurface,
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MonthPickerDialog extends StatefulWidget {
-  const _MonthPickerDialog({required this.initial});
-
-  final DateTime initial;
-
-  @override
-  State<_MonthPickerDialog> createState() => _MonthPickerDialogState();
-}
-
-class _MonthPickerDialogState extends State<_MonthPickerDialog> {
-  late int _year = widget.initial.year;
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(AppLocalizations.of(context)!.adminSelectMonth),
-      content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            DropdownButtonFormField<int>(
-              initialValue: _year,
-              items: [
-                for (
-                  var year = DateTime.now().year - 2;
-                  year <= DateTime.now().year + 1;
-                  year++
-                )
-                  DropdownMenuItem(value: year, child: Text(year.toString())),
-              ],
-              onChanged: (value) => setState(() => _year = value ?? _year),
-              decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.adminYear,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (var month = 1; month <= 12; month++)
-                  OutlinedButton(
-                    onPressed:
-                        () => Navigator.pop(context, DateTime(_year, month)),
-                    child: Text(_monthName(month).substring(0, 3)),
-                  ),
-              ],
             ),
           ],
         ),

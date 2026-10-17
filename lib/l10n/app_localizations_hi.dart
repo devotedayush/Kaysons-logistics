@@ -2243,6 +2243,9 @@ class AppLocalizationsHi extends AppLocalizations {
       'Excel से निकाली गई CSV का उपयोग करें। इस संस्करण में सीधे .xlsx अपलोड उपलब्ध नहीं है।';
 
   @override
+  String get adminApply => 'लागू करें';
+
+  @override
   String get adminCancel => 'रद्द करें';
 
   @override

@@ -730,6 +730,7 @@
   "adminCompanySheetName": "कंपनी / शीट का नाम *",
   "adminUploadTag": "अपलोड टैग",
   "adminCsvHelp": "Excel से निकाली गई CSV का उपयोग करें। इस संस्करण में सीधे .xlsx अपलोड उपलब्ध नहीं है।",
+  "adminApply": "लागू करें",
   "adminCancel": "रद्द करें",
   "adminChooseCsv": "CSV चुनें",
   "adminCsvUploadComplete": "CSV अपलोड पूरा हुआ",

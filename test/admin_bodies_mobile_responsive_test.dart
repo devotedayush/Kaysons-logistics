@@ -207,6 +207,17 @@ void main() {
         findsOneWidget,
       );
 
+      await tester.tap(
+        find.byTooltip(locale == 'hi' ? 'अवधि बदलें' : 'Change period'),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(month).last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('month-picker-selection')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.tap(find.byKey(const Key('month-picker-cancel')));
+      await tester.pumpAndSettle();
+
       await tester.scrollUntilVisible(
         find.text('₹123.46 Cr'),
         240,

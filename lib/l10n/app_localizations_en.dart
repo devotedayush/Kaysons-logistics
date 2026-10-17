@@ -2244,6 +2244,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Use an Excel-exported CSV. Direct .xlsx upload is not enabled in this version.';
 
   @override
+  String get adminApply => 'Apply';
+
+  @override
   String get adminCancel => 'Cancel';
 
   @override

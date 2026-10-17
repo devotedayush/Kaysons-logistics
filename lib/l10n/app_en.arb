@@ -910,6 +910,7 @@
   "adminCompanySheetName": "Company / sheet name *",
   "adminUploadTag": "Upload tag",
   "adminCsvHelp": "Use an Excel-exported CSV. Direct .xlsx upload is not enabled in this version.",
+  "adminApply": "Apply",
   "adminCancel": "Cancel",
   "adminChooseCsv": "Choose CSV",
   "adminCsvUploadComplete": "CSV upload complete",

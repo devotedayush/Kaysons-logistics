@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../../core/widgets/workspace_widgets.dart';
+import '../../core/widgets/month_picker_dialog.dart';
 import 'widgets/office_widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -382,7 +383,7 @@ class _AdminLedgerBodyState extends State<AdminLedgerBody> {
     final picked = await showDialog<DateTime>(
       context: context,
       builder:
-          (_) => _MonthYearPickerDialog(
+          (_) => MonthPickerDialog(
             initialMonth: _month ?? _customStart ?? DateTime.now(),
             years: availableYears,
           ),
@@ -3040,97 +3041,6 @@ class _FilterMenu extends StatelessWidget {
   }
 }
 
-class _MonthYearPickerDialog extends StatefulWidget {
-  const _MonthYearPickerDialog({
-    required this.initialMonth,
-    required this.years,
-  });
-
-  final DateTime initialMonth;
-  final List<int> years;
-
-  @override
-  State<_MonthYearPickerDialog> createState() => _MonthYearPickerDialogState();
-}
-
-class _MonthYearPickerDialogState extends State<_MonthYearPickerDialog> {
-  late int _year = widget.initialMonth.year;
-
-  @override
-  Widget build(BuildContext context) {
-    final years =
-        widget.years.contains(_year)
-            ? widget.years
-            : ([...widget.years, _year]..sort((a, b) => b.compareTo(a)));
-    return AlertDialog(
-      title: Text(AppLocalizations.of(context)!.adminSelectMonth),
-      content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            InputDecorator(
-              decoration: InputDecoration(
-                labelText: AppLocalizations.of(context)!.adminYear,
-                border: const OutlineInputBorder(),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
-                  value: _year,
-                  isDense: true,
-                  isExpanded: true,
-                  items:
-                      years
-                          .map(
-                            (year) => DropdownMenuItem(
-                              value: year,
-                              child: Text(year.toString()),
-                            ),
-                          )
-                          .toList(),
-                  onChanged: (value) => setState(() => _year = value ?? _year),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            GridView.builder(
-              shrinkWrap: true,
-              itemCount: 12,
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
-                mainAxisSpacing: 8,
-                crossAxisSpacing: 8,
-                childAspectRatio: 2.7,
-              ),
-              itemBuilder: (context, index) {
-                final month = index + 1;
-                final selected =
-                    widget.initialMonth.year == _year &&
-                    widget.initialMonth.month == month;
-                return OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    backgroundColor: selected ? const Color(0xFFE8DEF8) : null,
-                  ),
-                  onPressed:
-                      () => Navigator.of(context).pop(DateTime(_year, month)),
-                  child: Text(_monthName(month)),
-                );
-              },
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(AppLocalizations.of(context)!.adminCancel),
-        ),
-      ],
-    );
-  }
-}
-
 class _SearchFilter extends StatelessWidget {
   const _SearchFilter({
     required this.label,
@@ -3171,24 +3081,6 @@ class _SearchFilter extends StatelessWidget {
       ),
     );
   }
-}
-
-String _monthName(int month) {
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  return months[month - 1];
 }
 
 class _CsvUploadOptions {
